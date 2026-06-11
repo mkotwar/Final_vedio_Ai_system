@@ -1,0 +1,102 @@
+{
+    "event_id": "evt_005",
+    "video_id": "521e4881-b614-43c9-a3b4-ffc4fbaa2de6",
+    "start_time": 22.022,
+    "end_time": 25.023999999999997,
+    "timestamp_start_seconds": 22.022,
+    "timestamp_end_seconds": 25.023999999999997,
+    "timestamp_start_human": "00:00:22",
+    "timestamp_end_human": "00:00:25",
+    "duration_seconds": 3.0,
+    "frame_count": 3,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "sedan",
+            "color": "white",
+            "attributes": [
+                "closed doors",
+                "door open",
+                "driver visible",
+                "partially visible front end"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "pedicab",
+            "color": "red/pink",
+            "attributes": [
+                "decorated with 'SIBUL' text",
+                "occupied by a driver"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "minivan",
+            "color": "white",
+            "attributes": [
+                "following the rickshaw"
+            ]
+        },
+        {
+            "type": "pedestrian",
+            "subtype": "adult male",
+            "color": "brown",
+            "attributes": [
+                "wearing white shirt and dark pants"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "scooter",
+            "color": "black",
+            "attributes": [
+                "driver wearing white outfit",
+                "passenger visible in background"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "public transport bus",
+            "color": "red",
+            "attributes": [
+                "passengers inside",
+                "visible through car window"
+            ]
+        }
+    ],
+    "activities": [
+        "rickshaw moving",
+        "cars driving"
+    ],
+    "primary_object": "Adult male",
+    "color": "brown",
+    "primary_activity": "rickshaw moving",
+    "source_frames": [
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0023",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0024",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0025"
+    ],
+    "event_type": "vehicle_movement",
+    "summary": "Vehicle movement involving adult male was detected at the monitored area. Other participants: white sedan (closed doors), red/pink pedicab (decorated with 'SIBUL' text), white minivan (following the rickshaw), black scooter (driver wearing white outfit), red public transport bus (passengers inside).",
+    "scene_context": "A busy street scene in an urban area during daytime with various vehicles and rickshaws moving along the road.",
+    "real_world_time": null,
+    "actor_description": "brown, adult male, wearing white shirt and dark pants",
+    "participants": [
+        "white sedan (closed doors)",
+        "red/pink pedicab (decorated with 'SIBUL' text)",
+        "white minivan (following the rickshaw)",
+        "black scooter (driver wearing white outfit)",
+        "red public transport bus (passengers inside)"
+    ],
+    "participant_count": 6,
+    "behavioral_flags": [
+        "multi_person"
+    ],
+    "confidence": 0.688,
+    "narrative_sentence": "Adult male (brown, adult male, wearing white shirt and dark pants) was observed rickshaw moving at the monitored area. Others present: white sedan (closed doors), red/pink pedicab (decorated with 'SIBUL' text).",
+    "location_text": "the monitored area",
+    "event_severity": 30,
+    "unified_text": "No description available. Traffic scene with a white sedan and red public bus in motion, no incidents detected. urban traffic pedestrian crossing motorcycle rider public transport city life rickshaw moving cars driving driving walking traffic movement white sedan vehicle red/pink pedicab vehicle white minivan vehicle brown adult male pedestrian black scooter vehicle red public transport bus vehicle",
+    "frame_events": []
+}

@@ -1,0 +1,70 @@
+{
+    "event_id": "evt_003",
+    "video_id": "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53",
+    "start_time": 4.0,
+    "end_time": 5.0,
+    "timestamp_start_seconds": 4.0,
+    "timestamp_end_seconds": 5.0,
+    "timestamp_start_human": "00:00:04",
+    "timestamp_end_human": "00:00:05",
+    "duration_seconds": 1.0,
+    "frame_count": 1,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "auto rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "crowded with passengers"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "black",
+            "attributes": [
+                "on the side of the road"
+            ]
+        }
+    ],
+    "activities": [
+        "traffic congestion",
+        "pedestrians crossing"
+    ],
+    "primary_object": "Vehicle",
+    "color": "green/yellow",
+    "primary_activity": "traffic congestion",
+    "source_frames": [
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0005"
+    ],
+    "event_type": "collision_or_accident",
+    "summary": "A collision or accident occurred involving vehicle at the monitored area. Other participants: black motorcycle (on the side of the road).",
+    "scene_context": "A busy urban street scene with heavy traffic congestion and pedestrians navigating through the area.",
+    "real_world_time": null,
+    "actor_description": "green/yellow, auto rickshaw, crowded with passengers",
+    "participants": [
+        "black motorcycle (on the side of the road)"
+    ],
+    "participant_count": 2,
+    "behavioral_flags": [
+        "two_persons",
+        "collision_impact"
+    ],
+    "confidence": 0.618,
+    "narrative_sentence": "Vehicle (green/yellow, auto rickshaw, crowded with passengers) was involved in a collision/accident at the monitored area. Others present: black motorcycle (on the side of the road).",
+    "location_text": "the monitored area",
+    "event_severity": 100,
+    "unified_text": "No description available. traffic congestion pedestrians crossing rickshaws navigating collision green/yellow auto rickshaw vehicle black motorcycle vehicle",
+    "frame_events": [
+        {
+            "event_type": "collision",
+            "description": "A collision between car_1 and a pedestrian occurred, causing the rickshaw to veer off course.",
+            "actors": [
+                "car_1",
+                "pedestrian"
+            ],
+            "severity": "medium",
+            "timestamp_hint": ""
+        }
+    ]
+}

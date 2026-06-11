@@ -1,0 +1,227 @@
+{
+    "event_id": "evt_004",
+    "video_id": "521e4881-b614-43c9-a3b4-ffc4fbaa2de6",
+    "start_time": 12.011999999999999,
+    "end_time": 22.020999999999997,
+    "timestamp_start_seconds": 12.011999999999999,
+    "timestamp_end_seconds": 22.020999999999997,
+    "timestamp_start_human": "00:00:12",
+    "timestamp_end_human": "00:00:22",
+    "duration_seconds": 10.01,
+    "frame_count": 10,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "three-wheeled auto-rickshaw",
+            "color": "green/yellow/red",
+            "attributes": [
+                "advertising for 'baazar' on the back"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "taxi",
+            "color": "yellow",
+            "attributes": [
+                "green and black accents"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "bicycle",
+            "color": "pink",
+            "attributes": [
+                "being ridden by a person"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "two-wheeler",
+            "color": "black",
+            "attributes": [
+                "blue helmet",
+                "white helmet",
+                "white pants"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "two-wheeler",
+            "color": "red",
+            "attributes": [
+                "helmet on seat"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "black",
+            "attributes": [
+                "carrying a person wearing a helmet",
+                "occupied by a person in blue attire",
+                "occupied by a person in white attire",
+                "occupied by a person wearing purple and blue attire"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "red",
+            "attributes": [
+                "carrying a person wearing a helmet"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "bicycle",
+            "color": "red",
+            "attributes": [
+                "being pushed by a person in traditional attire"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "bicycle",
+            "color": "red/pink",
+            "attributes": [
+                "man holding handlebars",
+                "on tram tracks"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "taxi",
+            "color": "white",
+            "attributes": [
+                "moving on road"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "auto-rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "occupied by driver and passenger",
+                "on street"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "auto rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "small, three-wheeled"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "white",
+            "attributes": [
+                "on the right side of the road"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "pedestrian",
+            "color": "green/blue",
+            "attributes": [
+                "holding a bicycle, wearing a checkered skirt"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "sedan",
+            "color": "white",
+            "attributes": [
+                "driving on road",
+                "on the left side of the road"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "pedicab",
+            "color": "red",
+            "attributes": [
+                "attached to the minivan",
+                "decorated",
+                "decorated with 'SIBUL' text",
+                "occupied by a driver and passenger",
+                "occupied by a person in blue shorts",
+                "occupied by driver",
+                "on the right side of the road",
+                "passenger inside"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "scooter",
+            "color": "blue",
+            "attributes": [
+                "carrying two passengers",
+                "in front of car_1"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "minivan",
+            "color": "white",
+            "attributes": [
+                "on the road",
+                "partially obstructed by a rickshaw"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "adult male",
+            "color": "light skin tone",
+            "attributes": [
+                "holding a red object in hand",
+                "wearing light blue shirt and dark pants"
+            ]
+        }
+    ],
+    "activities": [
+        "{'event_type': 'none'}",
+        "vehicle occupied"
+    ],
+    "primary_object": "Person",
+    "color": "green/blue",
+    "primary_activity": "{'event_type': 'none'}",
+    "source_frames": [
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0013",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0014",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0015",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0016",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0017",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0018",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0019",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0020",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0021",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0022"
+    ],
+    "event_type": "vehicle_movement",
+    "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: green/yellow/red three-wheeled auto-rickshaw (advertising for 'baazar' on the back), yellow taxi (green and black accents), pink bicycle (being ridden by a person), black two-wheeler (blue helmet), red two-wheeler (helmet on seat), black motorcycle (carrying a person wearing a helmet).",
+    "scene_context": "A bustling urban street scene featuring a variety of vehicles and pedestrians in what appears to be a South Asian city.",
+    "real_world_time": null,
+    "actor_description": "green/blue, pedestrian, holding a bicycle, wearing a checkered skirt",
+    "participants": [
+        "green/yellow/red three-wheeled auto-rickshaw (advertising for 'baazar' on the back)",
+        "yellow taxi (green and black accents)",
+        "pink bicycle (being ridden by a person)",
+        "black two-wheeler (blue helmet)",
+        "red two-wheeler (helmet on seat)",
+        "black motorcycle (carrying a person wearing a helmet)"
+    ],
+    "participant_count": 19,
+    "behavioral_flags": [
+        "multi_person",
+        "carrying_object"
+    ],
+    "confidence": 0.861,
+    "narrative_sentence": "Person (green/blue, pedestrian, holding a bicycle, wearing a checkered skirt) was observed {'event_type': 'none'} at the monitored area. Carrying an object/bag. Others present: green/yellow/red three-wheeled auto-rickshaw (advertising for 'baazar' on the back), yellow taxi (green and black accents).",
+    "location_text": "the monitored area",
+    "event_severity": 30,
+    "unified_text": "No description available. No incidents detected. Pedicab 'SIBUL' is occupied and moving on the street. street scene pedicab urban area riding auto-rickshaw driving motorcycle walking on the street vehicle occupied carrying object man riding bicycle on tram tracks riding auto rickshaws walking on the sidewalk {'event_type': 'none'} green/yellow/red three-wheeled auto-rickshaw vehicle yellow taxi vehicle pink bicycle vehicle black two-wheeler vehicle red two-wheeler vehicle black motorcycle vehicle red motorcycle vehicle red bicycle vehicle red/pink bicycle vehicle white taxi vehicle green/yellow auto-rickshaw vehicle green/yellow auto rickshaw vehicle white motorcycle vehicle green/blue pedestrian person white sedan vehicle red pedicab vehicle blue scooter vehicle white minivan vehicle light skin tone adult male person",
+    "frame_events": []
+}

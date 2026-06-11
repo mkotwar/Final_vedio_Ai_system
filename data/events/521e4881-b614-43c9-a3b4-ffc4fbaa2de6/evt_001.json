@@ -1,0 +1,144 @@
+{
+    "event_id": "evt_001",
+    "video_id": "521e4881-b614-43c9-a3b4-ffc4fbaa2de6",
+    "start_time": 0.0,
+    "end_time": 4.003,
+    "timestamp_start_seconds": 0.0,
+    "timestamp_end_seconds": 4.003,
+    "timestamp_start_human": "00:00:00",
+    "timestamp_end_human": "00:00:04",
+    "duration_seconds": 4.0,
+    "frame_count": 4,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "taxi",
+            "color": "white with blue stripe",
+            "attributes": [
+                "license plate visible",
+                "text 'NO REFUSAL' on side"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "taxi",
+            "color": "yellow",
+            "attributes": [
+                "advertisements on roof"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "black and white",
+            "attributes": [
+                "person wearing helmet riding"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "scooter",
+            "color": "silver/yellow",
+            "attributes": [
+                "occupied by a person wearing a helmet"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "sedan",
+            "color": "white",
+            "attributes": [
+                "blue stripe",
+                "license plate visible"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "auto-rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "on the left side of the road"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "scooter",
+            "color": "blue",
+            "attributes": [
+                "two riders wearing helmets"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "scooter",
+            "color": "silver",
+            "attributes": [
+                "partially visible on the right side of the image"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "black",
+            "attributes": [
+                "holding phone",
+                "man wearing helmet"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "three-wheeled auto-rickshaw",
+            "color": "green and yellow",
+            "attributes": [
+                "passenger inside",
+                "yellow roof"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "blue",
+            "attributes": [
+                "man wearing helmet",
+                "riding behind auto-rickshaw"
+            ]
+        }
+    ],
+    "activities": [
+        "A person is riding a scooter down the street, navigating through traffic.",
+        "vehicles moving"
+    ],
+    "primary_object": "Vehicle",
+    "color": "white with blue stripe",
+    "primary_activity": "A person is riding a scooter down the street, navigating through traffic.",
+    "source_frames": [
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0001",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0002",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0003",
+        "521e4881-b614-43c9-a3b4-ffc4fbaa2de6_f0004"
+    ],
+    "event_type": "fall_incident",
+    "summary": "A fall incident was detected where vehicle fell at the monitored area. Other participants: yellow taxi (advertisements on roof), black and white motorcycle (person wearing helmet riding), silver/yellow scooter (occupied by a person wearing a helmet), white sedan (blue stripe), green/yellow auto-rickshaw (on the left side of the road), blue scooter (two riders wearing helmets).",
+    "scene_context": "A bustling urban street scene in what appears to be India, featuring vehicles and pedestrians amidst shops and advertisements.",
+    "real_world_time": null,
+    "actor_description": "white with blue stripe, taxi, text 'NO REFUSAL' on side",
+    "participants": [
+        "yellow taxi (advertisements on roof)",
+        "black and white motorcycle (person wearing helmet riding)",
+        "silver/yellow scooter (occupied by a person wearing a helmet)",
+        "white sedan (blue stripe)",
+        "green/yellow auto-rickshaw (on the left side of the road)",
+        "blue scooter (two riders wearing helmets)"
+    ],
+    "participant_count": 11,
+    "behavioral_flags": [
+        "multi_person",
+        "person_fall"
+    ],
+    "confidence": 0.611,
+    "narrative_sentence": "Vehicle (white with blue stripe, taxi, text 'NO REFUSAL' on side) was observed A person is riding a scooter down the street, navigating through traffic. at the monitored area. Others present: yellow taxi (advertisements on roof), black and white motorcycle (person wearing helmet riding).",
+    "location_text": "the monitored area",
+    "event_severity": 90,
+    "unified_text": "No description available. A person is riding a scooter down the street, navigating through traffic. vehicles moving pedestrians walking scooter rider using phone while riding white with blue stripe taxi vehicle yellow taxi vehicle black and white motorcycle vehicle silver/yellow scooter vehicle white sedan vehicle green/yellow auto-rickshaw vehicle blue scooter vehicle silver scooter vehicle black motorcycle vehicle green and yellow three-wheeled auto-rickshaw vehicle blue motorcycle vehicle",
+    "frame_events": []
+}

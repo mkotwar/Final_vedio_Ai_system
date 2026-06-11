@@ -1,0 +1,139 @@
+{
+    "event_id": "evt_004",
+    "video_id": "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53",
+    "start_time": 5.0,
+    "end_time": 11.0,
+    "timestamp_start_seconds": 5.0,
+    "timestamp_end_seconds": 11.0,
+    "timestamp_start_human": "00:00:05",
+    "timestamp_end_human": "00:00:11",
+    "duration_seconds": 6.0,
+    "frame_count": 6,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "auto-rickshaw",
+            "color": "green",
+            "attributes": [
+                "yellow roof"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "motorcycle",
+            "color": "black",
+            "attributes": [
+                "carrying a passenger",
+                "in front of auto_rickshaw_1",
+                "on the side of the road",
+                "wearing helmet"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "pedestrian",
+            "color": "red",
+            "attributes": [
+                "wearing red jacket"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "auto rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "crowded",
+                "crowded with passengers",
+                "slow movement"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "",
+            "color": "various colors",
+            "attributes": [
+                "walking on the sidewalk"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "pedestrian",
+            "color": "various",
+            "attributes": [
+                "carrying bags",
+                "crossing road",
+                "crossing the street"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "truck",
+            "color": "red",
+            "attributes": [
+                "partially covered by tarpaulin"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "auto-rickshaw",
+            "color": "green/yellow",
+            "attributes": [
+                "on the left side of the road"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "pedestrian",
+            "color": "various colors",
+            "attributes": [
+                "walking on the sidewalk"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "truck",
+            "color": "red/green",
+            "attributes": [
+                "partially obstructing the road"
+            ]
+        }
+    ],
+    "activities": [
+        "traffic congestion",
+        "pedestrian movement"
+    ],
+    "primary_object": "Person",
+    "color": "red",
+    "primary_activity": "traffic congestion",
+    "source_frames": [
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0006",
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0007",
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0008",
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0009",
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0010",
+        "e5c7f3c4-7acd-4669-95a9-841cb1ae7d53_f0011"
+    ],
+    "event_type": "vehicle_movement",
+    "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: green auto-rickshaw (yellow roof), black motorcycle (carrying a passenger), green/yellow auto rickshaw (crowded), various colors person (walking on the sidewalk), various pedestrian (carrying bags), red truck (partially covered by tarpaulin).",
+    "scene_context": "A busy street scene in an urban area with heavy traffic and pedestrians. The road is filled with auto-rickshaws, motorcycles, and a few cars. There are people walking on the sidewalk and some standing near utility poles. The environment appears to be a mix of residential and commercial buildings.",
+    "real_world_time": null,
+    "actor_description": "red, pedestrian, wearing red jacket",
+    "participants": [
+        "green auto-rickshaw (yellow roof)",
+        "black motorcycle (carrying a passenger)",
+        "green/yellow auto rickshaw (crowded)",
+        "various colors person (walking on the sidewalk)",
+        "various pedestrian (carrying bags)",
+        "red truck (partially covered by tarpaulin)"
+    ],
+    "participant_count": 10,
+    "behavioral_flags": [
+        "multi_person"
+    ],
+    "confidence": 0.696,
+    "narrative_sentence": "Person (red, pedestrian, wearing red jacket) was observed traffic congestion at the monitored area. Others present: green auto-rickshaw (yellow roof), black motorcycle (carrying a passenger).",
+    "location_text": "the monitored area",
+    "event_severity": 30,
+    "unified_text": "No description available. Urban traffic congestion with pedestrians navigating through the area. urban traffic congestion pedestrians pedestrian activity street scene traffic congestion pedestrian movement pedestrians crossing walking crossing road green auto-rickshaw vehicle black motorcycle vehicle red pedestrian person green/yellow auto rickshaw vehicle various colors  person various pedestrian person red truck vehicle green/yellow auto-rickshaw vehicle various colors pedestrian person red/green truck vehicle",
+    "frame_events": []
+}

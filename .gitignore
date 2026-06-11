@@ -1,27 +1,58 @@
 # Python
-.venv/
-__pycache__/
-*.pyc
 
-# Environment
+**pycache**/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual Environments
+
+.venv/
+env/
+venv/
+
+# Environment Variables
+
 .env
 
-# Generated video data
+# Data
+
 data/videos/
 data/frames/
 data/metadata/
+data/cache/
 
 # Logs
+
 logs/
 *.log
 
-# VS Code
-.vscode/
+# Generated Outputs
 
-# Build files
+*.tmp
+*.bak
+
+# IDE
+
+.vscode/
+.idea/
+
+# OS
+
+.DS_Store
+Thumbs.db
+
+# Node
+
+node_modules/
+
+# Build
+
 dist/
 build/
 
-# OS
-Thumbs.db
-.DS_Store
+# Model Cache
+
+models/
+hf_cache/
+ollama_cache/
