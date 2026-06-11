@@ -73,13 +73,52 @@ class SearchService:
             
             JobStatusService.update(video_id, current_step="Generating embeddings...", progress_percent=90.0)
 
-            # Prepare textual description strings to be embedded (combine summary with unified text)
+            # NEW: Generate and include macro-incidents
+            from app.services.incident_engine import IncidentEngine
+            from app.schemas.summary import AggregatedEvent
+            try:
+                agg_events = [AggregatedEvent(**e) for e in events]
+                chains = IncidentEngine.correlate_events(agg_events)
+                for chain in chains:
+                    sev_val = 100 if chain.severity == "CRITICAL" else (80 if chain.severity == "HIGH" else (50 if chain.severity == "MEDIUM" else 20))
+                    events.append({
+                        "event_id": chain.incident_id,
+                        "video_id": video_id,
+                        "event_type": chain.incident_type,
+                        "event_severity": sev_val,
+                        "summary": chain.description,
+                        "narrative_sentence": " ".join(chain.timeline),
+                        "start_time": chain.start_time,
+                        "end_time": chain.end_time,
+                        "duration_seconds": 0.0,
+                        "objects": ["macro_incident"],
+                        "activities": [chain.incident_type],
+                        "primary_actor": "Macro Incident"
+                    })
+            except Exception as exc:
+                logger.warning(f"Failed to correlate incident chains for search indexing: {exc}")
+
+            # Prepare pristine textual description strings to be embedded (Search Document)
             descriptions = []
             for e in events:
-                desc = e.get("summary", e.get("description", ""))
-                unified = e.get("unified_text", "")
-                full_text = f"{desc} {unified}".strip()
-                descriptions.append(full_text)
+                actor = str(e.get("primary_actor", "Unknown"))
+                activities = " ".join(e.get("activities", []))
+                
+                objs = []
+                for obj in e.get("objects", []):
+                    if isinstance(obj, dict):
+                        objs.append(str(obj.get("subtype", obj.get("type", ""))))
+                    else:
+                        objs.append(str(obj))
+                objects_str = " ".join(objs)
+                
+                severity_val = str(e.get("event_severity", "unknown"))
+                narrative_val = str(e.get("narrative_sentence", e.get("summary", "")))
+                event_type_val = str(e.get("event_type", "unknown")).replace("_", " ")
+
+                # Clean deduplicated search document string
+                search_doc = f"{actor} {event_type_val} {activities} {objects_str} severity {severity_val} {narrative_val}".replace("  ", " ").strip()
+                descriptions.append(search_doc)
             
             # Generate embeddings vectors
             embeddings = EmbeddingService.generate_embeddings(descriptions)
@@ -98,6 +137,7 @@ class SearchService:
                     "event_type": event["event_type"],
                     "event_severity": event.get("event_severity", 15),
                     "description": event.get("summary", event.get("description", "")),
+                    "narrative": event.get("narrative_sentence", event.get("summary", "")),
                     "start_time": event.get("timestamp_start_human", event.get("start_time", "00:00:00")),
                     "end_time": event.get("timestamp_end_human", event.get("end_time", "00:00:00")),
                     "duration_seconds": float(event.get("duration_seconds", 0.0)),
@@ -222,18 +262,51 @@ class SearchService:
             filtered = []
             for hit in raw_results:
                 normalized = cls.normalize_score(float(hit.score))
+                
+                event_type = hit.payload.get("event_type", "unknown")
+                severity_num = hit.payload.get("event_severity", 0)
+                
+                # Search Relevance Boosting
+                # Apply boost only if base similarity is >= 0.40 to prevent irrelevant events leaping to the top
+                if normalized >= 0.40:
+                    if event_type == "weapon_incident":
+                        normalized += 1.00
+                    elif event_type == "fire_incident":
+                        normalized += 0.75
+                    elif event_type in ["fall_incident", "medical_emergency", "collision_or_accident", "intrusion"]:
+                        normalized += 0.50
+                
+                normalized = min(1.0, normalized)
+                
+                # Explainability logic
+                match_reasons = []
+                if event_type not in ["unknown", "normal_activity"]:
+                    match_reasons.append(f"{event_type.replace('_', ' ')} detected")
+                
+                actor = hit.payload.get("primary_actor", "")
+                if actor and actor != "Unknown":
+                    match_reasons.append(f"actor '{actor}' identified")
+                    
+                if severity_num >= 70:
+                    match_reasons.append("high severity")
+
                 if normalized >= score_threshold:
+                    severity_str = "High" if severity_num >= 70 else ("Medium" if severity_num >= 40 else "Low")
                     filtered.append({
-                        "score": normalized,
+                        "score": round(normalized, 3),
                         "event_id": hit.payload.get("event_id"),
                         "video_id": hit.payload.get("video_id"),
-                        "event_type": hit.payload.get("event_type"),
-                        "description": hit.payload.get("description"),
+                        "event_type": event_type,
+                        "severity": severity_str,
+                        "description": hit.payload.get("description", ""),
+                        "narrative": hit.payload.get("narrative", ""),
                         "start_time": hit.payload.get("start_time"),
                         "end_time": hit.payload.get("end_time"),
                         "duration_seconds": hit.payload.get("duration_seconds"),
                         "objects": hit.payload.get("objects", []),
-                        "activities": hit.payload.get("activities", [])
+                        "activities": hit.payload.get("activities", []),
+                        "thumbnail_path": hit.payload.get("thumbnail_path"),
+                        "match_reasons": match_reasons
                     })
                 if len(filtered) >= limit:
                     break

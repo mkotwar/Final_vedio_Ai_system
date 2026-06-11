@@ -26,3 +26,19 @@ async def get_video_summary(
     except Exception as e:
         logger.error(f"Error generating summary for video {video_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal Server Error during summary generation")
+
+@router.get("/{video_id}/report")
+async def get_investigation_report(
+    video_id: str = Path(..., description="The unique UUID of the video"),
+):
+    """
+    Generate an export-ready, structured Investigation Report.
+    """
+    from app.services.report_service import ReportService
+    from app.schemas.report import InvestigationReport
+    try:
+        logger.info(f"Generating investigation report for video_id: {video_id}")
+        return ReportService.generate_report(video_id)
+    except Exception as e:
+        logger.error(f"Error generating report for video {video_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal Server Error during report generation")

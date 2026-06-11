@@ -1,0 +1,105 @@
+{
+    "event_id": "evt_004",
+    "video_id": "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a",
+    "start_time": 4.0,
+    "end_time": 10.0,
+    "timestamp_start_seconds": 4.0,
+    "timestamp_end_seconds": 10.0,
+    "timestamp_start_human": "00:00:04",
+    "timestamp_end_human": "00:00:10",
+    "duration_seconds": 6.0,
+    "frame_count": 6,
+    "objects": [
+        {
+            "type": "vehicle",
+            "subtype": "sedan",
+            "color": "silver",
+            "attributes": [
+                "broken glass scattered",
+                "cracked windshield",
+                "debris around",
+                "debris scattered around",
+                "front end crumpled",
+                "front end dented"
+            ]
+        },
+        {
+            "type": "vehicle",
+            "subtype": "sedan",
+            "color": "black",
+            "attributes": [
+                "debris around",
+                "debris scattered around",
+                "door open",
+                "front end dented",
+                "rear end crumpled",
+                "rear end impacted",
+                "side mirror broken"
+            ]
+        },
+        {
+            "type": "human",
+            "subtype": "adult male",
+            "color": "white",
+            "attributes": [
+                "on ground",
+                "on the ground",
+                "wearing white shirt and jeans"
+            ]
+        },
+        {
+            "type": "person",
+            "subtype": "adult male",
+            "color": "not specified",
+            "attributes": [
+                "on the ground, appears injured"
+            ]
+        }
+    ],
+    "activities": [
+        "collision"
+    ],
+    "primary_object": "Adult male",
+    "color": "white",
+    "primary_activity": "collision",
+    "source_frames": [
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0005",
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0006",
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0007",
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0008",
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0009",
+        "cba6a2be-d66b-4650-a8c0-2cf64aed9e6a_f0010"
+    ],
+    "event_type": "collision_or_accident",
+    "summary": "A collision or accident occurred involving adult male at the monitored area. Other participants: silver sedan (broken glass scattered), black sedan (debris around), adult male (on the ground, appears injured).",
+    "scene_context": "A street intersection scene showing two vehicles involved in an accident. Debris is scattered on the road.",
+    "real_world_time": null,
+    "actor_description": "white, adult male, on ground",
+    "participants": [
+        "silver sedan (broken glass scattered)",
+        "black sedan (debris around)",
+        "adult male (on the ground, appears injured)"
+    ],
+    "participant_count": 3,
+    "behavioral_flags": [
+        "multi_person",
+        "collision_impact"
+    ],
+    "confidence": 0.577,
+    "narrative_sentence": "Adult male (white, adult male, on ground) was involved in a collision/accident at the monitored area. Others present: silver sedan (broken glass scattered), black sedan (debris around).",
+    "location_text": "the monitored area",
+    "event_severity": 100,
+    "unified_text": "No description available. collision silver sedan vehicle black sedan vehicle white adult male human not specified adult male person",
+    "frame_events": [
+        {
+            "event_type": "collision",
+            "description": "A collision occurred between car_1 and car_2, causing damage to both vehicles.",
+            "actors": [
+                "car_1",
+                "car_2"
+            ],
+            "severity": "high",
+            "timestamp_hint": "2016-1/16 19:30:69"
+        }
+    ]
+}

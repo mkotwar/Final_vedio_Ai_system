@@ -481,7 +481,7 @@ class SummaryService:
             severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
             top_incidents = sorted(
                 incidents,
-                key=lambda e: severity_order.get(e.severity, 2),
+                key=lambda e: severity_order.get(e.severity.lower() if hasattr(e.severity, "lower") else "medium", 2),
             )[:3]  # Show up to 3 incidents
             incident_sentences = []
             for inc in top_incidents:
@@ -526,30 +526,10 @@ class SummaryService:
 
     # ── NEW: Collect all unique incidents across all events ───────────────
     @classmethod
-    def _collect_all_incidents(cls, events: List[AggregatedEvent]) -> List[FrameEventDetail]:
-        """Collect, deduplicate, and sort all frame-level incidents across all clip events."""
-        seen: set = set()
-        all_incidents: List[FrameEventDetail] = []
-        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-
-        for event in events:
-            for fe in event.frame_events:
-                fe_type = fe.event_type.lower().strip()
-                if not fe_type or fe_type == "none":
-                    continue
-                if fe_type in seen:
-                    # Keep higher severity
-                    for existing in all_incidents:
-                        if existing.event_type.lower() == fe_type:
-                            if severity_order.get(fe.severity, 2) < severity_order.get(existing.severity, 2):
-                                existing.severity = fe.severity
-                                existing.description = fe.description
-                    continue
-                seen.add(fe_type)
-                all_incidents.append(FrameEventDetail(**fe.model_dump()))
-
-        all_incidents.sort(key=lambda e: severity_order.get(e.severity, 2))
-        return all_incidents
+    def _collect_all_incidents(cls, events: List[AggregatedEvent]) -> List[Any]:
+        """Use IncidentEngine to correlate raw events into macro-incident chains."""
+        from app.services.incident_engine import IncidentEngine
+        return IncidentEngine.correlate_events(events)
     # ── END NEW ─────────────────────────────────────────────────────────
 
     @classmethod
@@ -558,7 +538,7 @@ class SummaryService:
         events: List[AggregatedEvent],
         stats: ActivityStatistics,
         notable: List[NotableEvent],
-        incidents: Optional[List[FrameEventDetail]] = None,  # NEW
+        incidents: Optional[List[Any]] = None,  # NEW
     ) -> str:
         """Build an investigation-grade narrative overview from aggregated events."""
         if not events:

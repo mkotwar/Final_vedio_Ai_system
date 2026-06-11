@@ -1,0 +1,96 @@
+{
+    "event_id": "evt_001",
+    "video_id": "a629ff6d-ae6a-4fbc-ac3d-bffe9952c8bd",
+    "start_time": 0.0,
+    "end_time": 3.0,
+    "timestamp_start_seconds": 0.0,
+    "timestamp_end_seconds": 3.0,
+    "timestamp_start_human": "00:00:00",
+    "timestamp_end_human": "00:00:03",
+    "duration_seconds": 3.0,
+    "frame_count": 3,
+    "objects": [
+        {
+            "type": "human",
+            "subtype": "adult male",
+            "color": "red/black checkered shirt, blue jeans",
+            "attributes": [
+                "walking",
+                "walking away from the camera",
+                "wearing a red and black checkered shirt"
+            ]
+        },
+        {
+            "type": "appliance",
+            "subtype": "electric stove",
+            "color": "white",
+            "attributes": []
+        },
+        {
+            "type": "appliance",
+            "subtype": "two-door refrigerator",
+            "color": "white",
+            "attributes": []
+        },
+        {
+            "type": "furniture",
+            "subtype": "white refrigerator",
+            "color": "white",
+            "attributes": []
+        },
+        {
+            "type": "appliance",
+            "subtype": "electric oven",
+            "color": "white",
+            "attributes": [
+                "built-in, white color"
+            ]
+        },
+        {
+            "type": "appliance",
+            "subtype": "microwave",
+            "color": "white",
+            "attributes": [
+                "mounted above the oven"
+            ]
+        }
+    ],
+    "activities": [
+        "person walking away from the camera",
+        "walking away from camera"
+    ],
+    "primary_object": "Adult male",
+    "color": "red/black checkered shirt, blue jeans",
+    "primary_activity": "person walking away from the camera",
+    "source_frames": [
+        "a629ff6d-ae6a-4fbc-ac3d-bffe9952c8bd_f0001",
+        "a629ff6d-ae6a-4fbc-ac3d-bffe9952c8bd_f0002",
+        "a629ff6d-ae6a-4fbc-ac3d-bffe9952c8bd_f0003"
+    ],
+    "event_type": "intrusion",
+    "summary": "An intrusion or unauthorized access was detected by adult male at the monitored area.",
+    "scene_context": "A kitchen interior featuring wooden cabinets, a white refrigerator, an electric stove, and a central island counter.",
+    "real_world_time": null,
+    "actor_description": "red/black checkered shirt, blue jeans, adult male, walking away from the camera",
+    "participants": [],
+    "participant_count": 0,
+    "behavioral_flags": [
+        "intrusion_detected"
+    ],
+    "confidence": 0.666,
+    "narrative_sentence": "Adult male (red/black checkered shirt, blue jeans, adult male, walking away from the camera) was observed person walking away from the camera at the monitored area.",
+    "location_text": "the monitored area",
+    "event_severity": 85,
+    "unified_text": "No description available. kitchen, person moving, electric stove, refrigerator person walking away from the camera walking away from camera intrusion walking red/black checkered shirt, blue jeans adult male human white electric stove appliance white two-door refrigerator appliance white white refrigerator furniture white electric oven appliance white microwave appliance",
+    "frame_events": [
+        {
+            "event_type": "intrusion",
+            "description": "The adult male is seen entering the kitchen, which could indicate an intrusion or a normal activity.",
+            "actors": [
+                "person_1"
+            ],
+            "severity": "low",
+            "timestamp_hint": ""
+        }
+    ]
+}

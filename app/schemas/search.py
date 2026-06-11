@@ -28,6 +28,9 @@ class SearchResultItem(BaseModel):
     objects: List[Any] = Field(default_factory=list, description="Objects detected in this event")
     activities: List[str] = Field(default_factory=list, description="Activities detected in this event")
     thumbnail_path: Optional[str] = Field(None, description="Path to the visual thumbnail for this event")
+    severity: Optional[str] = Field(None, description="Event severity string indicator")
+    narrative: Optional[str] = Field(None, description="Investigator narrative generated for the event")
+    match_reasons: List[str] = Field(default_factory=list, description="Explainability reasons for why this event matched")
 
 
 class SearchResponse(BaseModel):
