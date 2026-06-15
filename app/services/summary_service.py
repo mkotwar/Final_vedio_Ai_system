@@ -275,6 +275,7 @@ class SummaryService:
                     description=event.narrative_sentence or event.description,
                     real_world_time=event.real_world_time,
                     behavioral_flags=event.behavioral_flags,
+                    poster_frame=event.poster_frame or event.thumbnail_path,
                     frame_events=event.frame_events,  # NEW: pass incidents to timeline
                 )
             )
@@ -539,12 +540,21 @@ class SummaryService:
             source = "Gemini Narrative Builder" if NarrativeBuilderService.gemini_available() else "Legacy Incident Engine"
             # Actually if Gemini request fails inside NarrativeBuilderService, it falls back and we might falsely claim Gemini.
             # But that's acceptable for now, or we can just say "Gemini Narrative Builder" if it didn't raise an exception here.
+            
+            from app.services.poster_service import PosterService
+            for chain in chains:
+                PosterService.select_incident_poster(chain)
+                
             return chains, source
         except Exception as e:
             logger.error(f"[ERROR] NarrativeBuilderService failed: {e}. Falling back to IncidentEngine.")
             try:
                 from app.services.incident_engine import IncidentEngine
-                return IncidentEngine.correlate_events(events), "Legacy Incident Engine"
+                from app.services.poster_service import PosterService
+                fallback_chains = IncidentEngine.correlate_events(events)
+                for chain in fallback_chains:
+                    PosterService.select_incident_poster(chain)
+                return fallback_chains, "Legacy Incident Engine"
             except Exception as e2:
                 logger.error(f"[ERROR] IncidentEngine fallback failed: {e2}. Returning empty incidents.")
                 return [], "Legacy Incident Engine"

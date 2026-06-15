@@ -12,6 +12,7 @@ from loguru import logger
 from app.core.config import settings
 from app.core.utils import format_timestamp_human
 from app.services.status_service import JobStatusService
+from app.services.poster_service import PosterService
 
 class EventAggregationService:
     """Service to group consecutive frames into semantic events based on metadata similarity."""
@@ -988,6 +989,9 @@ class EventAggregationService:
                 "frame_events": frame_events,
             }
 
+            # Select the poster thumbnail for the event
+            event_data = PosterService.select_event_poster(video_id, event_data, group)
+
             # Save the event to disk
             event_file_path = video_events_dir / f"{event_id}.json"
             try:
@@ -1004,7 +1008,7 @@ class EventAggregationService:
         for e in events:
             source_frames = e.get("source_frames", [])
             first_frame_id = source_frames[0] if source_frames else None
-            thumbnail_path = f"/api/v1/events/{video_id}/thumbnail/{first_frame_id}" if first_frame_id else None
+            thumbnail_path = e.get("thumbnail_path") or (f"/api/v1/events/{video_id}/thumbnail/{first_frame_id}" if first_frame_id else None)
 
             consolidated_events.append({
                 "event_id": e["event_id"],
@@ -1027,6 +1031,9 @@ class EventAggregationService:
                 "confidence": e.get("confidence", 0.5),
                 "narrative_sentence": e.get("narrative_sentence", e["summary"]),
                 "thumbnail_path": thumbnail_path,
+                "poster_frame": e.get("poster_frame"),
+                "poster_timestamp": e.get("poster_timestamp"),
+                "poster_frame_id": e.get("poster_frame_id"),
                 "event_severity": e.get("event_severity", 15),
                 "unified_text": e.get("unified_text", ""),
                 "frame_events": e.get("frame_events", []),

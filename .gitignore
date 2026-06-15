@@ -59,3 +59,9 @@ build/
 models/
 hf_cache/
 ollama_cache/
+
+
+data/
+*.txt
+*.json
+logs/

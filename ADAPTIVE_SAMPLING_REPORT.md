@@ -4,21 +4,21 @@ This report summarizes the performance metrics and compute savings achieved by e
 
 ## Ingestion Overview
 
-* **Video ID**: `fef5394a-b684-4862-963a-d4ef12682f43`
-* **Original Frame Count (Extracted)**: 826
-* **Filtered Frame Count (Sent to Qwen)**: 411
-* **Frames Skipped**: 415
-* **Frame Reduction Ratio**: 50.24%
+* **Video ID**: `1a5b3d35-40ca-4f0f-ac42-c108d2c31161`
+* **Original Frame Count (Extracted)**: 121
+* **Filtered Frame Count (Sent to Qwen)**: 66
+* **Frames Skipped**: 55
+* **Frame Reduction Ratio**: 45.45%
 
 ---
 
 ## Runtime & Savings Analysis
 
-* **Average Processing Time Per Sent Frame**: 4.30 seconds
-* **Actual Pipeline Run Duration (with sampling)**: 1112.99 seconds
-* **Projected Run Duration Without Sampling**: 2897.87 seconds
-* **Estimated Runtime Savings**: 1784.87 seconds (29.75 minutes)
-* **Actual Runtime Savings**: 1784.87 seconds (29.75 minutes)
+* **Average Processing Time Per Sent Frame**: 9.01 seconds
+* **Actual Pipeline Run Duration (with sampling)**: 511.07 seconds
+* **Projected Run Duration Without Sampling**: 1006.56 seconds
+* **Estimated Runtime Savings**: 495.49 seconds (8.26 minutes)
+* **Actual Runtime Savings**: 495.49 seconds (8.26 minutes)
 
 ---
 

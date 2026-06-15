@@ -40,6 +40,9 @@ class AggregatedEvent(BaseModel):
     confidence: float = 0.5
     narrative_sentence: str = ""
     thumbnail_path: Optional[str] = None
+    poster_frame: Optional[str] = None
+    poster_timestamp: Optional[str] = None
+    poster_frame_id: Optional[str] = None
     event_severity: int = 15
 
     # ── NEW: Aggregated frame-level VLM incidents ───────────────────────
@@ -80,6 +83,7 @@ class TimelineEntry(BaseModel):
     description: str = ""
     real_world_time: Optional[str] = None
     behavioral_flags: List[str] = Field(default_factory=list)
+    poster_frame: Optional[str] = None
 
     # ── NEW: Surface incident details in the timeline ───────────────────
     frame_events: List[FrameEventDetail] = Field(default_factory=list)

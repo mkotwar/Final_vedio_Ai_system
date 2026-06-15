@@ -1,89 +1,146 @@
 import asyncio
+import time
+import cv2
 import json
-import base64
-import httpx
+import shutil
+import traceback
 from pathlib import Path
-from PIL import Image
-import io
-import os
-import glob
 
-os.environ.pop("HTTP_PROXY", None)
-os.environ.pop("HTTPS_PROXY", None)
-os.environ.pop("http_proxy", None)
-os.environ.pop("https_proxy", None)
+from app.core.config import settings
+from app.services.video import VideoService
+from app.services.frame import FrameExtractionService
+from app.services.qwen_vlm import QwenVLMService
+from app.services.event_aggregation import EventAggregationService
+from app.services.search_service import SearchService
+from app.services.summary_service import SummaryService
 
-def encode_and_compress_image(image_path: Path, max_dimension: int = 1024, quality: int = 85) -> str:
-    with Image.open(image_path) as img:
-        if img.mode != "RGB":
-            img = img.convert("RGB")
+async def main():
+    output_lines = []
+    def log(msg):
+        output_lines.append(msg)
+        
+    try:
+        video_id = "05715892-0b34-4fcb-9f62-608caeaadd42"
+        metadata, video_path = VideoService.get_video(video_id)
+        
+        timings = {}
+        
+        start = time.perf_counter()
+        dummy_path = video_path.with_name("dummy_upload.mp4")
+        shutil.copy(video_path, dummy_path)
+        dummy_path.unlink()
+        timings["Video upload time"] = time.perf_counter() - start
+        
+        start = time.perf_counter()
+        cap = cv2.VideoCapture(str(video_path))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0: fps = 30.0
+        frame_interval = max(1, int(round(fps)))
+        
+        extracted_tuples = []
+        last_sent_frame = None
+        frame_idx = 1
+        current_raw_frame = 0
+        total_extracted = 0
+        
+        frame_dir = settings.FRAMES_DIR / video_id
+        frame_dir.mkdir(parents=True, exist_ok=True)
+        
+        extract_time = 0.0
+        sampling_time = 0.0
+        
+        while True:
+            if current_raw_frame > 0:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, current_raw_frame)
+            t0 = time.perf_counter()
+            success, frame = cap.read()
+            extract_time += (time.perf_counter() - t0)
+            if not success: break
             
-        width, height = img.size
-        if width > max_dimension or height > max_dimension:
-            if width > height:
-                new_width = max_dimension
-                new_height = int((max_dimension / width) * height)
-            else:
-                new_height = max_dimension
-                new_width = int((max_dimension / height) * width)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            second = current_raw_frame / fps
+            total_extracted += 1
+            frame_id = f"{video_id}_f{frame_idx:04d}"
+            
+            should_send = True
+            t0 = time.perf_counter()
+            if settings.ENABLE_ADAPTIVE_SAMPLING and last_sent_frame is not None:
+                hist_diff, ssim_diff, motion_score = FrameExtractionService.compute_similarity_metrics(frame, last_sent_frame)
+                ssim_score = 1.0 - ssim_diff
+                is_scene_change = (hist_diff > settings.HISTOGRAM_THRESHOLD) or (ssim_score < settings.SSIM_THRESHOLD)
+                is_motion = motion_score > settings.MOTION_THRESHOLD
+                if not (is_scene_change or is_motion):
+                    should_send = False
+            sampling_time += (time.perf_counter() - t0)
+            
+            if should_send:
+                t0 = time.perf_counter()
+                out_path = frame_dir / f"frame_{frame_idx:04d}.jpg"
+                cv2.imwrite(str(out_path), frame)
+                extracted_tuples.append((frame_id, video_id, second, out_path))
+                last_sent_frame = frame.copy()
+                extract_time += (time.perf_counter() - t0)
+                
+            frame_idx += 1
+            current_raw_frame += frame_interval
+            
+        cap.release()
+        timings["Frame extraction time"] = extract_time
+        timings["Adaptive sampling time"] = sampling_time
         
-        buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=quality)
-        return base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-async def test():
-    # Use a dummy image if no frame is found
-    frames = glob.glob("data/frames/**/*.jpg", recursive=True)
-    if not frames:
-        img = Image.new('RGB', (100, 100), color = 'red')
-        img.save('C:/Mukul K/vinfo1/video-search-engine/dummy.jpg')
-        image_path = Path('C:/Mukul K/vinfo1/video-search-engine/dummy.jpg')
-    else:
-        image_path = Path(frames[0])
-
-    print(f"Using image: {image_path}")
-    base64_image = encode_and_compress_image(image_path)
-    print(f"Compressed image size = {len(base64_image)}")
-
-    payload = {
-        "model": "qwen3-vl:8b",
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a strict JSON-only vision analysis assistant. Respond ONLY with a valid JSON object matching the requested schema. No markdown, no commentary, no <think> blocks."
-            },
-            {
-                "role": "user",
-                "content": "Describe the image.",
-                "images": [base64_image],
-            }
-        ],
-        "format": "json",
-        "stream": False,
-        "options": {
-            "num_predict": 4096,
-            "temperature": 0.0,
-        }
-    }
-    
-    print("OLLAMA PAYLOAD SCHEMA:")
-    payload_copy = json.loads(json.dumps(payload))
-    payload_copy["messages"][1]["images"] = ["<base64_string_length_" + str(len(base64_image)) + ">"]
-    print(json.dumps(payload_copy, indent=2))
-    
-    async with httpx.AsyncClient() as client:
-        print("Sending request to Ollama WITH format=json...")
-        response = await client.post("http://127.0.0.1:11434/api/chat", json=payload, timeout=60.0)
-        print(f"STATUS={response.status_code}")
-        print(response.text)
+        start = time.perf_counter()
+        rich_frames = []
+        batch_size = settings.BATCH_SIZE
+        processed_count = len(extracted_tuples)
+        for i in range(0, processed_count, batch_size):
+            batch = extracted_tuples[i : i + batch_size]
+            batch_results = await QwenVLMService.generate_metadata_batch(batch)
+            for rich_meta, t in batch_results:
+                rich_frames.append(rich_meta.model_dump())
+        timings["OCR/VLM metadata generation time"] = time.perf_counter() - start
         
-        print("\nSending request to Ollama WITHOUT format=json...")
-        payload_no_json = json.loads(json.dumps(payload))
-        del payload_no_json["format"]
-        response2 = await client.post("http://127.0.0.1:11434/api/chat", json=payload_no_json, timeout=60.0)
-        print(f"STATUS={response2.status_code}")
-        print(response2.text)
+        start = time.perf_counter()
+        events = EventAggregationService.process_events(video_id, rich_frames)
+        timings["Event aggregation time"] = time.perf_counter() - start
+        
+        from app.services.incident_engine import IncidentEngine
+        start = time.perf_counter()
+        incidents = IncidentEngine.correlate_events(events)
+        timings["Incident correlation time"] = time.perf_counter() - start
+        
+        from app.services.narrative_builder import NarrativeBuilderService
+        start = time.perf_counter()
+        timeline_text = NarrativeBuilderService._format_events_for_prompt(events)
+        report_data = NarrativeBuilderService.generate_investigation_report(timeline_text)
+        timings["Narrative generation time"] = time.perf_counter() - start
+        
+        start = time.perf_counter()
+        try:
+            SearchService.index_events(video_id, events)
+        except Exception as search_exc:
+            log(f"Search indexing failed: {search_exc}")
+        timings["Search indexing time"] = time.perf_counter() - start
+        
+        total_time = sum(timings.values())
+        sorted_timings = sorted(timings.items(), key=lambda x: x[1], reverse=True)
+        
+        log(f"Video ID: {video_id}")
+        log(f"Total Pipeline Time: {total_time:.3f} seconds\n")
+        
+        log(f"{'Stage Name':<35} | {'Duration (s)':<12} | % of Runtime")
+        log("-" * 65)
+        for name, duration in sorted_timings:
+            pct = (duration / total_time) * 100
+            log(f"{name:<35} | {duration:<12.3f} | {pct:.2f}%")
+            
+        log("\nTop 3 Bottlenecks:")
+        for i in range(min(3, len(sorted_timings))):
+            log(f"{i+1}. {sorted_timings[i][0]} ({sorted_timings[i][1]:.3f}s)")
+            
+    except Exception as e:
+        log(f"ERROR: {traceback.format_exc()}")
+        
+    with open("C:/Mukul K/vinfo1/video-search-engine/final_profiler_output.txt", "w") as f:
+        f.write("\n".join(output_lines))
 
 if __name__ == "__main__":
-    asyncio.run(test())
+    asyncio.run(main())

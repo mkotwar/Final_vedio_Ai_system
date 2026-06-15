@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     )
 
     # VLM Model Settings
+    VLM_ENGINE_TYPE: Literal["ollama", "native_vllm", "native_hf"] = Field(
+        default="ollama", description="VLM engine to use for inference"
+    )
     QWEN_MODEL_ID: str = Field(
         default="Qwen/Qwen2.5-VL-7B-Instruct", description="VLM model identifier"
     )
@@ -111,6 +114,16 @@ class Settings(BaseSettings):
     MAX_EVENT_DURATION_SECONDS: int = Field(
         default=15,
         description="Safety boundary: Maximum duration in seconds for a single event cluster",
+    )
+
+    # Incident Engine Correlation Settings
+    INCIDENT_CORRELATION_THRESHOLD: float = Field(
+        default=0.65,
+        description="Confidence threshold (0.0 to 1.0) above which events are grouped into an incident chain",
+    )
+    INCIDENT_CORRELATION_SLIDING_WINDOW_MINUTES: int = Field(
+        default=15,
+        description="Time window in minutes to keep an incident memory active for new correlations",
     )
 
     # Qdrant & Embeddings Settings

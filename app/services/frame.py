@@ -10,7 +10,7 @@ from loguru import logger
 from app.core.config import settings, PROJECT_ROOT
 from app.core.exceptions import FrameExtractionError, VideoNotFoundError, MetadataGenerationError
 from app.services.video import VideoService
-from app.services.qwen_vlm import QwenVLMService
+from app.services.vlm_factory import get_vlm_service
 from app.services.motion_window_service import MotionWindowService
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
@@ -284,7 +284,8 @@ class FrameExtractionService:
 
             try:
                 # Generate rich metadata for batch
-                batch_results = await QwenVLMService.generate_metadata_batch(batch)
+                vlm_service = get_vlm_service()
+                batch_results = await vlm_service.generate_metadata_batch(batch)
                 logger.info(f"Successfully analyzed VLM batch {current_batch_num}/{total_batches} | Generated {len(batch_results)} metadata profiles.")
 
                 # Process batch results

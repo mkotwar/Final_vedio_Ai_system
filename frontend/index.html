@@ -202,12 +202,37 @@
                     
                     <div class="overview-panel glass-panel">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
-                            <h3 style="margin: 0;"><i class="fa-solid fa-clipboard-list"></i> AI Overview</h3>
+                            <h3 style="margin: 0;"><i class="fa-solid fa-clipboard-list"></i> Executive Summary</h3>
                             <div id="ai-status-badge-container">
                                 <!-- Status badge populated here -->
                             </div>
                         </div>
-                        <p id="overview-text">Loading overview...</p>
+                        <p id="overview-text" style="font-size: 16px; font-weight: 500; margin-bottom: 20px;">Loading overview...</p>
+                        
+                        <!-- NEW: Detailed Investigation Report -->
+                        <div id="detailed-report-container" class="hidden">
+                            <h4 style="color: var(--accent-color); margin-bottom: 10px; font-size: 15px;"><i class="fa-solid fa-book-open"></i> Narrative</h4>
+                            <p id="report-narrative" style="margin-bottom: 20px; font-size: 14px; color: var(--text-secondary);"></p>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+                                <div>
+                                    <h4 style="color: var(--accent-color); margin-bottom: 10px; font-size: 15px;"><i class="fa-solid fa-key"></i> Key Findings</h4>
+                                    <ul id="report-findings" style="padding-left: 20px; font-size: 14px; color: var(--text-secondary);"></ul>
+                                </div>
+                                <div>
+                                    <h4 style="color: var(--accent-color); margin-bottom: 10px; font-size: 15px;"><i class="fa-solid fa-lightbulb"></i> Recommendations</h4>
+                                    <ul id="report-recommendations" style="padding-left: 20px; font-size: 14px; color: var(--text-secondary);"></ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- NEW: Incident Cards Section -->
+                    <div id="incidents-container" class="hidden" style="margin-bottom: 24px;">
+                        <h3 style="margin-bottom: 16px;"><i class="fa-solid fa-triangle-exclamation"></i> Identified Incidents</h3>
+                        <div id="incidents-grid" class="results-grid">
+                            <!-- Incident cards populated here -->
+                        </div>
                     </div>
 
                     <div class="timeline-container glass-panel">

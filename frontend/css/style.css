@@ -603,6 +603,27 @@ input[type=range]::-webkit-slider-runnable-track {
     color: var(--text-secondary);
 }
 
+.timeline-poster {
+    width: 100%;
+    max-height: 160px;
+    object-fit: cover;
+    border-radius: 6px;
+    margin-top: 12px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background-color: #0b0f19;
+}
+
+.incident-hero {
+    width: 100%;
+    height: 240px;
+    object-fit: cover;
+    border-radius: 8px 8px 0 0;
+    margin: -24px -24px 20px -24px;
+    width: calc(100% + 48px);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    background-color: #0b0f19;
+}
+
 .tags {
     margin-top: 10px;
     display: flex;

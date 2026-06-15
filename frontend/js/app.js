@@ -462,7 +462,12 @@ function setupAnalytics() {
                 notable_events: [...(acc.notable_events || []), ...(curr.notable_events || [])],
                 timeline: [...(acc.timeline || []), ...(curr.timeline || [])],
                 overview: (acc.overview || "") + " " + (curr.overview || ""),
-                generation_source: curr.generation_source || acc.generation_source
+                generation_source: curr.generation_source || acc.generation_source,
+                executive_summary: curr.executive_summary || acc.executive_summary,
+                incident_narrative: curr.incident_narrative || acc.incident_narrative,
+                key_findings: [...(acc.key_findings || []), ...(curr.key_findings || [])],
+                recommendations: [...(acc.recommendations || []), ...(curr.recommendations || [])],
+                incidents: [...(acc.incidents || []), ...(curr.incidents || [])]
             }), {});
 
             if (!data || typeof data !== "object") {
@@ -568,9 +573,17 @@ function renderAnalytics(data) {
         timelineList.innerHTML = eventsToRender.map(ev => {
             const sevClass = ev.severity === 'high' ? 'high-severity' : (ev.severity === 'medium' ? 'medium-severity' : '');
             const tagsHtml = (ev.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
-            const escDesc = ev.description.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const evDesc = ev.description || ev.summary || '';
+            const escDesc = evDesc.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             const timeStr = ev.timestamp || ev.time_range;
             const timeSec = toSec(timeStr);
+            
+            let posterHtml = '';
+            if (ev.poster_frame) {
+                posterHtml = `<img src="${API_BASE}${ev.poster_frame}" class="timeline-poster" alt="Event Poster" onerror="this.style.display='none'">`;
+            } else if (ev.thumbnail_path) {
+                posterHtml = `<img src="${API_BASE}${ev.thumbnail_path}" class="timeline-poster" alt="Event Poster" onerror="this.style.display='none'">`;
+            }
             
             return `
                 <li class="timeline-item ${sevClass}" data-time-sec="${timeSec}" onclick="playVideoAt('${ev.video_id}', ${timeSec}, '${ev.event_type}', '${escDesc}', '${timeStr}', null)" style="cursor: pointer;">
@@ -582,7 +595,8 @@ function renderAnalytics(data) {
                                 ${ev.severity || 'INFO'}
                             </span>
                         </div>
-                        <div class="timeline-desc">${ev.description}</div>
+                        ${posterHtml}
+                        <div class="timeline-desc" style="margin-top: 12px;">${ev.description}</div>
                         ${ev.reason ? `<div style="font-size: 13px; color: var(--accent-color); margin-top:8px;">Reason: ${ev.reason}</div>` : ''}
                         <div class="tags">${tagsHtml}</div>
                     </div>
@@ -600,6 +614,63 @@ function renderAnalytics(data) {
         }
     } else {
         timelineList.innerHTML = '<li style="color: var(--text-secondary);">No events recorded in timeline.</li>';
+    }
+
+    // Render Detailed Report
+    const reportContainer = document.getElementById('detailed-report-container');
+    if (data.executive_summary || data.incident_narrative) {
+        reportContainer.classList.remove('hidden');
+        if (data.executive_summary) {
+            overviewText.textContent = data.executive_summary;
+        }
+        document.getElementById('report-narrative').textContent = data.incident_narrative || "No narrative available.";
+        
+        const findingsList = document.getElementById('report-findings');
+        findingsList.innerHTML = (data.key_findings || []).map(f => `<li style="margin-bottom: 6px;">${f}</li>`).join('');
+        
+        const recsList = document.getElementById('report-recommendations');
+        recsList.innerHTML = (data.recommendations || []).map(r => `<li style="margin-bottom: 6px;">${r}</li>`).join('');
+    } else {
+        reportContainer.classList.add('hidden');
+    }
+
+    // Render Incident Cards
+    const incidentsContainer = document.getElementById('incidents-container');
+    const incidentsGrid = document.getElementById('incidents-grid');
+    
+    if (data.incidents && data.incidents.length > 0) {
+        incidentsContainer.classList.remove('hidden');
+        incidentsGrid.innerHTML = data.incidents.map(inc => {
+            const timeStr = inc.chain_events && inc.chain_events.length > 0 ? inc.chain_events[0].start_time : '';
+            const timeSec = toSec(timeStr);
+            const incDesc = inc.summary || inc.description || '';
+            const escDesc = incDesc.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const incType = inc.primary_incident_type || inc.incident_type || '';
+            
+            let heroHtml = "";
+            if (inc.poster_frame) {
+                heroHtml = `<img src="${API_BASE}${inc.poster_frame}" class="incident-hero" alt="Incident Hero Image" onerror="this.style.display='none'">`;
+            } else if (inc.thumbnail_path) {
+                heroHtml = `<img src="${API_BASE}${inc.thumbnail_path}" class="incident-hero" alt="Incident Hero Image" onerror="this.style.display='none'">`;
+            }
+
+            return `
+                <div class="result-card glass-panel" onclick="playVideoAt('${data.video_id || document.getElementById('analytics-video-select').value}', ${timeSec}, '${incType}', '${escDesc}', '${timeStr}', null)" style="cursor: pointer;">
+                    ${heroHtml}
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="result-score" style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color);"><i class="fa-solid fa-triangle-exclamation"></i> ${(inc.severity || '').toUpperCase()}</span>
+                    </div>
+                    <h4 style="margin-top:12px; color:white; font-size: 16px;">${formatEventType(incType)}</h4>
+                    <p class="result-desc" style="margin-top: 8px;">${incDesc}</p>
+                    <div style="margin-top:auto; font-size:12px; color:var(--text-secondary); padding-top:12px; border-top:1px solid var(--panel-border);">
+                        ${inc.chain_events ? inc.chain_events.length : 0} Correlated Events
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } else {
+        incidentsContainer.classList.add('hidden');
+        incidentsGrid.innerHTML = '';
     }
 }
 

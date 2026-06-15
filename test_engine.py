@@ -1,66 +1,20 @@
 import json
-from app.services.event_aggregation import EventAggregationService
+from app.services.incident_engine import IncidentEngine
+from app.schemas.summary import AggregatedEvent
 
-def test_engine():
-    try:
-        # Mock data mimicking the kitchen fall
-        frames = [
-            {
-                "frame_id": "f1",
-                "timestamp_seconds": 1.0,
-                "scene_type": "indoor kitchen",
-                "scene_description": "An elderly man walking in the kitchen.",
-                "objects": [
-                    {"type": "environment", "subtype": "floor tile", "color": "white", "attributes": ["slippery"]},
-                    {"type": "person", "subtype": "elderly person", "color": "blue", "attributes": ["walking"]}
-                ],
-                "activities": ["walking"],
-                "events": []
-            },
-            {
-                "frame_id": "f2",
-                "timestamp_seconds": 2.0,
-                "scene_type": "indoor kitchen",
-                "objects": [
-                    {"type": "environment", "subtype": "floor tile", "color": "white"},
-                    {"type": "person", "subtype": "elderly person", "color": "blue", "attributes": ["slipping"]}
-                ],
-                "activities": ["slipping", "lost balance"],
-                "events": []
-            },
-            {
-                "frame_id": "f3",
-                "timestamp_seconds": 3.0,
-                "scene_type": "indoor kitchen",
-                "objects": [
-                    {"type": "environment", "subtype": "floor tile", "color": "white"},
-                    {"type": "person", "subtype": "elderly person", "color": "blue", "attributes": ["on floor"]}
-                ],
-                "activities": ["falling", "collapsed"],
-                "events": []
-            },
-            {
-                "frame_id": "f4",
-                "timestamp_seconds": 4.0,
-                "scene_type": "indoor kitchen",
-                "objects": [
-                    {"type": "environment", "subtype": "floor tile", "color": "white"},
-                    {"type": "person", "subtype": "elderly person", "color": "blue", "attributes": ["motionless"]}
-                ],
-                "activities": ["remains on floor"],
-                "events": []
-            }
-        ]
-        
-        events = EventAggregationService.process_events("vid1", frames)
-        with open("c:/Mukul K/vinfo1/video-search-engine/test_out.json", "w") as f:
-            json.dump(events, f, indent=2)
-        with open("c:/Mukul K/vinfo1/video-search-engine/test_success.txt", "w") as f:
-            f.write("Success")
-    except Exception as e:
-        with open("c:/Mukul K/vinfo1/video-search-engine/test_error.txt", "w") as f:
-            import traceback
-            f.write(traceback.format_exc())
+def main():
+    e1 = AggregatedEvent(start_time="00:00:00", end_time="00:00:10", scene_context="parking lot", participants=["man"], activities=["walking"], description="A man is walking in the parking lot.")
+    e2 = AggregatedEvent(start_time="00:00:15", end_time="00:00:20", scene_context="parking lot", participants=["man", "car"], activities=["breaking in", "theft"], description="A man breaks into a car.")
+    e3 = AggregatedEvent(start_time="00:05:00", end_time="00:05:10", scene_context="store interior", participants=["woman"], activities=["shopping"], description="A woman is shopping.")
+    
+    chains = IncidentEngine.build_candidate_chains([e1, e2, e3])
+    
+    with open("test_engine_out.txt", "w") as f:
+        f.write(f"Found {len(chains)} chains.\n")
+        for i, c in enumerate(chains):
+            f.write(f"Chain {i+1}:\n")
+            for e in c:
+                f.write(f"  {e.start_time} - {e.description}\n")
 
 if __name__ == "__main__":
-    test_engine()
+    main()

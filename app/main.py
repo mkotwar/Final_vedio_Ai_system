@@ -37,7 +37,8 @@ async def lifespan(app: FastAPI):
     logger.info(
         "\nQwen Generation Config\n"
         "----------------------\n"
-        f"max_new_tokens: {settings.QWEN_MAX_NEW_TOKENS}"
+        f"max_new_tokens: {settings.QWEN_MAX_NEW_TOKENS}\n"
+        f"Active VLM Backend: {settings.VLM_ENGINE_TYPE}"
     )
 
     # 2. Automatically verify and create necessary application directories
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
         settings.FRAMES_DIR,
         settings.METADATA_DIR,
         settings.LOGS_DIR,
+        settings.DATA_DIR / "thumbnails",
     ]
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
@@ -226,6 +228,45 @@ async def health_check() -> Dict[str, Any]:
         "storage_checks": checks,
         "timestamp": time.time(),
     }
+
+@app.get("/api/v1/debug/vlm-health", response_model=Dict[str, Any])
+async def vlm_health_check() -> Dict[str, Any]:
+    """Health check specifically for the VLM Engine."""
+    from app.services.vlm_factory import get_vlm_service
+    
+    vlm_service = get_vlm_service()
+    
+    if settings.VLM_ENGINE_TYPE == "native_vllm":
+        vllm_health = vlm_service.health_check()
+        return {
+            "engine_type": vllm_health.get("engine_type"),
+            "backend_active": True,
+            "model_name": vllm_health.get("model_loaded"),
+            "device": "cuda" if vllm_health.get("cuda_available") else "cpu",
+            "loaded": vllm_health.get("status") == "healthy"
+        }
+    
+    # Fallback for Ollama
+    return {
+        "engine_type": "ollama",
+        "backend_active": True,
+        "model_name": settings.QWEN_MODEL_ID,
+        "device": "ollama-managed",
+        "loaded": True
+    }
+
+@app.get("/api/v1/debug/hf-health", response_model=Dict[str, Any])
+async def hf_health_check() -> Dict[str, Any]:
+    """Health check specifically for the Native HF Backend."""
+    from app.services.qwen_vlm_hf import NativeQwenTransformersService
+    
+    return NativeQwenTransformersService.health_check()
+
+
+# --- Mount API Static Files ---
+thumbnails_path = settings.DATA_DIR / "thumbnails"
+thumbnails_path.mkdir(parents=True, exist_ok=True)
+app.mount("/api/static/thumbnails", StaticFiles(directory=str(thumbnails_path)), name="thumbnails")
 
 # --- Mount Web Dashboard (Frontend) ---
 frontend_path = settings.DATA_DIR.parent / "frontend"
