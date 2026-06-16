@@ -14,6 +14,7 @@ from app.services.vlm_factory import get_vlm_service
 from app.services.motion_window_service import MotionWindowService
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
+from app.schemas.telemetry import SamplingMetrics
 
 
 class FrameExtractionService:
@@ -126,9 +127,14 @@ class FrameExtractionService:
         window_stats = {}
         if is_motion_windowing_enabled:
             logger.info(f"Running Motion Window Service for video {video_id}...")
-            motion_windows = MotionWindowService.detect_motion_windows(video_path)
+            motion_windows, window_metrics = MotionWindowService.detect_motion_windows(video_path)
             window_stats = {idx: {"start": w[0], "end": w[1], "frames_in": 0, "frames_selected": 0} for idx, w in enumerate(motion_windows)}
             logger.info(f"Detected {len(motion_windows)} motion windows.")
+
+        sampling_metrics = SamplingMetrics(
+            video_id=video_id,
+            motion_windows_detected=len(motion_windows)
+        )
 
         # Temporary list of tuples to pass to VLM batching: (frame_id, video_id, timestamp_seconds, frame_absolute_path)
         extracted_tuples: List[Tuple[str, str, float, Path]] = []
@@ -138,22 +144,39 @@ class FrameExtractionService:
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps <= 0:
             fps = 30.0
-        frame_interval = max(1, int(round(fps)))
-        current_raw_frame = 0
+        current_fps = 0.1
+        current_state = "IDLE"
+        burst_timer_seconds = 0.0
+
+        # Telemetry trackers
+        state_durations = {"IDLE": 0.0, "LOW_ACTIVITY": 0.0, "NORMAL_ACTIVITY": 0.0, "HIGH_ACTIVITY": 0.0, "BURST_CAPTURE": 0.0, "COOLDOWN": 0.0}
+        fps_transitions = 0
+        burst_activations = 0
 
         saved_paths: List[Path] = []
+        current_raw_frame = 0
 
         last_sent_frame = None
+        last_eval_frame = None
         total_extracted = 0
         skipped_count = 0
-
+        
+        # Event Candidate Layer Configuration
+        last_candidate_second = 0.0
+        accumulated_vns = 0.0
+        candidate_frames_generated = 0
+        candidate_frames_rejected = 0
+        VNS_THRESHOLD = 45.0
+        MAX_GAP_SECONDS = 10.0
+        
         try:
             while True:
-                # Seek to exact frame position (more robust than MSEC seeking across codecs)
+                frame_interval = max(1, int(round(fps / current_fps)))
+                
+                # Seek to exact frame position
                 if current_raw_frame > 0:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, current_raw_frame)
 
-                # Read frame at current seek position
                 extract_start = time.perf_counter()
                 success, frame = cap.read()
                 if not success:
@@ -163,8 +186,70 @@ class FrameExtractionService:
                 total_extracted += 1
                 frame_id = f"{video_id}_f{frame_idx:04d}"
 
-                should_send = True
+                # Calculate ADS
+                ads = 0
                 hist_diff, ssim_diff, motion_score = 0.0, 0.0, 0.0
+                if last_eval_frame is not None:
+                    hist_diff, ssim_diff, motion_score = cls.compute_similarity_metrics(frame, last_eval_frame)
+                    
+                    # Normalize inputs based on practical maximums
+                    norm_motion = min(1.0, motion_score / 0.4) 
+                    norm_ssim = min(1.0, ssim_diff / 0.2)
+                    norm_hist = min(1.0, hist_diff / 0.5)
+                    
+                    ads = int(((norm_motion * 0.6) + (norm_ssim * 0.3) + (norm_hist * 0.1)) * 100)
+                
+                last_eval_frame = frame.copy()
+
+                # Dynamic FPS State Machine
+                prev_state = current_state
+                
+                if current_state == "BURST_CAPTURE":
+                    burst_timer_seconds += (1.0 / current_fps)
+                    if burst_timer_seconds >= 3.0 and ads < 80:
+                        current_state = "COOLDOWN"
+                        burst_timer_seconds = 0.0
+                elif current_state == "COOLDOWN":
+                    burst_timer_seconds += (1.0 / current_fps)
+                    if burst_timer_seconds >= 2.0:
+                        current_state = "NORMAL_ACTIVITY"
+                        burst_timer_seconds = 0.0
+                    elif ads > 80:
+                        current_state = "BURST_CAPTURE"
+                        burst_timer_seconds = 0.0
+                        burst_activations += 1
+                else:
+                    if ads > 80:
+                        current_state = "BURST_CAPTURE"
+                        burst_activations += 1
+                        burst_timer_seconds = 0.0
+                    elif ads > 50:
+                        current_state = "HIGH_ACTIVITY"
+                    elif ads > 20:
+                        current_state = "NORMAL_ACTIVITY"
+                    elif ads > 5:
+                        current_state = "LOW_ACTIVITY"
+                    else:
+                        current_state = "IDLE"
+                        
+                if current_state != prev_state:
+                    fps_transitions += 1
+                    
+                # Map State to FPS
+                if current_state == "IDLE": current_fps = 0.1
+                elif current_state == "LOW_ACTIVITY": current_fps = 0.5
+                elif current_state == "NORMAL_ACTIVITY": current_fps = 1.0
+                elif current_state == "HIGH_ACTIVITY": current_fps = 2.0
+                elif current_state == "BURST_CAPTURE": current_fps = 5.0
+                elif current_state == "COOLDOWN": current_fps = 1.0
+                
+                # Track duration in state
+                if current_state in state_durations:
+                    state_durations[current_state] += (1.0 / current_fps)
+                elif current_state == "COOLDOWN":
+                    state_durations["NORMAL_ACTIVITY"] += (1.0 / current_fps)
+
+                should_send = True
 
                 current_window_idx = None
                 if is_motion_windowing_enabled:
@@ -177,18 +262,44 @@ class FrameExtractionService:
                             break
                     if not in_window:
                         should_send = False
+                        sampling_metrics.dropped_by_motion_window += 1
 
                 if should_send and settings.ENABLE_ADAPTIVE_SAMPLING and last_sent_frame is not None:
                     hist_diff, ssim_diff, motion_score = cls.compute_similarity_metrics(frame, last_sent_frame)
 
-                    # SSIM returns a similarity score where 1.0 is identical
                     ssim_score = 1.0 - ssim_diff
-                    # Skip if no significant scene change AND no significant motion
-                    is_scene_change = (hist_diff > settings.HISTOGRAM_THRESHOLD) or (ssim_score < settings.SSIM_THRESHOLD)
-                    is_motion = motion_score > settings.MOTION_THRESHOLD
-
-                    if not (is_scene_change or is_motion):
+                    
+                    # Accumulate Visual Novelty Score
+                    vns_delta = (
+                        0.45 * (1.0 - ssim_score) +  # Structural change
+                        0.35 * motion_score +        # Raw pixel difference
+                        0.20 * hist_diff             # Lighting/color shifts
+                    ) * 100
+                    
+                    accumulated_vns += vns_delta
+                    time_since_last_candidate = second - last_candidate_second
+                    
+                    # Candidate Selection Rules
+                    is_candidate = False
+                    if accumulated_vns >= VNS_THRESHOLD:
+                        is_candidate = True
+                    elif time_since_last_candidate >= MAX_GAP_SECONDS:
+                        is_candidate = True
+                        
+                    if not is_candidate:
                         should_send = False
+                        candidate_frames_rejected += 1
+                        # Maintain legacy metrics based on strict thresholds for backward compatibility
+                        if ssim_score >= settings.SSIM_THRESHOLD:
+                            sampling_metrics.dropped_by_ssim += 1
+                        elif hist_diff <= settings.HISTOGRAM_THRESHOLD:
+                            sampling_metrics.dropped_by_histogram += 1
+                        else:
+                            sampling_metrics.dropped_by_motion_threshold += 1
+                    else:
+                        candidate_frames_generated += 1
+                        accumulated_vns = 0.0
+                        last_candidate_second = second
 
                 if should_send:
                     if is_motion_windowing_enabled and current_window_idx is not None:
@@ -222,7 +333,7 @@ class FrameExtractionService:
 
                 # Increment states
                 frame_idx += 1
-                current_raw_frame += frame_interval
+                current_raw_frame += max(1, int(round(fps / current_fps)))
 
         except Exception as exc:
             # Perform disk rollbacks of saved images on failures
@@ -263,7 +374,36 @@ class FrameExtractionService:
             f"-----------------------"
         )
         
-        logger.info(f"Successfully extracted {processed_count} frame JPEG images from video: {video_id}. Starting VLM batch processing...")
+        sampling_metrics.total_frames_seen = total_extracted
+        sampling_metrics.kept_frames = processed_count
+        sampling_metrics.reduction_percent = reduction_percentage
+        sampling_metrics.vlm_calls_saved = skipped_count
+        if total_extracted > 0:
+            sampling_metrics.video_duration_seconds = total_extracted / fps if fps > 0 else 0
+            
+        sampling_metrics.mode_idle_seconds = state_durations["IDLE"]
+        sampling_metrics.mode_low_seconds = state_durations["LOW_ACTIVITY"]
+        sampling_metrics.mode_normal_seconds = state_durations["NORMAL_ACTIVITY"]
+        sampling_metrics.mode_high_seconds = state_durations["HIGH_ACTIVITY"]
+        sampling_metrics.mode_burst_seconds = state_durations["BURST_CAPTURE"]
+        sampling_metrics.fps_transitions = fps_transitions
+        sampling_metrics.burst_activations = burst_activations
+        
+        # Approximate average FPS
+        total_duration = sum(state_durations.values())
+        if total_duration > 0:
+            sampling_metrics.average_extraction_fps = total_extracted / total_duration
+            
+        # Candidate Layer Telemetry
+        sampling_metrics.candidate_frames_generated = candidate_frames_generated
+        sampling_metrics.candidate_frames_rejected = candidate_frames_rejected
+        sampling_metrics.candidate_frames_sent_to_vlm = processed_count
+        if candidate_frames_generated + candidate_frames_rejected > 0:
+            sampling_metrics.candidate_reduction_percent = (candidate_frames_rejected / (candidate_frames_generated + candidate_frames_rejected)) * 100.0
+        if total_duration > 0:
+            sampling_metrics.average_candidate_density = candidate_frames_generated / total_duration
+        
+        logger.info(f"Successfully extracted {processed_count} candidate frames from video: {video_id}. Starting VLM batch processing...")
         JobStatusService.update(video_id, current_step=f"Starting VLM Analysis (0/{processed_count})...", total_frames=processed_count, progress_percent=10.0)
 
         # 3. Process extracted frames in batches using QwenVLMService
@@ -375,13 +515,11 @@ class FrameExtractionService:
 
         # Stop and finalize pipeline timings
         tracker.end_pipeline()
+        
+        sampling_metrics.processing_duration_seconds = tracker.end_time - tracker.start_time
+        
         if settings.ENABLE_ADAPTIVE_SAMPLING:
-            tracker.set_sampling_stats(
-                total=total_extracted,
-                sent=processed_count,
-                skipped=skipped_count,
-                pct=reduction_percent,
-            )
+            tracker.set_sampling_stats(sampling_metrics)
         tracker.finalize()
 
         logger.info(

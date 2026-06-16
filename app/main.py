@@ -24,6 +24,7 @@ from app.api.frames import router as frames_router
 from app.api.summary import router as summary_router
 from app.api.search import router as search_router
 from app.api.events import router as events_router
+from app.api.debug import router as debug_router
 
 
 @asynccontextmanager
@@ -140,6 +141,7 @@ app.include_router(frames_router)
 app.include_router(summary_router)
 app.include_router(search_router)
 app.include_router(events_router)
+app.include_router(debug_router)
 
 
 # Configure CORS Middleware
@@ -244,6 +246,16 @@ async def vlm_health_check() -> Dict[str, Any]:
             "model_name": vllm_health.get("model_loaded"),
             "device": "cuda" if vllm_health.get("cuda_available") else "cpu",
             "loaded": vllm_health.get("status") == "healthy"
+        }
+        
+    elif settings.VLM_ENGINE_TYPE == "native_hf":
+        hf_health = vlm_service.health_check()
+        return {
+            "engine_type": hf_health.get("engine_type"),
+            "backend_active": True,
+            "model_name": hf_health.get("model_loaded"),
+            "device": "cuda" if hf_health.get("cuda_available") else "cpu",
+            "loaded": hf_health.get("status") == "healthy"
         }
     
     # Fallback for Ollama

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 from loguru import logger
 from app.core.config import settings, PROJECT_ROOT
+from app.schemas.telemetry import SamplingMetrics
 
 class PerformanceTracker:
     """Manages accumulation of execution metrics, writing performance logs, and generating markdown reports."""
@@ -18,18 +19,12 @@ class PerformanceTracker:
         self.start_time = 0.0
         self.end_time = 0.0
         self.sampling_enabled = False
-        self.sampling_total = 0
-        self.sampling_sent = 0
-        self.sampling_skipped = 0
-        self.sampling_pct = 0.0
+        self.sampling_metrics: SamplingMetrics = None
 
-    def set_sampling_stats(self, total: int, sent: int, skipped: int, pct: float):
+    def set_sampling_stats(self, metrics: SamplingMetrics):
         """Sets the stats for adaptive frame sampling."""
         self.sampling_enabled = True
-        self.sampling_total = total
-        self.sampling_sent = sent
-        self.sampling_skipped = skipped
-        self.sampling_pct = pct
+        self.sampling_metrics = metrics
 
     def set_upload_time(self, ms: float):
         """Sets the video file upload duration in milliseconds."""
@@ -139,6 +134,51 @@ class PerformanceTracker:
         print(f" Avg Metadata Write:      {summary['avg_write_ms']} ms")
         print(f" Total Ingestion Time:    {summary['total_ingestion_seconds']} seconds")
         print("=" * 60 + "\n")
+        
+        if self.sampling_enabled and self.sampling_metrics:
+            m = self.sampling_metrics
+            estimated_runtime_saved = m.vlm_calls_saved * (summary['avg_vlm_ms'] / 1000.0)
+            print("=================================================")
+            print("SAMPLING REPORT")
+            print("=================================================")
+            print(f"Video Duration: {m.video_duration_seconds:.1f} sec")
+            print(f"Frames Read: {m.total_frames_seen}")
+            frames_after_motion_window = m.total_frames_seen - m.dropped_by_motion_window
+            print(f"After Motion Windowing: {frames_after_motion_window}")
+            print(f"After Adaptive Sampling: {m.kept_frames}")
+            print(f"Frames Sent To VLM: {m.kept_frames}")
+            print(f"Reduction: {m.reduction_percent:.1f}%")
+            print(f"VLM Calls Saved: {m.vlm_calls_saved}")
+            print(f"Estimated Runtime Saved: {estimated_runtime_saved:.1f} sec")
+            
+            print("=================================================")
+            print("DYNAMIC FPS TELEMETRY")
+            print("=================================================")
+            print(f"Average Extraction Rate: {m.average_extraction_fps:.2f} FPS")
+            print(f"State Transitions: {m.fps_transitions}")
+            print(f"Burst Activations: {m.burst_activations}")
+            print(f"Time in IDLE (0.1 FPS): {m.mode_idle_seconds:.1f}s")
+            print(f"Time in LOW (0.5 FPS): {m.mode_low_seconds:.1f}s")
+            print(f"Time in NORMAL (1.0 FPS): {m.mode_normal_seconds:.1f}s")
+            print(f"Time in HIGH (2.0 FPS): {m.mode_high_seconds:.1f}s")
+            print(f"Time in BURST (5.0 FPS): {m.mode_burst_seconds:.1f}s")
+            print("=================================================")
+            print("EVENT CANDIDATE LAYER TELEMETRY")
+            print("=================================================")
+            print(f"Candidates Generated: {m.candidate_frames_generated}")
+            print(f"Candidates Rejected: {m.candidate_frames_rejected}")
+            print(f"Sent To VLM: {m.candidate_frames_sent_to_vlm}")
+            print(f"Reduction Ratio: {m.candidate_reduction_percent:.1f}%")
+            print(f"Avg Density: {m.average_candidate_density:.2f} candidates/sec")
+            print("=================================================\n")
+            
+            # Save _sampling.json
+            sampling_path = settings.METADATA_DIR / f"{self.video_id}_sampling.json"
+            try:
+                with open(sampling_path, "w", encoding="utf-8") as f:
+                    json.dump(m.model_dump(), f, indent=4)
+            except Exception as exc:
+                logger.error(f"Failed to write sampling metadata: {exc}")
 
     def _generate_report(self, summary: Dict[str, Any]):
         """Builds and writes the comprehensive PERFORMANCE_REPORT.md file."""
@@ -262,9 +302,10 @@ Based on total runtime spent in each stage:
             avg_frame_ms = 0.0
 
         avg_frame_seconds = avg_frame_ms / 1000.0
+        m = self.sampling_metrics
         
         # Savings calculations
-        savings_seconds = self.sampling_skipped * avg_frame_seconds
+        savings_seconds = m.vlm_calls_saved * avg_frame_seconds
         savings_minutes = savings_seconds / 60.0
         projected_duration_seconds = pipeline_duration_seconds + savings_seconds
 
@@ -275,10 +316,38 @@ This report summarizes the performance metrics and compute savings achieved by e
 ## Ingestion Overview
 
 * **Video ID**: `{self.video_id}`
-* **Original Frame Count (Extracted)**: {self.sampling_total}
-* **Filtered Frame Count (Sent to Qwen)**: {self.sampling_sent}
-* **Frames Skipped**: {self.sampling_skipped}
-* **Frame Reduction Ratio**: {self.sampling_pct:.2f}%
+* **Original Frame Count (Extracted)**: {m.total_frames_seen}
+* **Filtered Frame Count (Sent to Qwen)**: {m.kept_frames}
+* **Frames Skipped**: {m.vlm_calls_saved}
+* **Frame Reduction Ratio**: {m.reduction_percent:.2f}%
+
+## Filter Breakdown
+
+* **Dropped by Motion Windowing**: {m.dropped_by_motion_window}
+* **Dropped by SSIM Threshold**: {m.dropped_by_ssim}
+* **Dropped by Histogram Correlation**: {m.dropped_by_histogram}
+* **Dropped by Motion Score Threshold**: {m.dropped_by_motion_threshold}
+
+## Dynamic FPS Telemetry
+
+* **Average Extraction Rate**: {m.average_extraction_fps:.2f} FPS
+* **State Transitions**: {m.fps_transitions}
+* **Burst Activations**: {m.burst_activations}
+
+### Time in FPS Modes
+
+* **IDLE (0.1 FPS)**: {m.mode_idle_seconds:.1f}s
+* **LOW_ACTIVITY (0.5 FPS)**: {m.mode_low_seconds:.1f}s
+* **NORMAL_ACTIVITY (1.0 FPS)**: {m.mode_normal_seconds:.1f}s
+* **HIGH_ACTIVITY (2.0 FPS)**: {m.mode_high_seconds:.1f}s
+* **BURST_CAPTURE (5.0 FPS)**: {m.mode_burst_seconds:.1f}s
+
+## Event Candidate Layer
+
+* **Candidates Evaluated**: {m.candidate_frames_generated + m.candidate_frames_rejected}
+* **Candidates Forwarded to VLM**: {m.candidate_frames_sent_to_vlm}
+* **Redundant Frames Dropped**: {m.candidate_frames_rejected}
+* **Candidate Reduction**: {m.candidate_reduction_percent:.2f}%
 
 ---
 
