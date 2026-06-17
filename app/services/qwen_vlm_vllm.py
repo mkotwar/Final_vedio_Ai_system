@@ -14,6 +14,9 @@ class NativeQwenVLLMService:
     
     @classmethod
     def load_model(cls):
+        logger.warning(f"MODEL CHECK | llm_is_none={cls._llm is None}")
+
+
         if cls._llm is not None:
             return
             

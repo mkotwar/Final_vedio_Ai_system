@@ -958,8 +958,8 @@ class EventAggregationService:
             event_data = {
                 "event_id": event_id,
                 "video_id": video_id,
-                "start_time": start_time,
-                "end_time": end_time,
+                "start_time": format_timestamp_human(start_time),
+                "end_time": format_timestamp_human(end_time),
                 "timestamp_start_seconds": start_time,
                 "timestamp_end_seconds": end_time,
                 "timestamp_start_human": format_timestamp_human(start_time),
@@ -974,6 +974,7 @@ class EventAggregationService:
                 "source_frames": source_frames,
                 "event_type": event_type,
                 "summary": summary,
+                "description": summary,
                 # --- Narrative Intelligence Fields ---
                 "scene_context": scene_context,
                 "real_world_time": real_world_time,

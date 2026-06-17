@@ -211,6 +211,9 @@ class NativeQwenVLMService:
 
             for idx, raw_out in enumerate(vlm_outputs):
                 frame_id, video_id, ts, path = batch_frames[idx]
+                
+                logger.info(f"\nRAW_QWEN_OUTPUT_START\n{raw_out}\nRAW_QWEN_OUTPUT_END\n")
+                
                 if not raw_out:
                     logger.warning(f"Empty response from vLLM for {frame_id}")
                     continue
@@ -219,8 +222,8 @@ class NativeQwenVLMService:
                     repair_start = time.perf_counter()
                     cleaned_out = QwenVLMService._clean_json_response(raw_out)
                     import json
-                    parsed = json.loads(cleaned_out)
-                    parsed = QwenVLMService._normalize_metadata_dict(parsed)
+                    parsed_raw = json.loads(cleaned_out)
+                    parsed = QwenVLMService._normalize_metadata_dict(parsed_raw.copy())
                     repair_duration_ms = (time.perf_counter() - repair_start) * 1000.0
 
                     time_snippet = calculate_time_snippet(ts, interval_seconds=1.0)
@@ -237,10 +240,35 @@ class NativeQwenVLMService:
 
                     parsed = ActivityRecoveryService.apply(parsed)
                     parsed["search_text"] = QwenVLMService._generate_search_text(parsed)
+                    
+                    if idx == 0:
+                        try:
+                            trace_data = {
+                                "1_raw_qwen_output": raw_out,
+                                "2_cleaned_json_string": cleaned_out,
+                                "2b_parsed_dict": parsed_raw,
+                                "3_normalized_metadata": parsed.copy(),
+                                "4_final_framerichmetadata": None
+                            }
+                            with open("debug_metadata_trace.json", "w", encoding="utf-8") as f:
+                                json.dump(trace_data, f, indent=4)
+                        except Exception as e:
+                            logger.error(f"Failed to write debug trace: {e}")
 
                     val_start = time.perf_counter()
                     rich_meta = FrameRichMetadata(**parsed)
                     val_duration_ms = (time.perf_counter() - val_start) * 1000.0
+
+                    if idx == 0:
+                        try:
+                            import json
+                            with open("debug_metadata_trace.json", "r", encoding="utf-8") as f:
+                                trace_data = json.load(f)
+                            trace_data["4_final_framerichmetadata"] = rich_meta.model_dump()
+                            with open("debug_metadata_trace.json", "w", encoding="utf-8") as f:
+                                json.dump(trace_data, f, indent=4)
+                        except Exception as e:
+                            logger.error(f"Failed to append to debug trace: {e}")
 
                     timings = {
                         "ocr_ms": ocr_duration_ms,

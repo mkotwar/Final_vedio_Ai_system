@@ -4,10 +4,10 @@ This report summarizes the performance metrics collected during the video ingest
 
 ## Ingestion Overview
 
-* **Video ID**: `457f33c8-0fed-4fdd-badb-a6dfed341981`
+* **Video ID**: `a8c6b594-42a0-485a-bcf3-ccb8fda0f844`
 * **Frames Processed**: 5
 * **Video Upload Time**: 0.00 seconds
-* **Total Ingestion Time**: 275.85 seconds
+* **Total Ingestion Time**: 15.80 seconds
 
 ---
 
@@ -15,13 +15,13 @@ This report summarizes the performance metrics collected during the video ingest
 
 | Stage | Average Time (ms) | Percentage of Runtime |
 | :--- | :--- | :--- |
-| **Qwen VLM Inference** | 52748.28 ms | 99.32% |
-| **OCR Processing** | 339.08 ms | 0.64% |
-| **Frame Extraction** | 21.44 ms | 0.04% |
-| **Metadata Write** | 0.37 ms | 0.00% |
-| **JSON Repair & Normalization** | 2.69 ms | 0.01% |
-| **Metadata Validation** | 0.02 ms | 0.00% |
-| **Total Per Frame** | 53111.88 ms | 100.00% |
+| **Qwen VLM Inference** | 2521.84 ms | 95.34% |
+| **OCR Processing** | 60.62 ms | 2.29% |
+| **Frame Extraction** | 62.17 ms | 2.35% |
+| **Metadata Write** | 0.29 ms | 0.01% |
+| **JSON Repair & Normalization** | 0.13 ms | 0.01% |
+| **Metadata Validation** | 0.01 ms | 0.00% |
+| **Total Per Frame** | 2645.07 ms | 100.00% |
 
 ---
 
@@ -29,11 +29,11 @@ This report summarizes the performance metrics collected during the video ingest
 
 Based on total runtime spent in each stage:
 
-1. **Qwen VLM Inference**: 263.74s total (99.32% of runtime)
-2. **OCR Processing**: 1.70s total (0.64% of runtime)
-3. **Frame Extraction**: 0.11s total (0.04% of runtime)
-4. **JSON Repair**: 0.01s total (0.01% of runtime)
-5. **Metadata Write**: 0.00s total (0.00% of runtime)
+1. **Qwen VLM Inference**: 12.61s total (95.34% of runtime)
+2. **Frame Extraction**: 0.31s total (2.35% of runtime)
+3. **OCR Processing**: 0.30s total (2.29% of runtime)
+4. **Metadata Write**: 0.00s total (0.01% of runtime)
+5. **JSON Repair**: 0.00s total (0.01% of runtime)
 6. **Metadata Validation**: 0.00s total (0.00% of runtime)
 
 ---
@@ -42,21 +42,21 @@ Based on total runtime spent in each stage:
 
 | Rank | Frame ID | Total Frame Time (ms) | VLM Inference (ms) | OCR Time (ms) | Extract Time (ms) | Write Time (ms) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 1 | `457f33c8-0fed-4fdd-badb-a6dfed341981_f0030` | 166297.95 | 166201.06 | 71.78 | 23.98 | 0.71 |
-| 2 | `457f33c8-0fed-4fdd-badb-a6dfed341981_f0013` | 24816.42 | 24385.09 | 405.90 | 24.81 | 0.33 |
-| 3 | `457f33c8-0fed-4fdd-badb-a6dfed341981_f0021` | 24816.26 | 24385.09 | 405.90 | 24.75 | 0.25 |
-| 4 | `457f33c8-0fed-4fdd-badb-a6dfed341981_f0026` | 24814.98 | 24385.09 | 405.90 | 23.53 | 0.24 |
-| 5 | `457f33c8-0fed-4fdd-badb-a6dfed341981_f0001` | 24813.80 | 24385.09 | 405.90 | 10.13 | 0.34 |
+| 1 | `a8c6b594-42a0-485a-bcf3-ccb8fda0f844_f0017` | 4582.02 | 4439.98 | 69.68 | 71.86 | 0.33 |
+| 2 | `a8c6b594-42a0-485a-bcf3-ccb8fda0f844_f0007` | 2175.65 | 2042.31 | 58.35 | 74.66 | 0.20 |
+| 3 | `a8c6b594-42a0-485a-bcf3-ccb8fda0f844_f0012` | 2173.51 | 2042.31 | 58.35 | 72.49 | 0.25 |
+| 4 | `a8c6b594-42a0-485a-bcf3-ccb8fda0f844_f0004` | 2171.78 | 2042.31 | 58.35 | 70.65 | 0.30 |
+| 5 | `a8c6b594-42a0-485a-bcf3-ccb8fda0f844_f0001` | 2122.40 | 2042.31 | 58.35 | 21.20 | 0.37 |
 
 ---
 
 ## Recommendations
 
 1. **Optimize Qwen VLM Inference**:
-   * Currently, the **Qwen VLM Inference** stage represents the largest performance bottleneck at **99.32%** of the total frame processing time.
+   * Currently, the **Qwen VLM Inference** stage represents the largest performance bottleneck at **95.34%** of the total frame processing time.
    * If VLM is the bottleneck: Consider flash attention, quantizing the model (INT4/INT8), or enabling frame-skipping based on motion thresholding.
    * If OCR is the bottleneck: Optimize easyocr reader parameters, switch to GPU if VRAM allows, or run OCR asynchronously in parallel processes.
 2. **Optimize Frame Extraction**:
-   * Frame extraction takes 21.44 ms per frame on average. If this is high, utilize faster decoder libraries (like `decord`) or write frames directly to an in-memory byte stream instead of saving JPEGs to disk.
+   * Frame extraction takes 62.17 ms per frame on average. If this is high, utilize faster decoder libraries (like `decord`) or write frames directly to an in-memory byte stream instead of saving JPEGs to disk.
 3. **Motion Detection / Pixel-Movement Filtering**:
    * Implement a frame-to-frame pixel difference threshold. For frames below a threshold (no motion), skip OCR, VLM, and JSON writing completely, and clone the previous frame's metadata to save significant compute.

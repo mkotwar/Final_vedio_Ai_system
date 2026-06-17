@@ -4,49 +4,49 @@ This report summarizes the performance metrics and compute savings achieved by e
 
 ## Ingestion Overview
 
-* **Video ID**: `457f33c8-0fed-4fdd-badb-a6dfed341981`
-* **Original Frame Count (Extracted)**: 31
+* **Video ID**: `a8c6b594-42a0-485a-bcf3-ccb8fda0f844`
+* **Original Frame Count (Extracted)**: 20
 * **Filtered Frame Count (Sent to Qwen)**: 5
-* **Frames Skipped**: 26
-* **Frame Reduction Ratio**: 83.87%
+* **Frames Skipped**: 15
+* **Frame Reduction Ratio**: 75.00%
 
 ## Filter Breakdown
 
-* **Dropped by Motion Windowing**: 12
-* **Dropped by SSIM Threshold**: 6
-* **Dropped by Histogram Correlation**: 8
+* **Dropped by Motion Windowing**: 0
+* **Dropped by SSIM Threshold**: 0
+* **Dropped by Histogram Correlation**: 15
 * **Dropped by Motion Score Threshold**: 0
 
 ## Dynamic FPS Telemetry
 
-* **Average Extraction Rate**: 1.03 FPS
-* **State Transitions**: 7
-* **Burst Activations**: 1
+* **Average Extraction Rate**: 2.00 FPS
+* **State Transitions**: 0
+* **Burst Activations**: 0
 
 ### Time in FPS Modes
 
-* **IDLE (0.1 FPS)**: 10.0s
-* **LOW_ACTIVITY (0.5 FPS)**: 4.0s
-* **NORMAL_ACTIVITY (1.0 FPS)**: 11.0s
+* **IDLE (0.1 FPS)**: 0.0s
+* **LOW_ACTIVITY (0.5 FPS)**: 0.0s
+* **NORMAL_ACTIVITY (1.0 FPS)**: 10.0s
 * **HIGH_ACTIVITY (2.0 FPS)**: 0.0s
-* **BURST_CAPTURE (5.0 FPS)**: 3.0s
+* **BURST_CAPTURE (5.0 FPS)**: 0.0s
 
 ## Event Candidate Layer
 
-* **Candidates Evaluated**: 18
+* **Candidates Evaluated**: 19
 * **Candidates Forwarded to VLM**: 5
-* **Redundant Frames Dropped**: 14
-* **Candidate Reduction**: 77.78%
+* **Redundant Frames Dropped**: 15
+* **Candidate Reduction**: 78.95%
 
 ---
 
 ## Runtime & Savings Analysis
 
-* **Average Processing Time Per Sent Frame**: 53.11 seconds
-* **Actual Pipeline Run Duration (with sampling)**: 275.85 seconds
-* **Projected Run Duration Without Sampling**: 1656.76 seconds
-* **Estimated Runtime Savings**: 1380.91 seconds (23.02 minutes)
-* **Actual Runtime Savings**: 1380.91 seconds (23.02 minutes)
+* **Average Processing Time Per Sent Frame**: 2.65 seconds
+* **Actual Pipeline Run Duration (with sampling)**: 15.80 seconds
+* **Projected Run Duration Without Sampling**: 55.48 seconds
+* **Estimated Runtime Savings**: 39.68 seconds (0.66 minutes)
+* **Actual Runtime Savings**: 39.68 seconds (0.66 minutes)
 
 ---
 

@@ -18,18 +18,14 @@ def my_print(msg):
     f_out.write(str(msg) + "\n")
     f_out.flush()
 
-try:
-    from app.services.frame import FrameExtractionService
-    from app.services.summary_service import SummaryService
-    from app.services.incident_engine import IncidentEngine
-    from app.services.narrative_builder import NarrativeBuilderService
-    from app.services.poster_service import PosterService
-    from app.services.qwen_vlm_hf import NativeQwenTransformersService
-    from app.core.qdrant_manager import QdrantManager
-    from app.core.config import settings
-except Exception as e:
-    my_print(f"IMPORT ERROR: {e}")
-    sys.exit(1)
+from app.services.frame import FrameExtractionService
+from app.services.summary_service import SummaryService
+from app.services.incident_engine import IncidentEngine
+from app.services.narrative_builder import NarrativeBuilderService
+from app.services.poster_service import PosterService
+from app.services.qwen_vlm_hf import NativeQwenTransformersService
+from app.core.qdrant_manager import QdrantManager
+from app.core.config import settings
 
 def print_memory(label):
     if torch.cuda.is_available():

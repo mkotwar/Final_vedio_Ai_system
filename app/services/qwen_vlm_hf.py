@@ -8,7 +8,7 @@ from typing import List, Tuple, Dict, Any
 from loguru import logger
 from PIL import Image
 
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration, BitsAndBytesConfig
 from qwen_vl_utils import process_vision_info
 
 from app.core.config import settings, PROJECT_ROOT
@@ -23,7 +23,7 @@ class NativeQwenTransformersService:
     _model = None
     _processor = None
     _device = "cuda" if torch.cuda.is_available() else "cpu"
-    
+    _batch_counter = 0
     @classmethod
     def health_check(cls) -> Dict[str, Any]:
         """Returns the health status and engine configuration."""
@@ -48,19 +48,26 @@ class NativeQwenTransformersService:
         logger.info(f"Loading Qwen2.5-VL-7B-Instruct via Transformers on {cls._device}...")
         model_id = "Qwen/Qwen2.5-VL-7B-Instruct"
         
-        # CRITICAL: Do NOT use device_map="auto".
-        # device_map="auto" activates accelerate dispatch hooks that offload some layers
-        # to CPU. CPU-offloaded layers compute activations in float32. When those float32
-        # activations are passed to GPU-resident bfloat16 layers (e.g. q_proj), PyTorch
-        # raises: "RuntimeError: mat1 and mat2 must have the same dtype, but got Float
-        # and BFloat16". The RTX 5070 Ti has 16GB VRAM — the 7B model in bf16 (~14.5GB)
-        # fits entirely on GPU. Using explicit .to(device) avoids all accelerate hooks.
+        # CRITICAL: 4-bit quantization reduces 14.5GB VRAM footprint to ~5GB, 
+        # eliminating the PCIe thrashing OOM slowdown on RTX 5070 Ti.
+        # Use device_map={"": "cuda:0"} to strictly bind to GPU and avoid CPU offload float32 bugs.
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4"
+        )
         cls._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             model_id,
-            torch_dtype=torch.bfloat16,
+            quantization_config=quantization_config,
+            device_map={"": "cuda:0"},
             attn_implementation="sdpa",
-        ).to(cls._device)
-        cls._processor = AutoProcessor.from_pretrained(model_id)
+        )
+        cls._processor = AutoProcessor.from_pretrained(
+            model_id, 
+            min_pixels=256*28*28, 
+            max_pixels=512*28*28
+        )
         
         # Add startup logging
         logger.info(f"Active VLM Backend: native_hf")
@@ -83,6 +90,9 @@ class NativeQwenTransformersService:
     def generate_batch(cls, image_paths: List[Path], prompt: str) -> List[str]:
         cls.load_model()
         
+        batch_start_time = time.perf_counter()
+        batch_size = len(image_paths)
+        
         messages_batch = []
         for path in image_paths:
             messages = [
@@ -99,11 +109,22 @@ class NativeQwenTransformersService:
             ]
             messages_batch.append(messages)
             
-        # Prepare inputs
+        # Stage 1
+        t0 = time.perf_counter()
         texts = [cls._processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages_batch]
+        t1 = time.perf_counter()
+        template_build_ms = (t1 - t0) * 1000.0
+        logger.info(f"Template Build Time: {template_build_ms:.2f} ms")
         
+        # Stage 2
+        t0 = time.perf_counter()
         image_inputs, video_inputs = process_vision_info(messages_batch)
+        t1 = time.perf_counter()
+        vision_processing_ms = (t1 - t0) * 1000.0
+        logger.info(f"Vision Processing Time: {vision_processing_ms:.2f} ms")
         
+        # Stage 3
+        t0 = time.perf_counter()
         inputs = cls._processor(
             text=texts,
             images=image_inputs,
@@ -111,26 +132,37 @@ class NativeQwenTransformersService:
             padding=True,
             return_tensors="pt",
         ).to(cls._device)
-        
-        # Batching audit logging
-        logger.info(f"--- TRUE BATCHING AUDIT ---")
+        t1 = time.perf_counter()
+        tensor_preparation_ms = (t1 - t0) * 1000.0
+        logger.info(f"Tensor Preparation Time: {tensor_preparation_ms:.2f} ms")
         logger.info(f"Input ids shape: {inputs.input_ids.shape}")
-        logger.info(f"Input ids dtype: {inputs.input_ids.dtype}")
         if 'pixel_values' in inputs:
             logger.info(f"Pixel values shape: {inputs.pixel_values.shape}")
-            logger.info(f"Pixel values dtype: {inputs.pixel_values.dtype}")
-        if 'attention_mask' in inputs:
-            logger.info(f"Attention mask dtype: {inputs.attention_mask.dtype}")
-        if 'image_grid_thw' in inputs:
-            logger.info(f"Image grid thw dtype: {inputs.image_grid_thw.dtype}")
-        logger.info(f"Model dtype: {cls._model.dtype}")
+        logger.info(f"Batch size: {batch_size}")
             
-        # Generate with autocast to handle any intermediate float32 computations
-        # (e.g. RMSNorm internally uses float32 for numerical stability then casts back)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            generated_ids = cls._model.generate(**inputs, max_new_tokens=256)
+        # Stage 4
+        mem_alloc_before = torch.cuda.memory_allocated() / (1024**3)
+        mem_res_before = torch.cuda.memory_reserved() / (1024**3)
         
-        # Trim input tokens
+        t0 = time.perf_counter()
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            generated_ids = cls._model.generate(**inputs, max_new_tokens=settings.QWEN_MAX_NEW_TOKENS)
+        t1 = time.perf_counter()
+        generate_ms = (t1 - t0) * 1000.0
+        
+        mem_alloc_after = torch.cuda.memory_allocated() / (1024**3)
+        mem_res_after = torch.cuda.memory_reserved() / (1024**3)
+        
+        logger.info(f"Generate Time: {generate_ms:.2f} ms")
+        logger.info(f"Batch size: {batch_size}")
+        logger.info(f"max_new_tokens: {settings.QWEN_MAX_NEW_TOKENS}")
+        logger.info(f"GPU memory allocated before: {mem_alloc_before:.2f} GB")
+        logger.info(f"GPU memory allocated after: {mem_alloc_after:.2f} GB")
+        logger.info(f"GPU memory reserved before: {mem_res_before:.2f} GB")
+        logger.info(f"GPU memory reserved after: {mem_res_after:.2f} GB")
+        
+        # Stage 5
+        t0 = time.perf_counter()
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
@@ -138,6 +170,58 @@ class NativeQwenTransformersService:
         output_texts = cls._processor.batch_decode(
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
+        t1 = time.perf_counter()
+        decode_ms = (t1 - t0) * 1000.0
+        logger.info(f"Decode Time: {decode_ms:.2f} ms")
+        
+        # Stage 6
+        total_chars = 0
+        for i, out_text in enumerate(output_texts):
+            chars = len(out_text)
+            total_chars += chars
+            logger.info(f"Frame {i+1} Output Length: {chars} chars")
+            
+        avg_output_length = total_chars / max(1, len(output_texts))
+        logger.info(f"Average Output Length: {avg_output_length:.1f} chars")
+        
+        # Stage 7
+        batch_end_time = time.perf_counter()
+        total_batch_sec = batch_end_time - batch_start_time
+        avg_runtime_per_frame = total_batch_sec / max(1, batch_size)
+        
+        logger.info(f"Frames Per Batch: {batch_size}")
+        logger.info(f"Batch Runtime: {total_batch_sec:.2f} sec")
+        logger.info(f"Average Runtime Per Frame: {avg_runtime_per_frame:.2f} sec")
+        
+        # Stage 8
+        total_ms = template_build_ms + vision_processing_ms + tensor_preparation_ms + generate_ms + decode_ms
+        if total_ms == 0: total_ms = 1
+        
+        report = f"""
+==========================
+QWEN PROFILING REPORT
+==========================
+
+Batch Size: {batch_size}
+Max New Tokens: {settings.QWEN_MAX_NEW_TOKENS}
+
+Template Build: {template_build_ms:.2f} ms
+Vision Processing: {vision_processing_ms:.2f} ms
+Tensor Preparation: {tensor_preparation_ms:.2f} ms
+Generate: {generate_ms:.2f} ms
+Decode: {decode_ms:.2f} ms
+
+Total Batch Runtime: {total_batch_sec:.2f} sec
+Average Output Length: {avg_output_length:.1f} chars
+
+Runtime Breakdown:
+Template Build = {(template_build_ms / total_ms) * 100:.1f}%
+Vision Processing = {(vision_processing_ms / total_ms) * 100:.1f}%
+Tensor Preparation = {(tensor_preparation_ms / total_ms) * 100:.1f}%
+Generate = {(generate_ms / total_ms) * 100:.1f}%
+Decode = {(decode_ms / total_ms) * 100:.1f}%
+=========================="""
+        logger.info(report)
         
         return output_texts
 
@@ -227,15 +311,23 @@ class NativeQwenTransformersService:
 
             for idx, raw_out in enumerate(vlm_outputs):
                 frame_id, video_id, ts, path = batch_frames[idx]
+                
                 if not raw_out:
                     logger.warning(f"Empty response from Native HF for {frame_id}")
                     continue
                     
+                # Save raw JSON before repair to inspect for truncation or bloat
+                dump_dir = PROJECT_ROOT / "data" / "logs"
+                dump_dir.mkdir(parents=True, exist_ok=True)
+                with open(dump_dir / f"raw_qwen_output_{frame_id}.json", "w", encoding="utf-8") as f:
+                    f.write(raw_out)
+                    
                 try:
                     repair_start = time.perf_counter()
                     cleaned_out = QwenVLMService._clean_json_response(raw_out)
-                    parsed = json.loads(cleaned_out)
-                    parsed = QwenVLMService._normalize_metadata_dict(parsed)
+                    import json
+                    parsed_raw = json.loads(cleaned_out)
+                    parsed = QwenVLMService._normalize_metadata_dict(parsed_raw.copy())
                     repair_duration_ms = (time.perf_counter() - repair_start) * 1000.0
 
                     time_snippet = calculate_time_snippet(ts, interval_seconds=1.0)
@@ -252,11 +344,11 @@ class NativeQwenTransformersService:
 
                     parsed = ActivityRecoveryService.apply(parsed)
                     parsed["search_text"] = QwenVLMService._generate_search_text(parsed)
-
+                    
                     val_start = time.perf_counter()
                     rich_meta = FrameRichMetadata(**parsed)
                     val_duration_ms = (time.perf_counter() - val_start) * 1000.0
-
+                    
                     timings = {
                         "ocr_ms": ocr_duration_ms,
                         "vlm_ms": vlm_ms_avg,

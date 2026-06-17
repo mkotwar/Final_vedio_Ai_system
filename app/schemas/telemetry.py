@@ -33,3 +33,4 @@ class SamplingMetrics(BaseModel):
     candidate_frames_sent_to_vlm: int = Field(default=0)
     candidate_reduction_percent: float = Field(default=0.0)
     average_candidate_density: float = Field(default=0.0)
+    sampling_collapse: bool = Field(default=False)

@@ -144,8 +144,8 @@ class FrameExtractionService:
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps <= 0:
             fps = 30.0
-        current_fps = 0.1
-        current_state = "IDLE"
+        current_fps = 1.0
+        current_state = "NORMAL_ACTIVITY"
         burst_timer_seconds = 0.0
 
         # Telemetry trackers
@@ -232,16 +232,31 @@ class FrameExtractionService:
                     else:
                         current_state = "IDLE"
                         
+                if second <= settings.WARMUP_SECONDS:
+                    current_state = "NORMAL_ACTIVITY"
+
                 if current_state != prev_state:
                     fps_transitions += 1
                     
                 # Map State to FPS
-                if current_state == "IDLE": current_fps = 0.1
-                elif current_state == "LOW_ACTIVITY": current_fps = 0.5
-                elif current_state == "NORMAL_ACTIVITY": current_fps = 1.0
-                elif current_state == "HIGH_ACTIVITY": current_fps = 2.0
-                elif current_state == "BURST_CAPTURE": current_fps = 5.0
-                elif current_state == "COOLDOWN": current_fps = 1.0
+                if settings.VIDEO_PROFILE == "INVESTIGATION":
+                    if current_state == "IDLE": current_fps = 1.0
+                    elif current_state == "LOW_ACTIVITY": current_fps = 1.0
+                    elif current_state == "NORMAL_ACTIVITY": current_fps = 2.0
+                    elif current_state == "HIGH_ACTIVITY": current_fps = 3.0
+                    elif current_state == "BURST_CAPTURE": current_fps = 5.0
+                    elif current_state == "COOLDOWN": current_fps = 2.0
+                else:
+                    if current_state == "IDLE": current_fps = 0.1
+                    elif current_state == "LOW_ACTIVITY": current_fps = 0.5
+                    elif current_state == "NORMAL_ACTIVITY": current_fps = 1.0
+                    elif current_state == "HIGH_ACTIVITY": current_fps = 2.0
+                    elif current_state == "BURST_CAPTURE": current_fps = 5.0
+                    elif current_state == "COOLDOWN": current_fps = 1.0
+
+                if second <= settings.WARMUP_SECONDS:
+                    if settings.VIDEO_PROFILE == "WAREHOUSE":
+                        current_fps = 1.0
                 
                 # Track duration in state
                 if current_state in state_durations:
@@ -379,7 +394,15 @@ class FrameExtractionService:
         sampling_metrics.reduction_percent = reduction_percentage
         sampling_metrics.vlm_calls_saved = skipped_count
         if total_extracted > 0:
-            sampling_metrics.video_duration_seconds = total_extracted / fps if fps > 0 else 0
+            sampling_metrics.video_duration_seconds = total_extracted / fps if fps > 0 else 0.0
+            
+            if sampling_metrics.video_duration_seconds > 5.0 and total_extracted <= 1:
+                logger.error(
+                    f"Sampling collapse detected | "
+                    f"duration={sampling_metrics.video_duration_seconds:.2f}s | "
+                    f"extracted={total_extracted}"
+                )
+                sampling_metrics.sampling_collapse = True
             
         sampling_metrics.mode_idle_seconds = state_durations["IDLE"]
         sampling_metrics.mode_low_seconds = state_durations["LOW_ACTIVITY"]
@@ -414,13 +437,16 @@ class FrameExtractionService:
         # Create video-specific metadata directory: data/metadata/{video_id}/
         video_metadata_dir = settings.METADATA_DIR / video_id
         video_metadata_dir.mkdir(parents=True, exist_ok=True)
-
+        
+        logger.warning(f"CONFIG_BATCH_SIZE={settings.BATCH_SIZE}")
+        
         batch_size = settings.BATCH_SIZE
         for i in range(0, processed_count, batch_size):
             batch = extracted_tuples[i : i + batch_size]
             current_batch_num = i // batch_size + 1
             total_batches = (processed_count + batch_size - 1) // batch_size
-            logger.info(f"Processing VLM batch {current_batch_num}/{total_batches} (frames {i} to {i + len(batch)} of {processed_count}) for video ID {video_id}...")
+            # logger.info(f"Processing VLM batch {current_batch_num}/{total_batches} (frames {i} to {i + len(batch)} of {processed_count}) for video ID {video_id}...")
+            logger.info(f"Current Batch Size: {len(batch)}")
 
             try:
                 # Generate rich metadata for batch

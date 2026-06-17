@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     )
 
     # Adaptive Frame Sampling Settings
+    VIDEO_PROFILE: Literal["INVESTIGATION", "WAREHOUSE"] = Field(
+        default="INVESTIGATION",
+        description="Profile determining base extraction frame rates."
+    )
+    WARMUP_SECONDS: int = Field(
+        default=5,
+        description="Initial duration to force higher FPS before trusting IDLE states."
+    )
     ENABLE_ADAPTIVE_SAMPLING: bool = Field(
         default=True,
         description="Enable adaptive frame sampling to filter visually similar frames",
