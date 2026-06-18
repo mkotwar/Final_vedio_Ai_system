@@ -12,6 +12,7 @@ from app.core.exceptions import FrameExtractionError, VideoNotFoundError, Metada
 from app.services.video import VideoService
 from app.services.vlm_factory import get_vlm_service
 from app.services.motion_window_service import MotionWindowService
+from app.services.object_detection.detector import ObjectDetector
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
 from app.schemas.telemetry import SamplingMetrics
@@ -427,6 +428,45 @@ class FrameExtractionService:
             sampling_metrics.average_candidate_density = candidate_frames_generated / total_duration
         
         logger.info(f"Successfully extracted {processed_count} candidate frames from video: {video_id}. Starting VLM batch processing...")
+        
+        # --- YOLO Object Detection Phase ---
+        logger.info(f"Starting YOLO object detection phase for video {video_id}...")
+        detector = ObjectDetector()
+        detection_results = []
+        total_detections_count = 0
+        total_yolo_runtime_ms = 0.0
+
+        for frame_id, vid, timestamp_seconds, frame_path in extracted_tuples:
+            try:
+                start = time.perf_counter()
+                
+                result = detector.detect_frame(
+                    frame_path=frame_path,
+                    frame_id=frame_id,
+                    video_id=vid,
+                    timestamp_seconds=timestamp_seconds,
+                )
+                
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+                total_yolo_runtime_ms += elapsed_ms
+                total_detections_count += len(result.detections)
+                detection_results.append(result)
+                
+                logger.info(
+                    f"Object Detection | "
+                    f"frame={frame_id} | "
+                    f"detections={len(result.detections)} | "
+                    f"time_ms={elapsed_ms:.2f}"
+                )
+            except Exception:
+                logger.exception(f"YOLO detection failed for frame {frame_id}")
+
+        logger.info(
+            f"YOLO detection completed | "
+            f"frames_processed={len(extracted_tuples)}"
+        )
+        # -----------------------------------
+
         JobStatusService.update(video_id, current_step=f"Starting VLM Analysis (0/{processed_count})...", total_frames=processed_count, progress_percent=10.0)
 
         # 3. Process extracted frames in batches using QwenVLMService
@@ -524,6 +564,9 @@ class FrameExtractionService:
             "reduction_percent": reduction_percent,
             "frames_extracted": total_extracted,
             "frames_analyzed": processed_count,
+            "total_detections": total_detections_count,
+            "average_detections_per_frame": total_detections_count / processed_count if processed_count > 0 else 0.0,
+            "object_detection_runtime_ms": total_yolo_runtime_ms,
         }
 
         # Trigger Event Aggregation service to group consecutive similar frames into events

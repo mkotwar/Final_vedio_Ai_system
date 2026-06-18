@@ -1,6 +1,8 @@
 """Event Aggregation Service for grouping similar consecutive frame metadata records.
 """
 
+from sys import flags
+import atexit
 import json
 import re
 import difflib
@@ -181,7 +183,21 @@ class EventAggregationService:
             flags.append("weapon_present")
         if any(kw in acts_lower for kw in ["intrusion", "trespassing", "unauthorized"]):
             flags.append("intrusion_detected")
-        if any(kw in acts_lower for kw in ["fall", "falling", "dropped", "collapsed", "trip"]):
+        
+        FALL_TERMS = [
+            "person fell",
+            "person falling",
+            "fallen person",
+            "fallen pedestrian",
+            "collapsed person",
+            "person collapsed",
+            "lying on ground",
+            "lying on road",
+            "person on ground",
+            "pedestrian on ground",
+        ]
+
+        if any(term in acts_lower for term in FALL_TERMS):
             flags.append("person_fall")
 
         # Check for motorcycles with riders/backpacks in objects
@@ -353,7 +369,20 @@ class EventAggregationService:
             return "medical_emergency"
             
         # Priority 4: Fall Incident
-        if any(kw in text for kw in ["fall", "falling", "dropped", "collapsed", "trip", "slipped"]):
+        FALL_TERMS = [
+            "person fell",
+            "person falling",
+            "fallen person",
+            "fallen pedestrian",
+            "collapsed person",
+            "person collapsed",
+            "lying on ground",
+            "lying on road",
+            "person on ground",
+            "pedestrian on ground",
+        ]
+
+        if any(term in text for term in FALL_TERMS):
             return "fall_incident"
             
         # Priority 5: Intrusion
