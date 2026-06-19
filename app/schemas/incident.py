@@ -16,6 +16,3 @@ class IncidentChain(BaseModel):
     chain_events: List[Dict[str, Any]] = Field(default_factory=list, description="Raw event data making up the chain")
     timeline: List[str] = Field(default_factory=list, description="Chronological breakdown of the chain")
     recommendations: List[str] = Field(default_factory=list, description="Automated actions based on the chain")
-    poster_frame: Optional[str] = None
-    poster_timestamp: Optional[str] = None
-    poster_event_id: Optional[str] = None

@@ -1,8 +1,6 @@
 """Event Aggregation Service for grouping similar consecutive frame metadata records.
 """
 
-from sys import flags
-import atexit
 import json
 import re
 import difflib
@@ -14,7 +12,6 @@ from loguru import logger
 from app.core.config import settings
 from app.core.utils import format_timestamp_human
 from app.services.status_service import JobStatusService
-from app.services.poster_service import PosterService
 
 class EventAggregationService:
     """Service to group consecutive frames into semantic events based on metadata similarity."""
@@ -181,23 +178,14 @@ class EventAggregationService:
             flags.append("fire_explosion")
         if any(kw in acts_lower for kw in ["weapon", "gun", "knife"]):
             flags.append("weapon_present")
+        if any(kw in acts_lower for kw in ["robbery", "robber", "robbing", "theft", "thief", "stealing", "looting"]):
+            flags.append("robbery_detected")
         if any(kw in acts_lower for kw in ["intrusion", "trespassing", "unauthorized"]):
             flags.append("intrusion_detected")
-        
-        FALL_TERMS = [
-            "person fell",
-            "person falling",
-            "fallen person",
-            "fallen pedestrian",
-            "collapsed person",
-            "person collapsed",
-            "lying on ground",
-            "lying on road",
-            "person on ground",
-            "pedestrian on ground",
-        ]
-
-        if any(term in acts_lower for term in FALL_TERMS):
+            
+        # Forensic trace for person_fall
+        fall_keywords = ["fall", "falling", "collapsed", "lost balance", "lying on floor"]
+        if any(kw in acts_lower for kw in fall_keywords):
             flags.append("person_fall")
 
         # Check for motorcycles with riders/backpacks in objects
@@ -277,6 +265,10 @@ class EventAggregationService:
             action = "was involved in a collision/accident"
         elif "fire_explosion" in behavioral_flags:
             action = "was involved in a fire/explosion incident"
+        elif "weapon_present" in behavioral_flags:
+            action = "was observed with a weapon"
+        elif "robbery_detected" in behavioral_flags:
+            action = "was involved in a robbery or theft"
         elif activities:
             action = f"was observed {activities[0]}"
         else:
@@ -365,31 +357,27 @@ class EventAggregationService:
             return "collision_or_accident"
             
         # Priority 3: Medical Emergency
-        if any(kw in text for kw in ["medical", "paramedic", "ambulance", "bleeding", "unconscious", "heart attack", "choking", "fainting"]):
+        if any(kw in text for kw in ["paramedic", "ambulance", "bleeding", "unconscious", "heart attack", "choking", "fainting", "seizure", "motionless", "medical emergency"]):
             return "medical_emergency"
             
-        # Priority 4: Fall Incident
-        FALL_TERMS = [
-            "person fell",
-            "person falling",
-            "fallen person",
-            "fallen pedestrian",
-            "collapsed person",
-            "person collapsed",
-            "lying on ground",
-            "lying on road",
-            "person on ground",
-            "pedestrian on ground",
-        ]
-
-        if any(term in text for term in FALL_TERMS):
+        # Priority 4: Weapon Drawn
+        if any(kw in text for kw in ["weapon", "gun", "firearm", "knife", "armed", "holding a gun", "holding a weapon", "brandishing"]):
+            return "weapon_drawn"
+            
+        # Priority 5: Robbery / Theft
+        if any(kw in text for kw in ["robbery", "robber", "robbing", "theft", "thief", "stealing", "holdup", "hold-up", "armed robbery", "looting"]):
+            return "robbery_incident"
+            
+        # Priority 6: Fall Incident
+        fall_keywords = ["fell", "falling", "collapsed", "lost balance", "lying on floor"]
+        if any(kw in text for kw in fall_keywords):
             return "fall_incident"
             
-        # Priority 5: Intrusion
+        # Priority 7: Intrusion
         if any(kw in text for kw in ["intrusion", "trespassing", "unauthorized", "forced entry", "break-in"]):
             return "intrusion"
             
-        # Priority 6: Loitering
+        # Priority 8: Loitering
         if any(kw in text for kw in ["loiter", "lingering", "waiting suspiciously", "standing around"]):
             return "loitering"
 
@@ -454,18 +442,24 @@ class EventAggregationService:
         unified_lower = group_unified_text.lower()
         event_type = "normal_activity"
         event_severity = 10
-        if any(w in unified_lower for w in ["falling", "slipped", "collapsed", "lying on floor", "lost balance", "fell"]):
-            event_type = "fall_incident"
-            event_severity = 95
-        elif any(w in unified_lower for w in ["unconscious", "motionless", "medical", "seizure"]):
-            event_type = "medical_emergency"
+        if any(w in unified_lower for w in ["smoke", "fire", "flames", "burning"]):
+            event_type = "fire_incident"
             event_severity = 100
         elif any(w in unified_lower for w in ["collision", "crash", "impact", "damaged vehicle", "accident"]):
             event_type = "collision_or_accident"
-            event_severity = 95
-        elif any(w in unified_lower for w in ["smoke", "fire", "flames", "burning"]):
-            event_type = "fire_incident"
             event_severity = 100
+        elif any(w in unified_lower for w in ["unconscious", "motionless", "seizure", "paramedic", "ambulance", "bleeding", "medical emergency"]):
+            event_type = "medical_emergency"
+            event_severity = 95
+        elif any(w in unified_lower for w in ["weapon", "gun", "firearm", "knife", "armed", "holding a gun", "brandishing"]):
+            event_type = "weapon_drawn"
+            event_severity = 95
+        elif any(w in unified_lower for w in ["robbery", "robber", "robbing", "theft", "thief", "stealing", "holdup", "looting"]):
+            event_type = "robbery_incident"
+            event_severity = 100
+        elif any(w in unified_lower for w in ["falling", "fell", "collapsed", "lying on floor", "lost balance"]):
+            event_type = "fall_incident"
+            event_severity = 90
         elif any(w in unified_lower for w in ["trespass", "unauthorized", "intrusion", "break-in"]):
             event_type = "intrusion"
             event_severity = 85
@@ -509,6 +503,8 @@ class EventAggregationService:
         if event_type == "collision_or_accident": summary_parts.append(f"A collision or accident occurred involving {agent_name.lower()}")
         elif event_type == "fire_incident": summary_parts.append(f"A fire or explosion incident was detected")
         elif event_type == "medical_emergency": summary_parts.append(f"A medical emergency was observed involving {agent_name.lower()}")
+        elif event_type == "weapon_drawn": summary_parts.append(f"A weapon was detected in possession of {agent_name.lower()}")
+        elif event_type == "robbery_incident": summary_parts.append(f"A robbery or theft was detected involving {agent_name.lower()}")
         elif event_type == "fall_incident": summary_parts.append(f"A fall incident was detected where {agent_name.lower()} fell")
         elif event_type == "intrusion": summary_parts.append(f"An intrusion or unauthorized access was detected by {agent_name.lower()}")
         elif event_type == "loitering": summary_parts.append(f"{agent_name} was observed loitering")
@@ -915,6 +911,8 @@ class EventAggregationService:
                     
             group_unified_text = " ".join(unique_captions + unique_keywords + unique_activities + unique_objects_desc).strip()
 
+
+
             # Behavioral flags: pattern analysis
             behavioral_flags = cls._compute_behavioral_flags(activities, duration, participant_count, merged_objects, group_unified_text)
 
@@ -945,6 +943,10 @@ class EventAggregationService:
                 summary_parts.append(f"A fire or explosion incident was detected")
             elif event_type == "medical_emergency":
                 summary_parts.append(f"A medical emergency was observed involving {agent_name.lower()}")
+            elif event_type == "weapon_drawn":
+                summary_parts.append(f"A weapon was detected in possession of {agent_name.lower()}")
+            elif event_type == "robbery_incident":
+                summary_parts.append(f"A robbery or theft was detected involving {agent_name.lower()}")
             elif event_type == "fall_incident":
                 summary_parts.append(f"A fall incident was detected where {agent_name.lower()} fell")
             elif event_type == "intrusion":
@@ -972,10 +974,11 @@ class EventAggregationService:
             severity_map = {
                 "collision_or_accident": 100,
                 "fire_incident": 100,
+                "robbery_incident": 100,
                 "medical_emergency": 95,
+                "weapon_drawn": 95,
                 "fall_incident": 90,
                 "intrusion": 85,
-                "weapon_incident": 90,
                 "loitering": 60,
                 "vehicle_movement": 30,
                 "pedestrian_activity": 20,
@@ -1003,7 +1006,6 @@ class EventAggregationService:
                 "source_frames": source_frames,
                 "event_type": event_type,
                 "summary": summary,
-                "description": summary,
                 # --- Narrative Intelligence Fields ---
                 "scene_context": scene_context,
                 "real_world_time": real_world_time,
@@ -1018,9 +1020,6 @@ class EventAggregationService:
                 "unified_text": group_unified_text,
                 "frame_events": frame_events,
             }
-
-            # Select the poster thumbnail for the event
-            event_data = PosterService.select_event_poster(video_id, event_data, group)
 
             # Save the event to disk
             event_file_path = video_events_dir / f"{event_id}.json"
@@ -1038,7 +1037,7 @@ class EventAggregationService:
         for e in events:
             source_frames = e.get("source_frames", [])
             first_frame_id = source_frames[0] if source_frames else None
-            thumbnail_path = e.get("thumbnail_path") or (f"/api/v1/events/{video_id}/thumbnail/{first_frame_id}" if first_frame_id else None)
+            thumbnail_path = f"/api/v1/events/{video_id}/thumbnail/{first_frame_id}" if first_frame_id else None
 
             consolidated_events.append({
                 "event_id": e["event_id"],
@@ -1061,9 +1060,6 @@ class EventAggregationService:
                 "confidence": e.get("confidence", 0.5),
                 "narrative_sentence": e.get("narrative_sentence", e["summary"]),
                 "thumbnail_path": thumbnail_path,
-                "poster_frame": e.get("poster_frame"),
-                "poster_timestamp": e.get("poster_timestamp"),
-                "poster_frame_id": e.get("poster_frame_id"),
                 "event_severity": e.get("event_severity", 15),
                 "unified_text": e.get("unified_text", ""),
                 "frame_events": e.get("frame_events", []),

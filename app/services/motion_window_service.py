@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple
 from loguru import logger
 from app.core.config import settings
 
@@ -9,7 +9,7 @@ class MotionWindowService:
     """Service to detect temporal windows of motion activity in a video."""
 
     @classmethod
-    def detect_motion_windows(cls, video_path: Path) -> Tuple[List[Tuple[float, float]], Dict[str, Any]]:
+    def detect_motion_windows(cls, video_path: Path) -> List[Tuple[float, float]]:
         """
         Performs a fast pass over the video to detect windows of motion.
         
@@ -17,23 +17,12 @@ class MotionWindowService:
             video_path: Absolute path to the video file.
             
         Returns:
-            Tuple containing:
-            - List of (start_seconds, end_seconds) tuples denoting active windows.
-            - Dict of metrics (frames_evaluated, frames_inside, frames_outside, num_windows, coverage_percent)
+            List of (start_seconds, end_seconds) tuples denoting active windows.
         """
-        metrics = {
-            "frames_evaluated": 0,
-            "frames_inside": 0,
-            "frames_outside": 0,
-            "num_windows": 0,
-            "coverage_percent": 0.0,
-            "total_duration_covered": 0.0
-        }
-        
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
             logger.error(f"Failed to open video for motion windowing: {video_path}")
-            return [], metrics
+            return []
 
         fps = cap.get(cv2.CAP_PROP_FPS)
         if fps <= 0:
@@ -103,7 +92,6 @@ class MotionWindowService:
                     active_windows.append((window_start_sec, current_sec))
                     consecutive_motion = 0 # reset to require new trigger
             
-            metrics["frames_evaluated"] += 1
             frame_idx += 1
             
         if is_active:
@@ -120,18 +108,7 @@ class MotionWindowService:
             
         merged_windows = cls._merge_windows(buffered_windows)
         
-        # Calculate coverage metrics
-        metrics["num_windows"] = len(merged_windows)
-        total_duration = 0.0
-        for start_sec, end_sec in merged_windows:
-            total_duration += (end_sec - start_sec)
-        metrics["total_duration_covered"] = total_duration
-        
-        video_duration = frame_idx / fps if fps > 0 else 0
-        if video_duration > 0:
-            metrics["coverage_percent"] = min(100.0, (total_duration / video_duration) * 100.0)
-            
-        return merged_windows, metrics
+        return merged_windows
         
     @classmethod
     def _merge_windows(cls, windows: List[Tuple[float, float]]) -> List[Tuple[float, float]]:

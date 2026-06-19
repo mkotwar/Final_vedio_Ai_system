@@ -105,22 +105,8 @@ class OCRService:
                     "OCR Reader unavailable. Returning empty OCR result."
                 )
                 return result
-            
-            # Debug: Show what EasyOCR is seeing
-            # import cv2
-            
-            # image = cv2.imread(str(image_path))
-            # print("OCR IMAGE SHAPE:", image.shape)
-            
-            # ocr_results = reader.readtext(str(image_path))
 
-            import cv2
-
-            image = cv2.imread(str(image_path))
-
-            logger.info(f"OCR DEBUG | shape={image.shape} | dtype={image.dtype}")
-
-            ocr_results = reader.readtext(image)
+            ocr_results = reader.readtext(str(image_path))
 
             detected_texts = []
 

@@ -61,7 +61,53 @@ hf_cache/
 ollama_cache/
 
 
-data/
+
+# Media files
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.flv
+*.wmv
+
+# Audio files
+*.mp3
+*.wav
+*.aac
+*.flac
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+
+# Large data/database files (if needed for your Qdrant/SQLite storage)
+*.sqlite
+*.db
+
+
+# Reports
+*_REPORT.md
+baseline_event_recall_report.md
+
+# Experiments
+data/experiments/
+data/detections/
+data/qdrant_db/
+
+# Diagnostics
+debug*
+audit*
+verify*
+validate_output*
+output*.txt
+*.log
 *.txt
-*.json
-logs/
+
+# Runtime artifacts
+ADAPTIVE_SAMPLING_DIAGNOSTIC_REPORT.md
+ADAPTIVE_SAMPLING_REPORT.md
+EVENT_AGGREGATION_REPORT.md
+PERFORMANCE_REPORT.md

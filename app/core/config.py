@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     )
 
     # VLM Model Settings
-    VLM_ENGINE_TYPE: Literal["ollama", "native_vllm", "native_hf"] = Field(
-        default="ollama", description="VLM engine to use for inference"
-    )
     QWEN_MODEL_ID: str = Field(
         default="Qwen/Qwen2.5-VL-7B-Instruct", description="VLM model identifier"
     )
@@ -59,14 +56,6 @@ class Settings(BaseSettings):
     )
 
     # Adaptive Frame Sampling Settings
-    VIDEO_PROFILE: Literal["INVESTIGATION", "WAREHOUSE"] = Field(
-        default="INVESTIGATION",
-        description="Profile determining base extraction frame rates."
-    )
-    WARMUP_SECONDS: int = Field(
-        default=5,
-        description="Initial duration to force higher FPS before trusting IDLE states."
-    )
     ENABLE_ADAPTIVE_SAMPLING: bool = Field(
         default=True,
         description="Enable adaptive frame sampling to filter visually similar frames",
@@ -107,6 +96,10 @@ class Settings(BaseSettings):
         default=0.15,
         description="Pixel difference threshold ratio above which frames are accepted",
     )
+    TEMPORAL_INTERVAL_SECONDS: float = Field(
+        default=10.0,
+        description="Temporal safeguard interval to retain a frame regardless of similarity metrics",
+    )
     EVENT_SIMILARITY_THRESHOLD: float = Field(
         default=0.70,
         description="Similarity ratio threshold above which consecutive frames are grouped into the same event",
@@ -122,16 +115,6 @@ class Settings(BaseSettings):
     MAX_EVENT_DURATION_SECONDS: int = Field(
         default=15,
         description="Safety boundary: Maximum duration in seconds for a single event cluster",
-    )
-
-    # Incident Engine Correlation Settings
-    INCIDENT_CORRELATION_THRESHOLD: float = Field(
-        default=0.65,
-        description="Confidence threshold (0.0 to 1.0) above which events are grouped into an incident chain",
-    )
-    INCIDENT_CORRELATION_SLIDING_WINDOW_MINUTES: int = Field(
-        default=15,
-        description="Time window in minutes to keep an incident memory active for new correlations",
     )
 
     # Qdrant & Embeddings Settings

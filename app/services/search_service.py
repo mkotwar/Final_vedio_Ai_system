@@ -269,11 +269,11 @@ class SearchService:
                 # Search Relevance Boosting
                 # Apply boost only if base similarity is >= 0.40 to prevent irrelevant events leaping to the top
                 if normalized >= 0.40:
-                    if event_type == "weapon_incident":
+                    if event_type == "weapon_drawn":
                         normalized += 1.00
                     elif event_type == "fire_incident":
                         normalized += 0.75
-                    elif event_type in ["fall_incident", "medical_emergency", "collision_or_accident", "intrusion"]:
+                    elif event_type in ["fall_incident", "medical_emergency", "collision_or_accident", "intrusion", "robbery_incident"]:
                         normalized += 0.50
                 
                 normalized = min(1.0, normalized)
