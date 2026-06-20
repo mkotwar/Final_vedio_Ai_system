@@ -36,6 +36,8 @@ async def run_vlm_validation():
     hallucination_incidents = 0
     actor_consistency_failures = 0
     total_latency_ms = 0.0
+    schema_compliance_failures = 0
+    schema_regurgitations = 0
     
     report_lines = []
     report_lines.append("# VLM OUTPUT VALIDATION AUDIT")
@@ -81,15 +83,33 @@ async def run_vlm_validation():
             results = await vlm_service.generate_metadata_batch(batch_frames)
         except Exception as e:
             logger.error(f"VLM batch generation failed for {video_id}: {e}")
+            schema_compliance_failures += len(batch_frames)
+            total_frames_analyzed += len(batch_frames)
             continue
             
-        for idx, (rich_meta, timings) in enumerate(results):
-            frame_gt = frames[idx]
+        result_map = {res[0].frame_id: res for res in results}
+        
+        for idx, frame_gt in enumerate(frames):
             ts = frame_gt["timestamp_seconds"]
+            frame_id = f"{video_id}_f{idx}"
             
             total_frames_analyzed += 1
+            
+            if frame_id not in result_map:
+                schema_compliance_failures += 1
+                report_lines.append(f"### Frame @ {ts}s")
+                report_lines.append(f"* **Schema Compliance:** FAIL (Parsing/Validation Error)")
+                report_lines.append("")
+                continue
+                
+            rich_meta, timings = result_map[frame_id]
+            
             vlm_ms = timings.get("vlm_ms", 0.0)
             total_latency_ms += vlm_ms
+            
+            meta_str = rich_meta.model_dump_json().lower()
+            if any(p in meta_str for p in ["e.g.", "example", "unique id"]):
+                schema_regurgitations += 1
             
             # Extract detected entities
             detected_obj_types = [obj.subtype.lower() if obj.subtype else obj.type.lower() for obj in rich_meta.objects]
@@ -147,9 +167,16 @@ async def run_vlm_validation():
     evt_recall = (total_events_found / total_expected_events * 100.0) if total_expected_events > 0 else 100.0
     hallucination_rate = (hallucination_incidents / total_frames_analyzed * 100.0) if total_frames_analyzed > 0 else 0.0
     actor_fail_rate = (actor_consistency_failures / total_frames_analyzed * 100.0) if total_frames_analyzed > 0 else 0.0
-    avg_latency = total_latency_ms / total_frames_analyzed if total_frames_analyzed > 0 else 0.0
+    
+    compliance_rate = ((total_frames_analyzed - schema_compliance_failures) / total_frames_analyzed * 100.0) if total_frames_analyzed > 0 else 100.0
+    regurgitation_rate = (schema_regurgitations / total_frames_analyzed * 100.0) if total_frames_analyzed > 0 else 0.0
+    
+    valid_frames = total_frames_analyzed - schema_compliance_failures
+    avg_latency = total_latency_ms / valid_frames if valid_frames > 0 else 0.0
     
     report_lines.append(f"* **Total Frames Analyzed:** {total_frames_analyzed}")
+    report_lines.append(f"* **Schema Compliance Rate:** {compliance_rate:.1f}%")
+    report_lines.append(f"* **Schema Regurgitation Rate:** {regurgitation_rate:.1f}%")
     report_lines.append(f"* **Object Recall:** {obj_recall:.1f}%")
     report_lines.append(f"* **Event Recall:** {evt_recall:.1f}%")
     report_lines.append(f"* **Hallucination Rate (Frames with false events):** {hallucination_rate:.1f}%")

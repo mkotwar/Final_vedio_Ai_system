@@ -251,32 +251,40 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             "You MUST return a single JSON object (enclosed in curly braces {}), NOT a JSON array. "
             "The JSON object MUST strictly adhere to this schema:\n"
             "{\n"
-            '  "scene_type": "indoor/outdoor description",\n'
-            '  "scene_description": "objective description of the environment",\n'
+            '  "scene_type": "string",\n'
+            '  "scene_description": "string",\n'
             '  "objects": [\n'
             "    {\n"
-            '      "id": "unique id e.g. car_1, person_2",\n'
-            '      "type": "object category",\n'
-            '      "subtype": "specific type",\n'
-            '      "color": "dominant color",\n'
+            '      "id": "string",\n'
+            '      "type": "string",\n'
+            '      "subtype": "string",\n'
+            '      "color": "string",\n'
             '      "condition": "standing/walking/sitting/lying/bending/moving/stationary/unknown",\n'
-            '      "attributes": ["list of describing attributes"]\n'
+            '      "attributes": ["string"]\n'
             "    }\n"
             "  ],\n"
             '  "events": [\n'
             "    {\n"
             '      "event_type": "interaction/observation/none",\n'
-            '      "description": "precise, objective sentence describing an observable interaction",\n'
-            '      "actors": ["object ids involved e.g. car_1, person_2"],\n'
-            '      "severity": "low"\n'
+            '      "description": "string",\n'
+            '      "actors": ["string"],\n'
+            '      "severity": "low/medium/high/critical"\n'
             "    }\n"
             "  ],\n"
             '  "people_count": 0,\n'
-            '  "activities": ["list of ongoing activities"],\n'
-            '  "keywords": ["search tag keywords"],\n'
-            '  "caption": "neutral, objective scene description detailing exactly what is visible. Do not infer incidents."\n'
+            '  "activities": ["string"],\n'
+            '  "keywords": ["string"],\n'
+            '  "caption": "string"\n'
             "}\n"
             "CRITICAL RULES:\n"
+            "- DO NOT output placeholder text like 'unique id e.g. person_1'. Generate actual values only.\n"
+            "- If no value is known, return null. If no actor exists, return an empty array.\n"
+            "- For 'subtype', you MUST use ONLY the following allowed values:\n"
+            "    Actors: person, employee, customer\n"
+            "    Vehicles: car, truck, motorcycle, bus\n"
+            "    Objects: bag, backpack, suitcase, box\n"
+            "- If uncertain, fallback to: person, vehicle, or object.\n"
+            "- NEVER invent new subtype names. NEVER output: adult male, individual, pedestrian, visitor, shopper.\n"
             "- Give each object a unique 'id' so events can reference them via 'actors'.\n"
             "- Describe the scene objectively. Extract visual facts only.\n"
             "- NEVER infer incidents, causality, or intent from a single frame.\n"
