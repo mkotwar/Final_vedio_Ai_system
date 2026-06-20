@@ -13,7 +13,6 @@ class FrameEventDetail(BaseModel):
     description: str = ""
     actors: List[str] = Field(default_factory=list)
     severity: str = "medium"
-    timestamp_hint: str = ""
 
 
 class AggregatedEvent(BaseModel):

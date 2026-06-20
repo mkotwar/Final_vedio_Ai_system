@@ -1,0 +1,23 @@
+{
+  "video_id": "empy_room_15sec",
+  "frames": [
+    {
+      "timestamp_seconds": 1.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "intrusion", "fall", "fire", "fight", "abandonment", "speeding", "trespassing", "person_walk", "interaction"]
+    },
+    {
+      "timestamp_seconds": 7.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "intrusion", "fall", "fire", "fight", "abandonment", "speeding", "trespassing", "person_walk", "interaction"]
+    },
+    {
+      "timestamp_seconds": 14.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "intrusion", "fall", "fire", "fight", "abandonment", "speeding", "trespassing", "person_walk", "interaction"]
+    }
+  ]
+}

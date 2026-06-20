@@ -248,7 +248,6 @@ class QwenVLMService:
             event_type = str(evt.get("event_type", "unknown")).lower().strip()
             description = str(evt.get("description", "")).strip()
             severity = str(evt.get("severity", "medium")).lower().strip()
-            timestamp_hint = str(evt.get("timestamp_hint", "")).strip()
 
             # Normalize actors to list of strings
             actors = evt.get("actors", [])
@@ -270,7 +269,6 @@ class QwenVLMService:
                     "description": description,
                     "actors": actors,
                     "severity": severity,
-                    "timestamp_hint": timestamp_hint,
                 })
 
         parsed["events"] = normalized_events
@@ -625,45 +623,42 @@ class QwenVLMService:
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 
         prompt_guidelines = (
-            "Analyze the image and return a raw JSON object detailing its contents. "
+            "Analyze the image and return a raw JSON object detailing its visual contents objectively. "
             "You MUST return a single JSON object (enclosed in curly braces {}), NOT a JSON array. "
             "The JSON object MUST strictly adhere to this schema:\n"
             "{\n"
             '  "scene_type": "indoor/outdoor description",\n'
-            '  "scene_description": "detailed text describing environment",\n'
+            '  "scene_description": "objective description of the environment",\n'
             '  "objects": [\n'
             "    {\n"
             '      "id": "unique id e.g. car_1, person_2",\n'
             '      "type": "object category",\n'
             '      "subtype": "specific type",\n'
             '      "color": "dominant color",\n'
-            '      "condition": "normal/damaged/displaced/moving/stationary/fallen",\n'
+            '      "condition": "standing/walking/sitting/lying/bending/moving/stationary/unknown",\n'
             '      "attributes": ["list of describing attributes"]\n'
             "    }\n"
             "  ],\n"
             '  "events": [\n'
             "    {\n"
-            '      "event_type": "collision/intrusion/fall/fire/fight/abandonment/speeding/trespassing/none",\n'
-            '      "description": "precise sentence: what happened, who/what was involved, outcome",\n'
-            '      "actors": ["object ids involved e.g. car_1, car_2"],\n'
-            '      "severity": "low/medium/high/critical",\n'
-            '      "timestamp_hint": "approximate time in clip if detectable, else empty string"\n'
+            '      "event_type": "interaction/observation/none",\n'
+            '      "description": "precise, objective sentence describing an observable interaction",\n'
+            '      "actors": ["object ids involved e.g. car_1, person_2"],\n'
+            '      "severity": "low"\n'
             "    }\n"
             "  ],\n"
             '  "people_count": 0,\n'
             '  "activities": ["list of ongoing activities"],\n'
             '  "keywords": ["search tag keywords"],\n'
-            '  "caption": "incident-report style caption — describe WHAT HAPPENED. '
-            'If objects are damaged, displaced, or in abnormal positions, state the likely cause."\n'
+            '  "caption": "neutral, objective scene description detailing exactly what is visible. Do not infer incidents."\n'
             "}\n"
             "CRITICAL RULES:\n"
             "- Give each object a unique 'id' so events can reference them via 'actors'.\n"
-            "- 'events' MUST capture INTERACTIONS and INCIDENTS, not just presence of objects.\n"
-            "- Damaged vehicle + nearby vehicle = collision event. Flag it.\n"
-            "- Fallen person = fall event. Person in restricted zone = intrusion event.\n"
-            "- Unattended bag/object = abandonment event. Unusual speed = speeding event.\n"
-            "- If the scene is fully normal with zero incidents, return: \"events\": []\n"
-            "- The 'caption' must read like a security incident report, not a photo description.\n"
+            "- Describe the scene objectively. Extract visual facts only.\n"
+            "- NEVER infer incidents, causality, or intent from a single frame.\n"
+            "- NEVER assume a person has fallen; use neutral posture descriptors like 'lying' or 'bending'.\n"
+            "- NEVER assume a collision, speeding, abandonment, or criminal activity occurred.\n"
+            "- If the scene has no notable interactions, return: \"events\": []\n"
             "- Respond ONLY with raw JSON. No markdown, no backticks, no commentary."
         )
 

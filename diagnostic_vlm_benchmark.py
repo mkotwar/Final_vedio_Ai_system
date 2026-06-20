@@ -186,7 +186,7 @@ Return ONLY valid JSON with these fields:
   "scene_type": "string",
   "scene_description": "string",
   "objects": [{"id": "string", "type": "string", "subtype": "string", "color": "string", "condition": "string", "attributes": ["string"]}],
-  "events": [{"event_type": "string", "description": "string", "actors": ["string"], "severity": "string", "timestamp_hint": "string"}],
+  "events": [{"event_type": "string", "description": "string", "actors": ["string"], "severity": "string"}],
   "people_count": 0,
   "activities": ["string"],
   "keywords": ["string"],

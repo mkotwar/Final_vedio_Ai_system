@@ -5,22 +5,19 @@ from pydantic import BaseModel, Field
 
 
 class EventMetadata(BaseModel):
-    """Represents a single incident or interaction detected in a frame by the VLM."""
+    """Represents a single observable interaction or visual state detected in a frame by the VLM."""
 
     event_type: str = ""
-    """Category of event: collision, intrusion, fall, fire, fight, abandonment, speeding, trespassing, etc."""
+    """Category of interaction: interaction, observation, none."""
 
     description: str = ""
-    """Precise natural-language sentence describing what happened, who/what was involved, and the outcome."""
+    """Precise, objective natural-language sentence describing exactly what is visually observable."""
 
     actors: List[str] = Field(default_factory=list)
-    """List of object IDs (from ObjectMetadata.id) involved in the event, e.g. ['car_1', 'car_2']."""
+    """List of object IDs (from ObjectMetadata.id) involved in the interaction, e.g. ['car_1', 'person_2']."""
 
-    severity: str = "medium"
-    """Severity level: low / medium / high / critical."""
-
-    timestamp_hint: str = ""
-    """Approximate timestamp within the clip where the event occurred, if detectable. Empty string otherwise."""
+    severity: str = "low"
+    """Severity level: low (always default to low for objective frame parsing)."""
 
 
 class ObjectMetadata(BaseModel):

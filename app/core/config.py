@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     )
 
     # VLM Model Settings
+    VLM_ENGINE_TYPE: Literal["ollama", "native_hf", "native_vllm", "mock"] = Field(
+        default="ollama", description="Which VLM engine backend to use"
+    )
     QWEN_MODEL_ID: str = Field(
         default="Qwen/Qwen2.5-VL-7B-Instruct", description="VLM model identifier"
     )

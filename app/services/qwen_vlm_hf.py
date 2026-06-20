@@ -268,8 +268,7 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             '      "event_type": "interaction/observation/none",\n'
             '      "description": "precise, objective sentence describing an observable interaction",\n'
             '      "actors": ["object ids involved e.g. car_1, person_2"],\n'
-            '      "severity": "low",\n'
-            '      "timestamp_hint": "approximate time in clip if detectable, else empty string"\n'
+            '      "severity": "low"\n'
             "    }\n"
             "  ],\n"
             '  "people_count": 0,\n'

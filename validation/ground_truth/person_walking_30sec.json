@@ -1,0 +1,18 @@
+{
+    "video_id": "7cc55952-9947-54b5-9f13-05f5219acfbd",
+    "filename": "person_walking_30sec.mp4",
+    "original_filename": "person_walking_30sec.mp4",
+    "duration_seconds": 33.37,
+    "fps": 30.0,
+    "total_frames": 1001,
+    "expected_base_frames": 33,
+    "expected_events": [
+        {
+            "event_id": "evt_001",
+            "event_type": "person_walk",
+            "start_seconds": 16.0,
+            "end_seconds": 22.0,
+            "description": "Person enters from the right, walks across the room, and exits left."
+        }
+    ]
+}

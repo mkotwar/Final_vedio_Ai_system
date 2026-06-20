@@ -1,0 +1,32 @@
+{
+  "video_id": "03301eee-50a4-4a3a-b5db-11f29b339233",
+  "filename": "03301eee-50a4-4a3a-b5db-11f29b339233.mp4",
+  "original_filename": "make_robery_vedio_person_com.mp4",
+  "duration_seconds": 10.01,
+  "fps": 29.97,
+  "total_frames": 300,
+  "expected_base_frames": 10,
+  "expected_events": [
+    {
+      "event_id": "evt_001",
+      "event_type": "abandonment",
+      "start_seconds": 2.0,
+      "end_seconds": 3.0,
+      "description": "A person in a yellow coat is being followed by another individual who appears to be taking their belongings."
+    },
+    {
+      "event_id": "evt_002",
+      "event_type": "intrusion",
+      "start_seconds": 5.0,
+      "end_seconds": 6.0,
+      "description": "A person is seen running towards a parked car with an open door."
+    },
+    {
+      "event_id": "evt_003",
+      "event_type": "fall",
+      "start_seconds": 6.0,
+      "end_seconds": 9.0,
+      "description": "A man wearing jeans has fallen onto the street."
+    }
+  ]
+}

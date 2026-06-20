@@ -1,0 +1,23 @@
+{
+  "video_id": "person_walking_30sec",
+  "frames": [
+    {
+      "timestamp_seconds": 5.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding", "person_walk", "interaction"]
+    },
+    {
+      "timestamp_seconds": 18.0,
+      "expected_objects": ["person"],
+      "expected_events": ["person_walk"],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding"]
+    },
+    {
+      "timestamp_seconds": 28.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding", "person_walk", "interaction"]
+    }
+  ]
+}

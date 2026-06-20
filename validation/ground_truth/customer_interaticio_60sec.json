@@ -1,0 +1,25 @@
+{
+    "video_id": "d21174a7-09d5-5ce2-9008-2773dd59b3e2",
+    "filename": "customer_interaticio_60sec.mp4",
+    "original_filename": "customer_interaticio_60sec.mp4",
+    "duration_seconds": 56.9,
+    "fps": 30.0,
+    "total_frames": 1707,
+    "expected_base_frames": 57,
+    "expected_events": [
+        {
+            "event_id": "evt_001",
+            "event_type": "customer_approach",
+            "start_seconds": 9.0,
+            "end_seconds": 23.0,
+            "description": "Customer enters the store and approaches the counter."
+        },
+        {
+            "event_id": "evt_002",
+            "event_type": "customer_interaction",
+            "start_seconds": 23.0,
+            "end_seconds": 56.0,
+            "description": "Customer and staff member interact at the counter."
+        }
+    ]
+}

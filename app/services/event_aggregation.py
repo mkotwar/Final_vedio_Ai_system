@@ -786,8 +786,7 @@ class EventAggregationService:
                         "event_type": inc.get("event_type", ""),
                         "description": inc.get("description", ""),
                         "actors": inc.get("actors", []),
-                        "severity": inc.get("severity", "medium"),
-                        "timestamp_hint": inc.get("timestamp_hint", "")
+                        "severity": inc.get("severity", "medium")
                     })
 
             # 1. Location text extraction (scoped per group — fixes location_text scope leak)

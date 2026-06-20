@@ -1,0 +1,23 @@
+{
+  "video_id": "customer_interaticio_60sec",
+  "frames": [
+    {
+      "timestamp_seconds": 5.0,
+      "expected_objects": [],
+      "expected_events": [],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding", "customer_approach", "customer_interaction"]
+    },
+    {
+      "timestamp_seconds": 15.0,
+      "expected_objects": ["person"],
+      "expected_events": ["customer_approach"],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding", "customer_interaction"]
+    },
+    {
+      "timestamp_seconds": 35.0,
+      "expected_objects": ["person"],
+      "expected_events": ["customer_interaction"],
+      "must_not_contain_events": ["collision", "fall", "fire", "fight", "abandonment", "speeding", "customer_approach"]
+    }
+  ]
+}
