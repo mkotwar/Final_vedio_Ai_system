@@ -1,0 +1,51 @@
+{
+    "scene_type": "jewelry store interior",
+    "scene_description": "A jewelry store with customers and employees interacting.",
+    "objects": [
+        {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "desk",
+            "color": "brown",
+            "condition": "stationary",
+            "attributes": [
+                "cluttered with papers"
+            ]
+        },
+        {
+            "id": "computer",
+            "type": "electronic device",
+            "subtype": "computer",
+            "color": "black",
+            "condition": "stationary",
+            "attributes": [
+                "on desk"
+            ]
+        },
+        {
+            "id": "laptop",
+            "type": "electronic device",
+            "subtype": "laptop",
+            "color": "silver",
+            "condition": "stationary",
+            "attributes": [
+                "on desk"
+            ]
+        },
+        {
+            "id": "glass display cases",
+            "type": "furniture",
+            "subtype": "display case",
+            "color": "white",
+            "condition": "stationary",
+            "attributes": [
+                "filled with jewelry"
+            ]
+        }
+    ],
+    "caption": "No description available.",
+    "activities": [],
+    "keywords": [],
+    "people_count": 0,
+    "events": []
+}

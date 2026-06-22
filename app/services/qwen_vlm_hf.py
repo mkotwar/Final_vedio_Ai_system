@@ -16,7 +16,12 @@ from app.schemas.frame import FrameRichMetadata
 from app.core.utils import calculate_time_snippet, format_timestamp_human
 from app.services.ocr import OCRService
 from app.services.activity_recovery import ActivityRecoveryService
-from app.services.qwen_vlm import QwenVLMService
+from app.services.vlm_utils import (
+    clean_json_response,
+    normalize_metadata_dict,
+    format_timestamp_human_vlm,
+    generate_search_text,
+)
 from qwen_vl_utils import process_vision_info
 
 class NativeQwenTransformersService:
@@ -241,8 +246,9 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
         cls.load_model()
 
         if settings.MOCK_MODEL:
-            # Fallback to Ollama mock generation
-            return await QwenVLMService.generate_metadata_batch(batch_frames)
+            # Fallback to MockVLMService
+            from app.services.mock_vlm import MockVLMService
+            return await MockVLMService.generate_metadata_batch(batch_frames)
 
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 
@@ -263,6 +269,19 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             '      "attributes": ["string"]\n'
             "    }\n"
             "  ],\n"
+            '  "location_context": [\n'
+            "    {\n"
+            '      "object_id": "string",\n'
+            '      "location": "string (e.g. near_counter, center_area)"\n'
+            "    }\n"
+            "  ],\n"
+            '  "relationships": [\n'
+            "    {\n"
+            '      "subject_id": "string",\n'
+            '      "target_id": "string",\n'
+            '      "relation": "string (e.g. talking_to, holding)"\n'
+            "    }\n"
+            "  ],\n"
             '  "events": [\n'
             "    {\n"
             '      "event_type": "interaction/observation/none",\n'
@@ -272,7 +291,7 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             "    }\n"
             "  ],\n"
             '  "people_count": 0,\n'
-            '  "activities": ["string"],\n'
+            '  "activities": ["string (CHOOSE FROM: standing, walking, running, sitting, talking, interacting, waiting, working, driving, entering, exiting, none)"],\n'
             '  "keywords": ["string"],\n'
             '  "caption": "string"\n'
             "}\n"
@@ -285,12 +304,13 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             "    Objects: bag, backpack, suitcase, box\n"
             "- If uncertain, fallback to: person, vehicle, or object.\n"
             "- NEVER invent new subtype names. NEVER output: adult male, individual, pedestrian, visitor, shopper.\n"
-            "- Give each object a unique 'id' so events can reference them via 'actors'.\n"
+            "- For 'activities', you MUST ONLY use the allowed values listed in the schema. NEVER invent custom activity names.\n"
+            "- Give each object a unique 'id' so events, relationships, and location_context can reference them via 'actors', 'subject_id', 'target_id', or 'object_id'.\n"
             "- Describe the scene objectively. Extract visual facts only.\n"
             "- NEVER infer incidents, causality, or intent from a single frame.\n"
             "- NEVER assume a person has fallen; use neutral posture descriptors like 'lying' or 'bending'.\n"
             "- NEVER assume a collision, speeding, abandonment, or criminal activity occurred.\n"
-            "- If the scene has no notable interactions, return: \"events\": []\n"
+            "- If the scene has no notable interactions, return: \"events\": [], \"relationships\": []\n"
             "- Respond ONLY with raw JSON. No markdown, no backticks, no commentary."
         )
 
@@ -329,10 +349,10 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
                     
                 try:
                     repair_start = time.perf_counter()
-                    cleaned_out = QwenVLMService._clean_json_response(raw_out)
+                    cleaned_out = clean_json_response(raw_out)
                     import json
                     parsed_raw = json.loads(cleaned_out)
-                    parsed = QwenVLMService._normalize_metadata_dict(parsed_raw.copy())
+                    parsed = normalize_metadata_dict(parsed_raw.copy())
                     repair_duration_ms = (time.perf_counter() - repair_start) * 1000.0
 
                     time_snippet = calculate_time_snippet(ts, interval_seconds=1.0)
@@ -344,14 +364,18 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
                     parsed["frame_id"] = frame_id
                     parsed["video_id"] = video_id
                     parsed["timestamp_seconds"] = ts
-                    parsed["timestamp_human"] = QwenVLMService._format_timestamp_human(ts)
+                    parsed["timestamp_human"] = format_timestamp_human_vlm(ts)
                     parsed["frame_path"] = str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
 
                     parsed = ActivityRecoveryService.apply(parsed)
-                    parsed["search_text"] = QwenVLMService._generate_search_text(parsed)
+                    parsed["search_text"] = generate_search_text(parsed)
                     
                     val_start = time.perf_counter()
                     rich_meta = FrameRichMetadata(**parsed)
+                    
+                    from app.services.metadata_postprocessor import MetadataPostprocessor
+                    rich_meta = MetadataPostprocessor.process(rich_meta)
+                    
                     val_duration_ms = (time.perf_counter() - val_start) * 1000.0
                     
                     timings = {

@@ -1,6 +1,6 @@
 import pytest
 import json
-from app.services.qwen_vlm import QwenVLMService
+from app.services.vlm_utils import normalize_metadata_dict
 
 def test_normalization_subtype_person():
     """CASE 1: Input 'adult male'/'pedestrian' normalizes to 'person'"""
@@ -8,7 +8,7 @@ def test_normalization_subtype_person():
         "scene_type": "outdoor",
         "objects": [{"id": "p1", "type": "person", "subtype": "pedestrian"}]
     }
-    normalized = QwenVLMService._normalize_metadata_dict(raw_dict)
+    normalized = normalize_metadata_dict(raw_dict)
     assert normalized["objects"][0]["subtype"] == "person"
 
 def test_normalization_subtype_customer():
@@ -17,7 +17,7 @@ def test_normalization_subtype_customer():
         "scene_type": "indoor",
         "objects": [{"id": "c1", "type": "person", "subtype": "shopper"}]
     }
-    normalized = QwenVLMService._normalize_metadata_dict(raw_dict)
+    normalized = normalize_metadata_dict(raw_dict)
     assert normalized["objects"][0]["subtype"] == "customer"
 
 def test_normalization_expanded():
@@ -36,7 +36,7 @@ def test_normalization_expanded():
             "scene_type": "indoor",
             "objects": [{"id": "x1", "type": "person", "subtype": input_sub}]
         }
-        normalized = QwenVLMService._normalize_metadata_dict(raw_dict)
+        normalized = normalize_metadata_dict(raw_dict)
         assert normalized["objects"][0]["subtype"] == expected, f"Failed on {input_sub}"
 
 def validate_regurgitation(raw_json_str: str) -> bool:

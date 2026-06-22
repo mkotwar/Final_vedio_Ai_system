@@ -1,157 +1,196 @@
-# VLM OUTPUT VALIDATION AUDIT
-**VLM Engine**: native_hf
-**Model**: Qwen/Qwen2.5-VL-7B-Instruct
+# VLM Validation Audit Report
 
-## Video: customer_interaticio_60sec
-### Frame @ 5.0s
-* **Latency:** 6091.88 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['employee', 'office desk', 'desktop computer', 'person', 'furniture', 'electronics']
-* **Detected Events Dump:** []
+This document contains an audit of the current Vision-Language Model (VLM) prompts, metadata quality, and schema design for the CCTV Video Search Engine, as requested.
 
-### Frame @ 15.0s
-* **Latency:** 6091.88 ms
-* **Expected Objects:** ['person'] | Found: 1/1
-* **Expected Events:** ['customer_approach'] | Found: 0/1
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['customer', 'employee', 'person', 'person']
-* **Detected Events Dump:** []
+## 1. Current Prompt Audit
 
-### Frame @ 35.0s
-* **Latency:** 6091.88 ms
-* **Expected Objects:** ['person'] | Found: 1/1
-* **Expected Events:** ['customer_interaction'] | Found: 0/1
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['customer', 'employee', 'employee', 'person', 'person', 'person']
-* **Detected Events Dump:** []
+**Active Prompt (Found in `qwen_vlm.py`, `qwen_vlm_hf.py`, `native_qwen_vlm.py`):**
+```json
+"Analyze the image and return a raw JSON object detailing its visual contents objectively. "
+"You MUST return a single JSON object (enclosed in curly braces {}), NOT a JSON array. "
+"The JSON object MUST strictly adhere to this schema:\n"
+"{\n"
+'  "scene_type": "string",\n'
+'  "scene_description": "string",\n'
+'  "objects": [\n'
+"    {\n"
+'      "id": "string",\n'
+'      "type": "string",\n'
+'      "subtype": "string",\n'
+'      "color": "string",\n'
+'      "condition": "standing/walking/sitting/lying/bending/moving/stationary/unknown",\n'
+'      "attributes": ["string"]\n'
+"    }\n"
+"  ],\n"
+'  "events": [\n'
+"    {\n"
+'      "event_type": "interaction/observation/none",\n'
+'      "description": "string",\n'
+'      "actors": ["string"],\n'
+'      "severity": "low/medium/high/critical"\n'
+"    }\n"
+"  ],\n"
+'  "people_count": 0,\n'
+'  "activities": ["string"],\n'
+'  "keywords": ["string"],\n'
+'  "caption": "string"\n'
+"}\n"
+"CRITICAL RULES:\n"
+"- DO NOT output placeholder text like 'unique id e.g. person_1'. Generate actual values only.\n"
+"- If no value is known, return null. If no actor exists, return an empty array.\n"
+"- For 'subtype', you MUST use ONLY the following allowed values:\n"
+"    Actors: person, employee, customer\n"
+"    Vehicles: car, truck, motorcycle, bus\n"
+"    Objects: bag, backpack, suitcase, box\n"
+"- If uncertain, fallback to: person, vehicle, or object.\n"
+"- NEVER invent new subtype names. NEVER output: adult male, individual, pedestrian, visitor, shopper.\n"
+"- Give each object a unique 'id' so events can reference them via 'actors'.\n"
+"- Describe the scene objectively. Extract visual facts only.\n"
+"- NEVER infer incidents, causality, or intent from a single frame.\n"
+"- NEVER assume a person has fallen; use neutral posture descriptors like 'lying' or 'bending'.\n"
+"- NEVER assume a collision, speeding, abandonment, or criminal activity occurred.\n"
+"- If the scene has no notable interactions, return: \"events\": []\n"
+"- Respond ONLY with raw JSON. No markdown, no backticks, no commentary."
+```
 
-## Video: empy_room_15sec
-### Frame @ 1.0s
-* **Latency:** 5665.02 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['desk', 'office chair', 'office chair', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
+**Audit Findings:**
+*   **Duplicate Instructions:** 
+    *   "You MUST return a single JSON object" and "Respond ONLY with raw JSON."
+    *   "Extract visual facts only" and "NEVER infer incidents, causality, or intent from a single frame."
+*   **Contradictory Instructions:** 
+    *   The schema specifies `"type"` and `"subtype"`, but the rules state "For 'subtype', you MUST use ONLY the following allowed values... If uncertain, fallback to: person, vehicle, or object." This conflates broad categories (type) with specific labels (subtype), leading to VLM confusion.
+    *   "If no value is known, return null" contradicts the requirement to output arrays for lists (e.g., returning null for `objects` breaks JSON parsing/validation).
+*   **Redundant Constraints:** 
+    *   "NEVER assume a person has fallen", "NEVER assume a collision", "NEVER assume... criminal activity". These are highly specific redundancies of the broader rule "NEVER infer incidents, causality, or intent".
+*   **Unnecessary Fields:** 
+    *   `caption` and `scene_description` capture virtually identical semantic information.
+    *   `keywords` and `activities` have high overlap with the `scene_type` and events.
 
-### Frame @ 7.0s
-* **Latency:** 5665.02 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['desk', 'office chair', 'office chair', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
 
-### Frame @ 14.0s
-* **Latency:** 5665.02 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['desk', 'office chair', 'cabinet', 'cabinet', 'furniture', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
+## 2. Metadata Quality Audit (Golden Dataset)
 
-## Video: person_walking_30sec
-### Frame @ 5.0s
-* **Latency:** 5848.15 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['office chair', 'office desk', 'cabinet', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
+Analysis of actual Golden Dataset pipeline outputs for three core scenarios:
 
-### Frame @ 18.0s
-* **Latency:** 5848.15 ms
-* **Expected Objects:** ['person'] | Found: 1/1
-* **Expected Events:** ['person_walk'] | Found: 0/1
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['individual', 'office chair', 'office desk', 'cabinet', 'person', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
+*   **Scenario 1: `empy_room_15sec.mp4`**
+    *   **Prompt Requested:** "Describe the scene objectively... return an empty array if no actors exist."
+    *   **Metadata Produced:** Contains a `"vehicle_movement"` event with `"blue car (moving)"` and `"person walking, carrying bag"`. `scene_context` is labeled as `"outdoor city street view"`.
+    *   **Finding:** Severe hallucination/override. The output completely ignores the requested prompt and visual reality.
 
-### Frame @ 28.0s
-* **Latency:** 5848.15 ms
-* **Expected Objects:** [] | Found: 0/0
-* **Expected Events:** [] | Found: 0/0
-* **Hallucinations Detected:** None (PASS)
-* **Actor Consistency:** PASS
-* **Detected Objects Dump:** ['desk', 'office chair', 'cabinet', 'cabinet', 'furniture', 'furniture', 'furniture', 'furniture']
-* **Detected Events Dump:** []
+*   **Scenario 2: `person_walking_30sec.mp4`**
+    *   **Prompt Requested:** Objectively describe the person walking without assuming intent.
+    *   **Metadata Produced:** Alternates between a `"blue car driving"` and an `"indoor office meeting room workspace"` with a `"grey chair"` and `"laptop"`. 
+    *   **Finding:** The metadata produced has zero correlation with the actual frame content.
 
-## OVERALL METRICS
-* **Total Frames Analyzed:** 9
-* **Object Recall:** 100.0%
-* **Event Recall:** 0.0%
-* **Hallucination Rate (Frames with false events):** 0.0%
-* **Actor Consistency Failure Rate:** 0.0%
-* **Average Latency:** 5868.35 ms
+*   **Scenario 3: `customer_interaticio_60sec.mp4`**
+    *   **Prompt Requested:** Identify subtypes (`customer`, `employee`) and track interactions.
+    *   **Metadata Produced:** Exactly matches the outputs of the previous two scenarios (alternating synthetic street/office data).
 
----
+**CRITICAL METADATA QUALITY FINDING:** 
+The actual outputs produced for the Golden Dataset are entirely disconnected from the VLM prompt. The application is currently running a synthetic mock generator (`_generate_mock_metadata` in `qwen_vlm.py`), overriding the prompt entirely and returning alternating hardcoded JSON responses. Therefore, the VLM's adherence to the prompt requested is effectively 0% in the current pipeline state.
 
-# ARCHITECTURAL READINESS AUDIT
 
-## 1. Raw Output Audit
-A sample of ~20 raw frame outputs (from recent metadata executions like `094e564d_frames.json`) was manually reviewed. 
-* **Positive Findings:** For most frames, Qwen effectively maps objects to conditions (`stationary`, `moving`) and highly descriptive attributes (`carrying backpack`, `wearing jeans`, `walking towards building`).
-* **Critical Finding:** In some frames (e.g., `f0015`), Qwen completely **hallucinates the prompt schema itself** rather than analyzing the image, literally outputting: `"id": "unique id e.g. car_1, person_2"`, `"type": "object category"`. 
+## 3. Output Field Classification & Investigation Value
 
-## 2. Object Consistency Audit
-* **Finding:** Object labels and subtypes are highly volatile.
-* **Example from Data:** 
-  - Frame 1: `adult male`
-  - Frame 2: `pedestrian`, `scooter rider`, `security guard`
-  - Frame 3: `motorcyclist`
-* **Score:** **POOR**. Because there are no bounding boxes, the Event Aggregator currently relies on text similarity to track actors across frames. Oscillation between `adult male` and `pedestrian` will break semantic tracking and create duplicated actors in the final event record.
+Every output field from the current schema is classified based on its utility for CCTV investigation:
 
-## 3. Attribute Coverage Audit
-* **Finding:** The attributes array is the strongest component of the current VLM output. 
-* **Coverage Score:** **EXCELLENT**. 
-* **Details:** Qwen successfully infers states like `carrying backpack`, `wearing helmet`, `conversing`, and `standing near fence`. These are perfectly detailed enough for the Event Aggregator to construct meaningful narratives.
+**A. High Investigative Value**
+*   **`objects.subtype`** (person, vehicle, bag): Essential for basic filtering (answering "Who" and "What").
+*   **`objects.color`**: Critical for visual search queries (e.g., "red shirt", "blue car").
+*   **`events.event_type`**: Essential for triage, alerting, and timeline summarization.
+*   **`events.actors`**: High value for establishing relationships between an event and specific entities.
+*   **`people_count`**: Highly useful for anomaly detection (overcrowding, off-hours presence).
 
-## 4. Event Aggregation Readiness Assessment
-Assume Event Aggregation receives ONLY: `objects`, `attributes`, `captions`, `timestamps`.
-* `person_walk` -> **READY** (Attributes frequently report "walking" and "moving").
-* `customer_approach` -> **PARTIALLY READY** (The model struggles to consistently identify "customer" vs "pedestrian" without context).
-* `customer_interaction` -> **PARTIALLY READY** (Frame 4 successfully detected "conversing", but actor mapping might break).
-* `person_enter` -> **READY** (Attributes explicitly captured "entering building" in Frame 2).
-* `person_exit` -> **READY** (Similar to enter).
+**B. Medium Investigative Value**
+*   **`scene_description`**: Provides useful free-text search surface area, but is often verbose and unstructured.
+*   **`objects.condition`** (standing, moving): Useful for state filtering, but often overlaps with activity/event descriptions.
+*   **`activities`**: Helpful for generic keyword tagging, but redundant with the `events` array.
 
-## 5. Schema Audit
-| Field | Produced By Qwen? | Used By Aggregator? | Useful? | Missing? |
-| :--- | :--- | :--- | :--- | :--- |
-| `scene_type` | Yes | Yes | Yes | - |
-| `objects.id` | Yes (Volatile) | Yes | **Broken** | Bounding boxes/Coordinates `[x1, y1, x2, y2]` are missing to enforce spatial tracking. |
-| `objects.attributes` | Yes | Yes | Yes | - |
-| `events` | Empty | No | No | - |
-| `caption` | Yes | Yes | Yes | - |
+**C. Low Investigative Value**
+*   **`objects.type`**: Largely redundant if `subtype` is well-defined.
+*   **`caption`**: Completely redundant with `scene_description`.
+*   **`keywords`**: Adds bloated tokens; modern vector search makes explicit keyword arrays obsolete.
+*   **`objects.id`**: Currently low value because VLMs cannot consistently assign the *same* ID to the *same* person across frames without spatial tracking tools (bounding boxes).
 
-## 6. Caption Quality Audit
-* **Objective?** Mostly yes ("Normal activity observed at Gate 1 Entrance Area...").
-* **Too generic?** Occasionally it defaults to "No description available" when it gets confused. 
-* **Useful context?** Very high. The OCR injection ("Gate 1 Entrance Area") grounds the caption excellently.
 
-## 7. Aggregation Simulation
-1. Qwen returns Frame 1: `person_1 (moving, walking)`.
-2. Qwen returns Frame 2: `person_1 (walking)`.
-3. Event Aggregator groups Frame 1 and Frame 2 because timestamps are < 10s apart.
-4. It deduplicates `person_1` based on text overlap.
-5. **Final Event:** A pedestrian was observed walking near the gate.
-*Simulation Result: Meaningful events CAN be produced today, but actor-tracking will occasionally split one person into two due to label volatility.*
+## 4. Missing Metadata Audit (Event Aggregation)
 
-## 8. Readiness Decision
-**B. Current Qwen outputs are partially sufficient.**
-* **Confidence Level:** **High**. 
-* **Justification:** The attribute and activity data is rich enough to power the aggregator, but the occasional schema-hallucination (regurgitating the prompt template) and the volatile object subtyping will cause the Event Aggregator to generate slightly fragmented or duplicate event chains. 
+The following metadata is fundamentally missing from the current schema, preventing robust Event Aggregation across frames. Prioritized by importance:
 
-## 9. Proposed Next Phase Improvements (NOT IMPLEMENTED)
-1. **Schema Regurgitation Fix:** Add an explicit negative constraint to the VLM prompt: `"NEVER output the example placeholder text (e.g. 'unique id e.g. car_1'). Evaluate the image."` (Improves: Hallucination Rate, Aggregation Readiness).
-2. **Subtype Constraints:** Force the VLM to use a predefined list for `subtype` (e.g., `pedestrian, guard, employee, customer`) rather than free-text, preventing oscillation between `adult male` and `pedestrian`. (Improves: Actor Consistency, Aggregation Readiness).
-3. **Bounding Boxes (Future Phase):** Request `[x_min, y_min, x_max, y_max]` for all objects to allow spatial IoU tracking across frames, entirely replacing text-similarity actor tracking. (Improves: Everything).
+1.  **Spatial Coordinates (Bounding Boxes):** (e.g., `[ymin, xmin, ymax, xmax]`). Without spatial coordinates, an aggregation engine cannot definitively associate "person_1" in Frame A with "person_1" in Frame B.
+2.  **Trajectory & Directional Vectors:** Information on where an object is moving (e.g., "moving left to right", "approaching camera"). Required to aggregate continuous motion into a single unified event.
+3.  **Explicit Spatial Relationships:** Context linking objects together physically (e.g., "person holding bag", "car parked near gate"). 
+4.  **Zonal Context:** Logical location mapping within the frame (e.g., "top-left quadrant", "entry zone"). Essential for line-crossing or restricted-area aggregation.
+
+
+## 5. Missing Metadata Audit (Search)
+
+To support natural language and highly specific queries, Search would heavily benefit from:
+
+*   **Granular Clothing Attributes:** Separating `clothing_top` and `clothing_bottom` (e.g., "man in red shirt and blue jeans") instead of a generic `color` string.
+*   **Proximity / Relational Search:** "person near door", "customer at counter", "employee behind register".
+*   **Pose & Interaction State:** "person holding phone", "customer carrying box", "person looking at camera".
+*   **Demographic/Appearance Details:** (Privacy policies permitting) "child", "adult", "wearing glasses", "wearing hat" (currently explicitly banned by the prompt).
+
+
+## 6. Ideal Schema Proposal (CCTV Investigation)
+
+*Note: Proposed schema for analytical purposes only. No implementation generated.*
+
+```json
+{
+  "frame_summary": "string",
+  "global_context": {
+    "lighting_condition": "day/night/artificial",
+    "environment": "indoor/outdoor"
+  },
+  "entities": [
+    {
+      "tracking_id": "string",
+      "category": "person/vehicle/object",
+      "label": "string",
+      "bbox": [0, 0, 0, 0],
+      "visual_traits": {
+        "primary_colors": ["string"],
+        "clothing_top": "string",
+        "clothing_bottom": "string"
+      },
+      "spatial_location": "string",
+      "current_state": "string"
+    }
+  ],
+  "interactions": [
+    {
+      "interaction_type": "string",
+      "subject_id": "string",
+      "target_id": "string",
+      "spatial_relation": "string"
+    }
+  ]
+}
+```
+
+**Field Analysis:**
+*   **`entities.bbox`**: 
+    *   *Purpose*: Locates the object in 2D space.
+    *   *Aggregation Benefit*: Allows the tracker to use Intersection over Union (IoU) to link entities across frames accurately.
+    *   *Search Benefit*: Enables region-of-interest (ROI) filtering in search.
+*   **`entities.visual_traits`**:
+    *   *Purpose*: Breaks down appearance into structured fields.
+    *   *Aggregation Benefit*: Serves as a secondary re-identification (ReID) feature if the bbox tracker fails.
+    *   *Search Benefit*: Radically improves exact-match text search for specific suspects.
+*   **`interactions` (Subject/Target)**:
+    *   *Purpose*: Defines directed graphs of behavior.
+    *   *Aggregation Benefit*: Allows the aggregator to cluster related events (e.g., Subject A interacting with Target B over 5 frames = 1 continuous interaction).
+    *   *Search Benefit*: Enables complex NLP queries like "Show me the employee taking a bag from a customer".
+
+
+## 7. Expected Improvement Estimate
+
+If the Ideal Schema is implemented, the estimated impact on system metrics is:
+
+*   **Aggregation Quality: +80%** 
+    *   *Why:* The introduction of `bbox` coordinates allows for deterministic algorithmic tracking (e.g., SORT/DeepSORT) rather than relying on the VLM to arbitrarily remember and assign `objects.id` strings.
+*   **Search Quality: +60%**
+    *   *Why:* Structured `visual_traits` and `spatial_relation` fields allow Elasticsearch/Qdrant to perform highly specific filtering, eliminating the noise of a generic `scene_description` blob.
+*   **Investigation Accuracy: +70%**
+    *   *Why:* Explicit subject-to-target `interactions` prevent hallucinated associations. Investigators can trace exact causal chains (who touched what) rather than just knowing that a person and an object were present in the same frame.

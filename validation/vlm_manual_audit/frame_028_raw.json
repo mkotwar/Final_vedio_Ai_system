@@ -1,0 +1,36 @@
+```json
+{
+  "scene_type": "jewelry store interior",
+  "scene_description": "A jewelry store with glass display cases, a counter, and employees interacting with customers.",
+  "objects": [
+    {
+      "id": "display_case_1",
+      "type": "display_case",
+      "subtype": "jewelry",
+      "color": "transparent",
+      "condition": "stationary",
+      "attributes": ["filled with jewelry"]
+    },
+    {
+      "id": "display_case_2",
+      "type": "display_case",
+      "subtype": "jewelry",
+      "color": "transparent",
+      "condition": "stationary",
+      "attributes": ["filled with jewelry"]
+    },
+    {
+      "id": "display_case_3",
+      "type": "display_case",
+      "subtype": "jewelry",
+      "color": "transparent",
+      "condition": "stationary",
+      "attributes": ["filled with jewelry"]
+    },
+    {
+      "id": "display_case_4",
+      "type": "display_case",
+      "subtype": "jewelry",
+      "color": "transparent",
+      "condition": "stationary",
+      "attributes

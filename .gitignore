@@ -106,6 +106,8 @@ output*.txt
 *.log
 *.txt
 
+*.json
+
 # Runtime artifacts
 ADAPTIVE_SAMPLING_DIAGNOSTIC_REPORT.md
 ADAPTIVE_SAMPLING_REPORT.md

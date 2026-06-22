@@ -1,0 +1,743 @@
+{
+  "frames": [
+    "empy_room_ts1.jpg",
+    "empy_room_ts7.jpg",
+    "empy_room_ts14.jpg",
+    "person_walk_ts5.jpg",
+    "person_walk_ts18.jpg",
+    "person_walk_ts28.jpg",
+    "customer_int_ts5.jpg",
+    "customer_int_ts15.jpg",
+    "customer_int_ts35.jpg"
+  ],
+  "json_quality": {
+    "valid": 9,
+    "invalid": 0,
+    "total": 9,
+    "parse_success_pct": 100.0
+  },
+  "object_quality": {
+    "total_frames": 9,
+    "frames_with_objects": 9,
+    "total_objects": 56,
+    "objects_with_id": 56,
+    "objects_with_type": 56,
+    "objects_with_subtype": 56,
+    "duplicate_id_frames": 1,
+    "completeness_pct": 88.88888888888889
+  },
+  "activity_quality": {
+    "total_frames": 9,
+    "frames_with_activities": 9,
+    "total_activities": 10,
+    "compliant_activities": 10,
+    "schema_drift_count": 0,
+    "compliance_pct": 100.0
+  },
+  "relationship_quality": {
+    "total_frames": 9,
+    "frames_with_relationships": 8,
+    "total_relationships": 20,
+    "complete_relationships": 20,
+    "missing_subject": 0,
+    "missing_target": 0,
+    "missing_relation": 0,
+    "completeness_pct": 100.0
+  },
+  "location_context_quality": {
+    "total_frames": 9,
+    "frames_with_loc": 8,
+    "total_loc": 27,
+    "complete_loc": 27,
+    "missing_object_id": 0,
+    "missing_location": 0,
+    "completeness_pct": 100.0
+  },
+  "reference_integrity": {
+    "total_refs": 67,
+    "valid_refs": 53,
+    "dangling_refs": 14,
+    "integrity_pct": 79.1044776119403,
+    "dangling_details": [
+      "Frame 1: relationship.target_id='wall' not in objects",
+      "Frame 2: relationship.target_id='wall' not in objects",
+      "Frame 2: relationship.target_id='wall' not in objects",
+      "Frame 2: relationship.target_id='wall' not in objects",
+      "Frame 3: relationship.target_id='left_side' not in objects",
+      "Frame 3: relationship.target_id='left_side' not in objects",
+      "Frame 4: relationship.subject_id='person' not in objects",
+      "Frame 4: location_context.object_id='person' not in objects",
+      "Frame 6: relationship.subject_id='person' not in objects",
+      "Frame 6: location_context.object_id='person' not in objects",
+      "Frame 8: relationship.subject_id='person_1' not in objects",
+      "Frame 8: relationship.subject_id='person_2' not in objects",
+      "Frame 8: relationship.subject_id='person_3' not in objects",
+      "Frame 8: relationship.subject_id='person_4' not in objects"
+    ]
+  },
+  "aggregator_readiness_pct": 94.66556108347153,
+  "raw_outputs": [
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office chair\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building feature\",\n      \"subtype\": \"interior door\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"monitor\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"computer monitor\",\n      \"condition\": \"off\"\n    },\n    {\n      \"id\": \"keyboard\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"input device\",\n      \"condition\": \"not in use\"\n    },\n    {\n      \"id\": \"mouse\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"input device\",\n      \"condition\": \"not in use\"\n    },\n    {\n      \"id\": \"lockers\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"empty\"\n    }\n  ],\n  \"activities\": [\"none\"],\n  \"relationships\": [],\n  \"location_context\": []\n}\n```",
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"monitor\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"computer\",\n      \"condition\": \"off\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building_feature\",\n      \"subtype\": \"entry\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"lockers\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"empty\"\n    }\n  ],\n  \"activities\": [\"none\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"desk\",\n      \"target_id\": \"chair\",\n      \"relation\": \"near\"\n    },\n    {\n      \"subject_id\": \"cabinet\",\n      \"target_id\": \"desk\",\n      \"relation\": \"behind\"\n    },\n    {\n      \"subject_id\": \"lockers\",\n      \"target_id\": \"wall\",\n      \"relation\": \"attached\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"desk\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"chair\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"cabinet\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"lockers\",\n      \"location\": \"right_side\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office chair\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"board\",\n      \"type\": \"furniture\",\n      \"subtype\": \"blackboard\",\n      \"condition\": \"blank\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building feature\",\n      \"subtype\": \"interior door\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"lockers\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"empty\"\n    }\n  ],\n  \"activities\": [\"none\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"desk\",\n      \"target_id\": \"chair\",\n      \"relation\": \"near\"\n    },\n    {\n      \"subject_id\": \"cabinet\",\n      \"target_id\": \"desk\",\n      \"relation\": \"behind\"\n    },\n    {\n      \"subject_id\": \"board\",\n      \"target_id\": \"wall\",\n      \"relation\": \"on\"\n    },\n    {\n      \"subject_id\": \"door\",\n      \"target_id\": \"wall\",\n      \"relation\": \"in\"\n    },\n    {\n      \"subject_id\": \"lockers\",\n      \"target_id\": \"wall\",\n      \"relation\": \"attached\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"desk\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"chair\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"cabinet\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"board\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"door\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"lockers\",\n      \"location\": \"right_side\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"chair\",\n      \"type\": \"office chair\",\n      \"subtype\": \"black\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"desk\",\n      \"type\": \"office desk\",\n      \"subtype\": \"wooden\",\n      \"condition\": \"clean\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"storage cabinet\",\n      \"subtype\": \"wooden\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"monitor\",\n      \"type\": \"computer monitor\",\n      \"subtype\": \"black\",\n      \"condition\": \"off\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"office door\",\n      \"subtype\": \"brown\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"sign\",\n      \"type\": \"information sign\",\n      \"subtype\": \"blue\",\n      \"condition\": \"visible\"\n    }\n  ],\n  \"activities\": [\"none\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"chair\",\n      \"target_id\": \"desk\",\n      \"relation\": \"near\"\n    },\n    {\n      \"subject_id\": \"door\",\n      \"target_id\": \"left_side\",\n      \"relation\": \"near\"\n    },\n    {\n      \"subject_id\": \"sign\",\n      \"target_id\": \"left_side\",\n      \"relation\": \"near\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"chair\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"desk\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"cabinet\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"monitor\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"door\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"sign\",\n      \"location\": \"left_side\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building\",\n      \"subtype\": \"interior\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"blackboard\",\n      \"type\": \"furniture\",\n      \"subtype\": \"educational\",\n      \"condition\": \"clean\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"occupied\"\n    }\n  ],\n  \"activities\": [\"walking\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"person\",\n      \"target_id\": \"desk\",\n      \"relation\": \"standing\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"person\",\n      \"location\": \"center_area\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office chair\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building feature\",\n      \"subtype\": \"interior door\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage cabinet\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"monitor\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"computer monitor\",\n      \"condition\": \"off\"\n    },\n    {\n      \"id\": \"keyboard\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"computer keyboard\",\n      \"condition\": \"not in use\"\n    },\n    {\n      \"id\": \"mouse\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"computer mouse\",\n      \"condition\": \"not in use\"\n    },\n    {\n      \"id\": \"wall_hanger\",\n      \"type\": \"furniture\",\n      \"subtype\": \"coat hanger\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"blackboard\",\n      \"type\": \"furniture\",\n      \"subtype\": \"educational board\",\n      \"condition\": \"blank\"\n    }\n  ],\n  \"activities\": [\"none\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"desk\",\n      \"target_id\": \"chair\",\n      \"relation\": \"near\"\n    },\n    {\n      \"subject_id\": \"door\",\n      \"target_id\": \"cabinet\",\n      \"relation\": \"behind\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"desk\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"chair\",\n      \"location\": \"left_side\"\n    },\n    {\n      \"object_id\": \"door\",\n      \"location\": \"right_side\"\n    },\n    {\n      \"object_id\": \"cabinet\",\n      \"location\": \"right_side\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"jewelry_store\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"workstation\",\n      \"subtype\": \"office\",\n      \"condition\": \"cluttered\"\n    },\n    {\n      \"id\": \"computer\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"desktop\",\n      \"condition\": \"powered_on\"\n    },\n    {\n      \"id\": \"laptop\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"portable\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"documents\",\n      \"type\": \"paper\",\n      \"subtype\": \"files\",\n      \"condition\": \"on_desk\"\n    },\n    {\n      \"id\": \"jewelry_cases\",\n      \"type\": \"display_case\",\n      \"subtype\": \"glass\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"cash_register\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"point_of_sale\",\n      \"condition\": \"inactive\"\n    }\n  ],\n  \"activities\": [\"working\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"person\",\n      \"target_id\": \"desk\",\n      \"relation\": \"sitting\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"person\",\n      \"location\": \"near_counter\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"jewelry_store\",\n  \"objects\": [\n    {\n      \"id\": \"customer\",\n      \"type\": \"person\",\n      \"subtype\": \"man\",\n      \"condition\": \"standing\"\n    },\n    {\n      \"id\": \"employee\",\n      \"type\": \"person\",\n      \"subtype\": \"man\",\n      \"condition\": \"sitting\"\n    }\n  ],\n  \"activities\": [\"standing\", \"working\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"customer\",\n      \"target_id\": \"employee\",\n      \"relation\": \"facing\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"customer\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"employee\",\n      \"location\": \"left_side\"\n    }\n  ]\n}\n```",
+    "```json\n{\n  \"scene_type\": \"jewelry_store\",\n  \"objects\": [\n    {\n      \"id\": \"counter\",\n      \"type\": \"desk\",\n      \"subtype\": \"cashier\",\n      \"condition\": \"occupied\"\n    },\n    {\n      \"id\": \"glass_cases\",\n      \"type\": \"display_cases\",\n      \"subtype\": \"jewelry\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"computer\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"monitor\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"laptop\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"laptop\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"phone\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"landline\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"wall_decor\",\n      \"type\": \"artwork\",\n      \"subtype\": \"painting\",\n      \"condition\": \"hung\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"entrance\",\n      \"subtype\": \"main\",\n      \"condition\": \"open\"\n    }\n  ],\n  \"activities\": [\"working\"],\n  \"relationships\": [\n    {\n      \"subject_id\": \"person_1\",\n      \"target_id\": \"counter\",\n      \"relation\": \"working\"\n    },\n    {\n      \"subject_id\": \"person_2\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    },\n    {\n      \"subject_id\": \"person_3\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    },\n    {\n      \"subject_id\": \"person_4\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"counter\",\n      \"location\": \"near_counter\"\n    },\n    {\n      \"object_id\": \"glass_cases\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"door\",\n      \"location\": \"right_side\"\n    }\n  ]\n}\n```"
+  ],
+  "parsed_outputs": [
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "empty"
+        },
+        {
+          "id": "chair",
+          "type": "furniture",
+          "subtype": "office chair",
+          "condition": "unoccupied"
+        },
+        {
+          "id": "cabinet",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "closed"
+        },
+        {
+          "id": "door",
+          "type": "building feature",
+          "subtype": "interior door",
+          "condition": "open"
+        },
+        {
+          "id": "monitor",
+          "type": "electronic device",
+          "subtype": "computer monitor",
+          "condition": "off"
+        },
+        {
+          "id": "keyboard",
+          "type": "electronic device",
+          "subtype": "input device",
+          "condition": "not in use"
+        },
+        {
+          "id": "mouse",
+          "type": "electronic device",
+          "subtype": "input device",
+          "condition": "not in use"
+        },
+        {
+          "id": "lockers",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "empty"
+        }
+      ],
+      "activities": [
+        "none"
+      ],
+      "relationships": [],
+      "location_context": []
+    },
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "empty"
+        },
+        {
+          "id": "chair",
+          "type": "furniture",
+          "subtype": "office",
+          "condition": "unoccupied"
+        },
+        {
+          "id": "cabinet",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "closed"
+        },
+        {
+          "id": "monitor",
+          "type": "electronic_device",
+          "subtype": "computer",
+          "condition": "off"
+        },
+        {
+          "id": "door",
+          "type": "building_feature",
+          "subtype": "entry",
+          "condition": "open"
+        },
+        {
+          "id": "lockers",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "empty"
+        }
+      ],
+      "activities": [
+        "none"
+      ],
+      "relationships": [
+        {
+          "subject_id": "desk",
+          "target_id": "chair",
+          "relation": "near"
+        },
+        {
+          "subject_id": "cabinet",
+          "target_id": "desk",
+          "relation": "behind"
+        },
+        {
+          "subject_id": "lockers",
+          "target_id": "wall",
+          "relation": "attached"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "desk",
+          "location": "center_area"
+        },
+        {
+          "object_id": "chair",
+          "location": "left_side"
+        },
+        {
+          "object_id": "cabinet",
+          "location": "right_side"
+        },
+        {
+          "object_id": "lockers",
+          "location": "right_side"
+        }
+      ]
+    },
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "empty"
+        },
+        {
+          "id": "chair",
+          "type": "furniture",
+          "subtype": "office chair",
+          "condition": "unoccupied"
+        },
+        {
+          "id": "cabinet",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "closed"
+        },
+        {
+          "id": "board",
+          "type": "furniture",
+          "subtype": "blackboard",
+          "condition": "blank"
+        },
+        {
+          "id": "door",
+          "type": "building feature",
+          "subtype": "interior door",
+          "condition": "open"
+        },
+        {
+          "id": "lockers",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "empty"
+        }
+      ],
+      "activities": [
+        "none"
+      ],
+      "relationships": [
+        {
+          "subject_id": "desk",
+          "target_id": "chair",
+          "relation": "near"
+        },
+        {
+          "subject_id": "cabinet",
+          "target_id": "desk",
+          "relation": "behind"
+        },
+        {
+          "subject_id": "board",
+          "target_id": "wall",
+          "relation": "on"
+        },
+        {
+          "subject_id": "door",
+          "target_id": "wall",
+          "relation": "in"
+        },
+        {
+          "subject_id": "lockers",
+          "target_id": "wall",
+          "relation": "attached"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "desk",
+          "location": "center_area"
+        },
+        {
+          "object_id": "chair",
+          "location": "left_side"
+        },
+        {
+          "object_id": "cabinet",
+          "location": "right_side"
+        },
+        {
+          "object_id": "board",
+          "location": "right_side"
+        },
+        {
+          "object_id": "door",
+          "location": "left_side"
+        },
+        {
+          "object_id": "lockers",
+          "location": "right_side"
+        }
+      ]
+    },
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "chair",
+          "type": "office chair",
+          "subtype": "black",
+          "condition": "empty"
+        },
+        {
+          "id": "desk",
+          "type": "office desk",
+          "subtype": "wooden",
+          "condition": "clean"
+        },
+        {
+          "id": "cabinet",
+          "type": "storage cabinet",
+          "subtype": "wooden",
+          "condition": "closed"
+        },
+        {
+          "id": "monitor",
+          "type": "computer monitor",
+          "subtype": "black",
+          "condition": "off"
+        },
+        {
+          "id": "door",
+          "type": "office door",
+          "subtype": "brown",
+          "condition": "open"
+        },
+        {
+          "id": "sign",
+          "type": "information sign",
+          "subtype": "blue",
+          "condition": "visible"
+        }
+      ],
+      "activities": [
+        "none"
+      ],
+      "relationships": [
+        {
+          "subject_id": "chair",
+          "target_id": "desk",
+          "relation": "near"
+        },
+        {
+          "subject_id": "door",
+          "target_id": "left_side",
+          "relation": "near"
+        },
+        {
+          "subject_id": "sign",
+          "target_id": "left_side",
+          "relation": "near"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "chair",
+          "location": "left_side"
+        },
+        {
+          "object_id": "desk",
+          "location": "center_area"
+        },
+        {
+          "object_id": "cabinet",
+          "location": "right_side"
+        },
+        {
+          "object_id": "monitor",
+          "location": "right_side"
+        },
+        {
+          "object_id": "door",
+          "location": "left_side"
+        },
+        {
+          "object_id": "sign",
+          "location": "left_side"
+        }
+      ]
+    },
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "empty"
+        },
+        {
+          "id": "chair",
+          "type": "furniture",
+          "subtype": "office",
+          "condition": "unoccupied"
+        },
+        {
+          "id": "door",
+          "type": "building",
+          "subtype": "interior",
+          "condition": "open"
+        },
+        {
+          "id": "blackboard",
+          "type": "furniture",
+          "subtype": "educational",
+          "condition": "clean"
+        },
+        {
+          "id": "cabinet",
+          "type": "furniture",
+          "subtype": "storage",
+          "condition": "closed"
+        },
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "occupied"
+        }
+      ],
+      "activities": [
+        "walking"
+      ],
+      "relationships": [
+        {
+          "subject_id": "person",
+          "target_id": "desk",
+          "relation": "standing"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "person",
+          "location": "center_area"
+        }
+      ]
+    },
+    {
+      "scene_type": "office",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "furniture",
+          "subtype": "workstation",
+          "condition": "empty"
+        },
+        {
+          "id": "chair",
+          "type": "furniture",
+          "subtype": "office chair",
+          "condition": "unoccupied"
+        },
+        {
+          "id": "door",
+          "type": "building feature",
+          "subtype": "interior door",
+          "condition": "closed"
+        },
+        {
+          "id": "cabinet",
+          "type": "furniture",
+          "subtype": "storage cabinet",
+          "condition": "closed"
+        },
+        {
+          "id": "monitor",
+          "type": "electronic device",
+          "subtype": "computer monitor",
+          "condition": "off"
+        },
+        {
+          "id": "keyboard",
+          "type": "electronic device",
+          "subtype": "computer keyboard",
+          "condition": "not in use"
+        },
+        {
+          "id": "mouse",
+          "type": "electronic device",
+          "subtype": "computer mouse",
+          "condition": "not in use"
+        },
+        {
+          "id": "wall_hanger",
+          "type": "furniture",
+          "subtype": "coat hanger",
+          "condition": "empty"
+        },
+        {
+          "id": "blackboard",
+          "type": "furniture",
+          "subtype": "educational board",
+          "condition": "blank"
+        }
+      ],
+      "activities": [
+        "none"
+      ],
+      "relationships": [
+        {
+          "subject_id": "desk",
+          "target_id": "chair",
+          "relation": "near"
+        },
+        {
+          "subject_id": "door",
+          "target_id": "cabinet",
+          "relation": "behind"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "desk",
+          "location": "center_area"
+        },
+        {
+          "object_id": "chair",
+          "location": "left_side"
+        },
+        {
+          "object_id": "door",
+          "location": "right_side"
+        },
+        {
+          "object_id": "cabinet",
+          "location": "right_side"
+        }
+      ]
+    },
+    {
+      "scene_type": "jewelry_store",
+      "objects": [
+        {
+          "id": "desk",
+          "type": "workstation",
+          "subtype": "office",
+          "condition": "cluttered"
+        },
+        {
+          "id": "computer",
+          "type": "electronic_device",
+          "subtype": "desktop",
+          "condition": "powered_on"
+        },
+        {
+          "id": "laptop",
+          "type": "electronic_device",
+          "subtype": "portable",
+          "condition": "closed"
+        },
+        {
+          "id": "documents",
+          "type": "paper",
+          "subtype": "files",
+          "condition": "on_desk"
+        },
+        {
+          "id": "jewelry_cases",
+          "type": "display_case",
+          "subtype": "glass",
+          "condition": "empty"
+        },
+        {
+          "id": "cash_register",
+          "type": "electronic_device",
+          "subtype": "point_of_sale",
+          "condition": "inactive"
+        }
+      ],
+      "activities": [
+        "working"
+      ],
+      "relationships": [
+        {
+          "subject_id": "person",
+          "target_id": "desk",
+          "relation": "sitting"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "person",
+          "location": "near_counter"
+        }
+      ]
+    },
+    {
+      "scene_type": "jewelry_store",
+      "objects": [
+        {
+          "id": "customer",
+          "type": "person",
+          "subtype": "man",
+          "condition": "standing"
+        },
+        {
+          "id": "employee",
+          "type": "person",
+          "subtype": "man",
+          "condition": "sitting"
+        }
+      ],
+      "activities": [
+        "standing",
+        "working"
+      ],
+      "relationships": [
+        {
+          "subject_id": "customer",
+          "target_id": "employee",
+          "relation": "facing"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "customer",
+          "location": "center_area"
+        },
+        {
+          "object_id": "employee",
+          "location": "left_side"
+        }
+      ]
+    },
+    {
+      "scene_type": "jewelry_store",
+      "objects": [
+        {
+          "id": "counter",
+          "type": "desk",
+          "subtype": "cashier",
+          "condition": "occupied"
+        },
+        {
+          "id": "glass_cases",
+          "type": "display_cases",
+          "subtype": "jewelry",
+          "condition": "closed"
+        },
+        {
+          "id": "computer",
+          "type": "electronic_device",
+          "subtype": "monitor",
+          "condition": "on"
+        },
+        {
+          "id": "laptop",
+          "type": "electronic_device",
+          "subtype": "laptop",
+          "condition": "on"
+        },
+        {
+          "id": "phone",
+          "type": "electronic_device",
+          "subtype": "landline",
+          "condition": "on"
+        },
+        {
+          "id": "wall_decor",
+          "type": "artwork",
+          "subtype": "painting",
+          "condition": "hung"
+        },
+        {
+          "id": "door",
+          "type": "entrance",
+          "subtype": "main",
+          "condition": "open"
+        }
+      ],
+      "activities": [
+        "working"
+      ],
+      "relationships": [
+        {
+          "subject_id": "person_1",
+          "target_id": "counter",
+          "relation": "working"
+        },
+        {
+          "subject_id": "person_2",
+          "target_id": "glass_cases",
+          "relation": "standing_near"
+        },
+        {
+          "subject_id": "person_3",
+          "target_id": "glass_cases",
+          "relation": "standing_near"
+        },
+        {
+          "subject_id": "person_4",
+          "target_id": "glass_cases",
+          "relation": "standing_near"
+        }
+      ],
+      "location_context": [
+        {
+          "object_id": "counter",
+          "location": "near_counter"
+        },
+        {
+          "object_id": "glass_cases",
+          "location": "center_area"
+        },
+        {
+          "object_id": "door",
+          "location": "right_side"
+        }
+      ]
+    }
+  ]
+}

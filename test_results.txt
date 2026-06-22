@@ -1,0 +1,1829 @@
+=== STDOUT ===
+Script started. Initializing imports...
+Imports successful.
+Starting run_validation async loop...
+Loading ground truth: 03301eee-50a4-4a3a-b5db-11f29b339233.json
+Processing Video: make_robery_vedio_person_com.mp4 (ID: 03301eee-50a4-4a3a-b5db-11f29b339233)
+Specs - Duration: 10.00s | FPS: 24.00 | Total Frames: 240
+Running Pass 1: Base Frame Extraction...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                03301eee-50a4-4a3a-b5db-11f29b339233
+ Frames Processed:        10
+ Avg Frame Extract:       5.67 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.59 ms
+ Total Ingestion Time:    25.07 seconds
+============================================================
+
+Pass 1 complete. Extracted frames: 10
+Running Pass 2: Dynamic FPS & Adaptive Sampling...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                03301eee-50a4-4a3a-b5db-11f29b339233
+ Frames Processed:        10
+ Avg Frame Extract:       48.43 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.45 ms
+ Total Ingestion Time:    2.48 seconds
+============================================================
+
+Pass 2 complete. Retained frames: 10 (Reduction: 0.00%)
+Reports generated successfully.
+Running database cleanups...
+Loading ground truth: customer_interaticio_60sec.json
+Processing Video: customer_interaticio_60sec.mp4 (ID: d21174a7-09d5-5ce2-9008-2773dd59b3e2)
+Specs - Duration: 56.90s | FPS: 30.00 | Total Frames: 1707
+Running Pass 1: Base Frame Extraction...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                d21174a7-09d5-5ce2-9008-2773dd59b3e2
+ Frames Processed:        57
+ Avg Frame Extract:       10.22 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.51 ms
+ Total Ingestion Time:    3.7 seconds
+============================================================
+
+Pass 1 complete. Extracted frames: 57
+Running Pass 2: Dynamic FPS & Adaptive Sampling...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                d21174a7-09d5-5ce2-9008-2773dd59b3e2
+ Frames Processed:        10
+ Avg Frame Extract:       51.49 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.41 ms
+ Total Ingestion Time:    12.04 seconds
+============================================================
+
+Pass 2 complete. Retained frames: 10 (Reduction: 82.46%)
+Reports generated successfully.
+Running database cleanups...
+Loading ground truth: empy_room_15sec.json
+Processing Video: empy_room_15sec.mp4 (ID: 3867299b-8b62-5525-b79f-0ee3e7aea3e2)
+Specs - Duration: 14.90s | FPS: 30.00 | Total Frames: 447
+Running Pass 1: Base Frame Extraction...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                3867299b-8b62-5525-b79f-0ee3e7aea3e2
+ Frames Processed:        15
+ Avg Frame Extract:       9.69 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.49 ms
+ Total Ingestion Time:    1.43 seconds
+============================================================
+
+Pass 1 complete. Extracted frames: 15
+Running Pass 2: Dynamic FPS & Adaptive Sampling...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                3867299b-8b62-5525-b79f-0ee3e7aea3e2
+ Frames Processed:        2
+ Avg Frame Extract:       39.43 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.42 ms
+ Total Ingestion Time:    3.62 seconds
+============================================================
+
+Pass 2 complete. Retained frames: 2 (Reduction: 86.67%)
+Reports generated successfully.
+Running database cleanups...
+Loading ground truth: person_walking_30sec.json
+Processing Video: person_walking_30sec.mp4 (ID: 7cc55952-9947-54b5-9f13-05f5219acfbd)
+Specs - Duration: 33.37s | FPS: 30.00 | Total Frames: 1001
+Running Pass 1: Base Frame Extraction...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                7cc55952-9947-54b5-9f13-05f5219acfbd
+ Frames Processed:        34
+ Avg Frame Extract:       8.08 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.32 ms
+ Total Ingestion Time:    2.99 seconds
+============================================================
+
+Pass 1 complete. Extracted frames: 34
+Running Pass 2: Dynamic FPS & Adaptive Sampling...
+
+============================================================
+               INGESTION PERFORMANCE SUMMARY
+============================================================
+ Video ID:                7cc55952-9947-54b5-9f13-05f5219acfbd
+ Frames Processed:        5
+ Avg Frame Extract:       44.15 ms
+ Avg OCR Time:            0.0 ms
+ Avg VLM Inference:       0.0 ms
+ Avg Metadata Write:      0.22 ms
+ Total Ingestion Time:    7.93 seconds
+============================================================
+
+Pass 2 complete. Retained frames: 5 (Reduction: 85.29%)
+Reports generated successfully.
+Running database cleanups...
+Validation complete!
+[15.0, 17.0, 18.0, 19.0, 20.0]
+
+=== STDERR ===
+2026-06-22 14:56:17.702 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 03301eee-50a4-4a3a-b5db-11f29b339233 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\03301eee-50a4-4a3a-b5db-11f29b339233.mp4
+2026-06-22 14:56:17.702 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 03301eee-50a4-4a3a-b5db-11f29b339233
+2026-06-22 14:56:17.717 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=24.0 | Total Frames=240
+2026-06-22 14:56:18.035 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 03301eee-50a4-4a3a-b5db-11f29b339233
+Total Frames Extracted (1fps base): 10
+Motion Windows Detected: N/A (Disabled)
+Frames Sent To VLM: 10
+Estimated Workload Reduction: 0.0%
+-----------------------
+2026-06-22 14:56:18.035 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 10 frame JPEG images from video: 03301eee-50a4-4a3a-b5db-11f29b339233. Starting VLM batch processing...
+2026-06-22 14:56:18.041 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/3 (frames 0 to 4 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:18.041 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:21.051 | INFO     | app.services.qwen_vlm_hf:load_model:48 - Loading Qwen2.5-VL-7B-Instruct via Transformers on cuda...
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+W0622 14:56:22.557000 36776 .venv\Lib\site-packages\torch\utils\flop_counter.py:29] triton not found; flop counting will not work for triton kernels
+
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]
+Fetching 5 files: 100%|##########| 5/5 [00:00<?, ?it/s]
+
+Loading weights:   0%|          | 0/729 [00:00<?, ?it/s]
+Loading weights:   0%|          | 1/729 [00:00<05:43,  2.12it/s]
+Loading weights:   0%|          | 2/729 [00:00<05:57,  2.04it/s]c:\Mukul K\vinfo1\video-search-engine\.venv\Lib\site-packages\bitsandbytes\backends\cuda\ops.py:213: FutureWarning: _check_is_size will be removed in a future PyTorch release along with guard_size_oblivious.     Use _check(i >= 0) instead.
+  torch._check_is_size(blocksize)
+
+Loading weights:   1%|          | 4/729 [00:01<02:38,  4.56it/s]
+Loading weights:   1%|          | 6/729 [00:01<01:45,  6.84it/s]
+Loading weights:   2%|2         | 16/729 [00:01<00:29, 24.09it/s]
+Loading weights:   3%|2         | 21/729 [00:01<00:26, 26.90it/s]
+Loading weights:   4%|3         | 29/729 [00:01<00:20, 33.48it/s]
+Loading weights:   5%|5         | 38/729 [00:01<00:15, 45.42it/s]
+Loading weights:   6%|6         | 44/729 [00:01<00:17, 39.17it/s]
+Loading weights:   7%|7         | 53/729 [00:02<00:15, 44.06it/s]
+Loading weights:   9%|8         | 64/729 [00:02<00:13, 51.13it/s]
+Loading weights:  10%|9         | 70/729 [00:02<00:13, 47.21it/s]
+Loading weights:  11%|#         | 77/729 [00:02<00:14, 46.35it/s]
+Loading weights:  12%|#1        | 84/729 [00:02<00:12, 50.86it/s]
+Loading weights:  12%|#2        | 90/729 [00:02<00:15, 42.07it/s]
+Loading weights:  14%|#3        | 100/729 [00:03<00:11, 53.68it/s]
+Loading weights:  15%|#4        | 107/729 [00:03<00:12, 51.31it/s]
+Loading weights:  16%|#5        | 113/729 [00:03<00:12, 47.93it/s]
+Loading weights:  16%|#6        | 120/729 [00:03<00:11, 52.59it/s]
+Loading weights:  17%|#7        | 126/729 [00:03<00:13, 44.23it/s]
+Loading weights:  19%|#8        | 137/729 [00:03<00:11, 51.60it/s]
+Loading weights:  20%|##        | 148/729 [00:03<00:10, 56.40it/s]
+Loading weights:  21%|##1       | 154/729 [00:04<00:11, 51.91it/s]
+Loading weights:  22%|##2       | 161/729 [00:04<00:11, 50.82it/s]
+Loading weights:  24%|##3       | 172/729 [00:04<00:09, 55.86it/s]
+Loading weights:  24%|##4       | 178/729 [00:04<00:10, 50.83it/s]
+Loading weights:  25%|##5       | 185/729 [00:04<00:10, 49.86it/s]
+Loading weights:  27%|##6       | 196/729 [00:04<00:09, 55.33it/s]
+Loading weights:  28%|##7       | 202/729 [00:05<00:10, 51.46it/s]
+Loading weights:  29%|##8       | 209/729 [00:05<00:10, 50.33it/s]
+Loading weights:  30%|###       | 220/729 [00:05<00:09, 55.92it/s]
+Loading weights:  31%|###1      | 226/729 [00:05<00:09, 51.59it/s]
+Loading weights:  32%|###1      | 233/729 [00:05<00:09, 50.48it/s]
+Loading weights:  33%|###3      | 244/729 [00:05<00:08, 56.14it/s]
+Loading weights:  34%|###4      | 250/729 [00:05<00:09, 51.59it/s]
+Loading weights:  35%|###5      | 257/729 [00:06<00:09, 50.07it/s]
+Loading weights:  36%|###6      | 264/729 [00:06<00:08, 54.46it/s]
+Loading weights:  37%|###7      | 270/729 [00:06<00:10, 45.16it/s]
+Loading weights:  38%|###8      | 280/729 [00:06<00:07, 56.85it/s]
+Loading weights:  39%|###9      | 287/729 [00:06<00:08, 53.29it/s]
+Loading weights:  40%|####      | 293/729 [00:06<00:09, 48.12it/s]
+Loading weights:  41%|####1     | 300/729 [00:06<00:08, 52.67it/s]
+Loading weights:  42%|####1     | 306/729 [00:07<00:09, 42.47it/s]
+Loading weights:  43%|####3     | 316/729 [00:07<00:07, 54.20it/s]
+Loading weights:  44%|####4     | 323/729 [00:07<00:07, 51.25it/s]
+Loading weights:  45%|####5     | 329/729 [00:07<00:08, 47.97it/s]
+Loading weights:  46%|####6     | 336/729 [00:07<00:07, 52.67it/s]
+Loading weights:  54%|#####3    | 393/729 [00:07<00:01, 177.23it/s]
+Loading weights:  61%|######1   | 445/729 [00:07<00:01, 248.96it/s]
+Loading weights:  67%|######7   | 489/729 [00:07<00:00, 297.85it/s]
+Loading weights:  73%|#######3  | 535/729 [00:08<00:00, 339.44it/s]
+Loading weights:  80%|#######9  | 581/729 [00:08<00:00, 371.64it/s]
+Loading weights:  86%|########5 | 625/729 [00:08<00:00, 386.01it/s]
+Loading weights:  92%|#########2| 671/729 [00:08<00:00, 401.92it/s]
+Loading weights:  98%|#########8| 717/729 [00:08<00:00, 417.96it/s]
+Loading weights: 100%|##########| 729/729 [00:08<00:00, 85.67it/s] 
+2026-06-22 14:56:42.108 | INFO     | app.services.qwen_vlm_hf:load_model:73 - Active VLM Backend: native_hf
+2026-06-22 14:56:42.108 | INFO     | app.services.qwen_vlm_hf:load_model:75 - CUDA Available: True
+2026-06-22 14:56:42.108 | INFO     | app.services.qwen_vlm_hf:load_model:77 - GPU Name: NVIDIA GeForce RTX 5070 Ti
+2026-06-22 14:56:42.109 | INFO     | app.services.qwen_vlm_hf:load_model:78 - VRAM: 15.92 GB
+2026-06-22 14:56:42.109 | INFO     | app.services.qwen_vlm_hf:load_model:79 - VRAM used after load: 5.51 GB
+2026-06-22 14:56:42.109 | INFO     | app.services.qwen_vlm_hf:load_model:80 - Model Loaded: Qwen/Qwen2.5-VL-7B-Instruct
+2026-06-22 14:56:42.110 | INFO     | app.services.qwen_vlm_hf:load_model:81 - Model dtype: torch.bfloat16
+2026-06-22 14:56:42.110 | INFO     | app.services.qwen_vlm_hf:load_model:82 - First param dtype: torch.bfloat16
+2026-06-22 14:56:42.110 | INFO     | app.services.qwen_vlm_hf:load_model:83 - First param device: cuda:0
+2026-06-22 14:56:42.110 | INFO     | app.services.qwen_vlm_hf:load_model:87 - No accelerate device map (all on single device). GOOD.
+2026-06-22 14:56:42.110 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:42.111 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/3 | Generated 4 metadata profiles.
+2026-06-22 14:56:42.123 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/3 (frames 4 to 8 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:42.123 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:42.123 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:42.123 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/3 | Generated 4 metadata profiles.
+2026-06-22 14:56:42.131 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/3 (frames 8 to 10 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:42.131 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:42.131 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:42.132 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/3 | Generated 2 metadata profiles.
+2026-06-22 14:56:42.632 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 03301eee-50a4-4a3a-b5db-11f29b339233 with 10 frames
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0002 | Timestamp=1.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0002 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0003
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0003 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0004 | Timestamp=3.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0004 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0005 | Timestamp=4.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0005 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0006 | Timestamp=5.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0006 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:42.637 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0007 | Timestamp=6.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0007 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0008 | Timestamp=7.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0008 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0009 | Timestamp=8.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0009 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0010 | Timestamp=9.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0010 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:42.638 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:42.640 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 03301eee-50a4-4a3a-b5db-11f29b339233 to C:\Mukul K\vinfo1\video-search-engine\data\events\03301eee-50a4-4a3a-b5db-11f29b339233\evt_001.json
+2026-06-22 14:56:42.640 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\03301eee-50a4-4a3a-b5db-11f29b339233_events_v2.json with 1 events.
+2026-06-22 14:56:42.641 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 03301eee-50a4-4a3a-b5db-11f29b339233:
+  - Number of frames loaded: 10
+  - Number of events generated: 1
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\03301eee-50a4-4a3a-b5db-11f29b339233
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\03301eee-50a4-4a3a-b5db-11f29b339233_events_v2.json
+2026-06-22 14:56:42.641 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "03301eee-50a4-4a3a-b5db-11f29b339233",
+  "start_time": "00:00:00",
+  "end_time": "00:00:10",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 10.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:10",
+  "duration_seconds": 10.0,
+  "frame_count": 10,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    },
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0001",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0002",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0003",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0004",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0005",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0006",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0007",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0008",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0009",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0010"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.933,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. A laptop open on a table next to a grey office chair in an empty conference room. street traffic daylight city office workplace corporate desk driving walking working sitting blue car vehicle black person pedestrian grey chair furniture silver laptop electronics",
+  "frame_events": []
+}
+2026-06-22 14:56:42.644 | INFO     | app.services.search_service:get_client:27 - Initializing local in-memory Qdrant client fallback.
+2026-06-22 14:56:42.648 | INFO     | app.services.search_service:initialize_collection:54 - Creating Qdrant collection: video_events (size: 1024, distance: COSINE)
+2026-06-22 14:56:42.668 | INFO     | app.services.embedding_service:initialize:26 - Mock model mode is enabled. Skipping weights download and loading for EmbeddingService.
+2026-06-22 14:56:42.673 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 1 events in Qdrant for video 03301eee-50a4-4a3a-b5db-11f29b339233.
+2026-06-22 14:56:42.677 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:56:42.677 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:56:42.677 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 03301eee-50a4-4a3a-b5db-11f29b339233 | Processed: 10 | Success: 10 | Failed: 0
+2026-06-22 14:56:42.677 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=03301eee-50a4-4a3a-b5db-11f29b339233 | processed=10 | success=10 | failed=0
+2026-06-22 14:56:42.681 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 03301eee-50a4-4a3a-b5db-11f29b339233 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\03301eee-50a4-4a3a-b5db-11f29b339233.mp4
+2026-06-22 14:56:42.681 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 03301eee-50a4-4a3a-b5db-11f29b339233
+2026-06-22 14:56:42.698 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=24.0 | Total Frames=240
+2026-06-22 14:56:42.698 | INFO     | app.services.frame:extract_frames:128 - Running Motion Window Service for video 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:44.182 | INFO     | app.services.frame:extract_frames:131 - Detected 1 motion windows.
+2026-06-22 14:56:45.009 | INFO     | app.services.frame:extract_frames:368 - 
+=============== SAMPLING DIAGNOSTICS ===============
+Frames Evaluated: 9
+Frames Retained: 9
+Frames Dropped: 0
+Retention Rate: 100.00%
+Average SSIM: 0.441
+Average Motion: 0.469
+====================================================
+
+2026-06-22 14:56:45.009 | INFO     | app.services.frame:extract_frames:381 - Motion Window 1:
+Start=0.0s
+End=12.0s
+FramesInWindow=10
+FramesSelected=10
+2026-06-22 14:56:45.009 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 03301eee-50a4-4a3a-b5db-11f29b339233
+Total Frames Extracted (1fps base): 10
+Motion Windows Detected: 1
+Frames Sent To VLM: 10
+Estimated Workload Reduction: 0.0%
+-----------------------
+2026-06-22 14:56:45.009 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 10 frame JPEG images from video: 03301eee-50a4-4a3a-b5db-11f29b339233. Starting VLM batch processing...
+2026-06-22 14:56:45.015 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/3 (frames 0 to 4 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:45.015 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:45.015 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:45.015 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/3 | Generated 4 metadata profiles.
+2026-06-22 14:56:45.023 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/3 (frames 4 to 8 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:45.023 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:45.023 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:45.024 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/3 | Generated 4 metadata profiles.
+2026-06-22 14:56:45.032 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/3 (frames 8 to 10 of 10) for video ID 03301eee-50a4-4a3a-b5db-11f29b339233...
+2026-06-22 14:56:45.032 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:45.032 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:45.032 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/3 | Generated 2 metadata profiles.
+2026-06-22 14:56:45.039 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 03301eee-50a4-4a3a-b5db-11f29b339233 with 10 frames
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0002 | Timestamp=1.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0002 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0003
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0003 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0004 | Timestamp=3.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0004 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0005 | Timestamp=4.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0005 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.043 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0006 | Timestamp=5.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0006 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0007 | Timestamp=6.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0007 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0008 | Timestamp=7.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0008 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0009 | Timestamp=8.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0009 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0010 | Timestamp=9.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=03301eee-50a4-4a3a-b5db-11f29b339233_f0010 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:45.044 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:45.045 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 03301eee-50a4-4a3a-b5db-11f29b339233 to C:\Mukul K\vinfo1\video-search-engine\data\events\03301eee-50a4-4a3a-b5db-11f29b339233\evt_001.json
+2026-06-22 14:56:45.046 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\03301eee-50a4-4a3a-b5db-11f29b339233_events_v2.json with 1 events.
+2026-06-22 14:56:45.046 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 03301eee-50a4-4a3a-b5db-11f29b339233:
+  - Number of frames loaded: 10
+  - Number of events generated: 1
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\03301eee-50a4-4a3a-b5db-11f29b339233
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\03301eee-50a4-4a3a-b5db-11f29b339233_events_v2.json
+2026-06-22 14:56:45.046 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "03301eee-50a4-4a3a-b5db-11f29b339233",
+  "start_time": "00:00:00",
+  "end_time": "00:00:10",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 10.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:10",
+  "duration_seconds": 10.0,
+  "frame_count": 10,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    },
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0001",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0002",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0003",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0004",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0005",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0006",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0007",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0008",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0009",
+    "03301eee-50a4-4a3a-b5db-11f29b339233_f0010"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.933,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. A laptop open on a table next to a grey office chair in an empty conference room. street traffic daylight city office workplace corporate desk driving walking working sitting blue car vehicle black person pedestrian grey chair furniture silver laptop electronics",
+  "frame_events": []
+}
+2026-06-22 14:56:45.056 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 1 events in Qdrant for video 03301eee-50a4-4a3a-b5db-11f29b339233.
+2026-06-22 14:56:45.061 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:56:45.061 | INFO     | app.core.profiler:_generate_adaptive_sampling_report:306 - Successfully generated ADAPTIVE_SAMPLING_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\ADAPTIVE_SAMPLING_REPORT.md
+2026-06-22 14:56:45.062 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:56:45.062 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 03301eee-50a4-4a3a-b5db-11f29b339233 | Processed: 10 | Success: 10 | Failed: 0
+2026-06-22 14:56:45.062 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=03301eee-50a4-4a3a-b5db-11f29b339233 | processed=10 | success=10 | failed=0
+2026-06-22 14:56:45.126 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: d21174a7-09d5-5ce2-9008-2773dd59b3e2 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\d21174a7-09d5-5ce2-9008-2773dd59b3e2.mp4
+2026-06-22 14:56:45.126 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: d21174a7-09d5-5ce2-9008-2773dd59b3e2
+2026-06-22 14:56:45.146 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=1707
+2026-06-22 14:56:48.561 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: d21174a7-09d5-5ce2-9008-2773dd59b3e2
+Total Frames Extracted (1fps base): 57
+Motion Windows Detected: N/A (Disabled)
+Frames Sent To VLM: 57
+Estimated Workload Reduction: 0.0%
+-----------------------
+2026-06-22 14:56:48.562 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 57 frame JPEG images from video: d21174a7-09d5-5ce2-9008-2773dd59b3e2. Starting VLM batch processing...
+2026-06-22 14:56:48.568 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/15 (frames 0 to 4 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.568 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.568 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.569 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.579 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/15 (frames 4 to 8 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.579 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.579 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.580 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.589 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/15 (frames 8 to 12 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.589 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.589 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.589 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.598 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 4/15 (frames 12 to 16 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.598 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.598 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.599 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 4/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.607 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 5/15 (frames 16 to 20 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.607 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.608 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.608 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 5/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.616 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 6/15 (frames 20 to 24 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.616 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.616 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.616 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 6/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.624 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 7/15 (frames 24 to 28 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.624 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.624 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.624 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 7/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.631 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 8/15 (frames 28 to 32 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.632 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.632 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.632 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 8/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.640 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 9/15 (frames 32 to 36 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.640 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.640 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.641 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 9/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.650 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 10/15 (frames 36 to 40 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.650 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.650 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.650 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 10/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.657 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 11/15 (frames 40 to 44 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.657 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.657 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.657 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 11/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.664 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 12/15 (frames 44 to 48 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.664 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.664 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.664 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 12/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.669 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 13/15 (frames 48 to 52 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.669 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.669 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.669 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 13/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.675 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 14/15 (frames 52 to 56 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.675 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.675 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.675 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 14/15 | Generated 4 metadata profiles.
+2026-06-22 14:56:48.683 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 15/15 (frames 56 to 57 of 57) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:48.683 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:56:48.683 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:56:48.683 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 15/15 | Generated 1 metadata profiles.
+2026-06-22 14:56:48.689 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: d21174a7-09d5-5ce2-9008-2773dd59b3e2 with 57 frames
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0002 | Timestamp=1.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0002 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0003
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0003 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0004 | Timestamp=3.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0004 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0005 | Timestamp=4.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0005 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.692 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0006 | Timestamp=5.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0006 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0007 | Timestamp=6.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0007 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0008 | Timestamp=7.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0008 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0009 | Timestamp=8.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0009 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0010 | Timestamp=9.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0010 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0011 | Timestamp=10.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0011 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0012 | Timestamp=11.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0012 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0013 | Timestamp=12.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0013 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0014 | Timestamp=13.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0014 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0015 | Timestamp=14.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0015 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.693 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0016 | Timestamp=15.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0016 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0017 | Timestamp=16.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0017 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0018
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0018 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0017
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0018 | Timestamp=17.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0018 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0019
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0019 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_002 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0020 | Timestamp=19.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.694 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0020 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0021 | Timestamp=20.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0021 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0022 | Timestamp=21.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0022 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0023 | Timestamp=22.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0023 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.695 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0024 | Timestamp=23.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0024 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0025 | Timestamp=24.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0025 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0026 | Timestamp=25.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0026 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0027 | Timestamp=26.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0027 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0028 | Timestamp=27.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0028 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.696 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0029 | Timestamp=28.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0029 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0030 | Timestamp=29.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0030 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0031 | Timestamp=30.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0031 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0032 | Timestamp=31.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0032 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0033 | Timestamp=32.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.697 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0033 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0034
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0034 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0033
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0034 | Timestamp=33.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0034 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0035
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0035 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_003 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0036 | Timestamp=35.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0036 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0037 | Timestamp=36.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0037 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.698 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0038 | Timestamp=37.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0038 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0039 | Timestamp=38.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0039 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040 | Timestamp=39.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0041 | Timestamp=40.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0041 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0042 | Timestamp=41.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.699 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0042 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0043 | Timestamp=42.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0043 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0044 | Timestamp=43.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0044 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0045 | Timestamp=44.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0045 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0046 | Timestamp=45.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0046 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.700 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0047 | Timestamp=46.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0047 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0048 | Timestamp=47.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0048 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_003 | Assignment: current group
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0049 | Timestamp=48.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0049 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0050
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0050 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0049
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0050 | Timestamp=49.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0050 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0051
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0051 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_004 | Assignment: glitch absorbed with next frame
+2026-06-22 14:56:48.701 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0052 | Timestamp=51.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0052 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0053 | Timestamp=52.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0053 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0054 | Timestamp=53.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0054 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0055 | Timestamp=54.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0055 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0056 | Timestamp=55.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0056 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.702 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0057 | Timestamp=56.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:56:48.703 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0057 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:56:48.703 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_004 | Assignment: current group
+2026-06-22 14:56:48.704 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_001.json
+2026-06-22 14:56:48.705 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_002 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_002.json
+2026-06-22 14:56:48.705 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_003 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_003.json
+2026-06-22 14:56:48.706 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_004 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_004.json
+2026-06-22 14:56:48.706 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\d21174a7-09d5-5ce2-9008-2773dd59b3e2_events_v2.json with 4 events.
+2026-06-22 14:56:48.706 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video d21174a7-09d5-5ce2-9008-2773dd59b3e2:
+  - Number of frames loaded: 57
+  - Number of events generated: 4
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\d21174a7-09d5-5ce2-9008-2773dd59b3e2_events_v2.json
+2026-06-22 14:56:48.706 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "d21174a7-09d5-5ce2-9008-2773dd59b3e2",
+  "start_time": "00:00:00",
+  "end_time": "00:00:16",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 16.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:16",
+  "duration_seconds": 16.0,
+  "frame_count": 16,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    },
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0001",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0002",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0003",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0004",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0005",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0006",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0007",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0008",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0009",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0010",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0011",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0012",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0013",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0014",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0015",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0016"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.933,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. A laptop open on a table next to a grey office chair in an empty conference room. street traffic daylight city office workplace corporate desk driving walking working sitting blue car vehicle black person pedestrian grey chair furniture silver laptop electronics",
+  "frame_events": []
+}
+2026-06-22 14:56:48.721 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 4 events in Qdrant for video d21174a7-09d5-5ce2-9008-2773dd59b3e2.
+2026-06-22 14:56:48.724 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:56:48.725 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:56:48.725 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: d21174a7-09d5-5ce2-9008-2773dd59b3e2 | Processed: 57 | Success: 57 | Failed: 0
+2026-06-22 14:56:48.725 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=d21174a7-09d5-5ce2-9008-2773dd59b3e2 | processed=57 | success=57 | failed=0
+2026-06-22 14:56:48.738 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: d21174a7-09d5-5ce2-9008-2773dd59b3e2 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\d21174a7-09d5-5ce2-9008-2773dd59b3e2.mp4
+2026-06-22 14:56:48.738 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: d21174a7-09d5-5ce2-9008-2773dd59b3e2
+2026-06-22 14:56:48.764 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=1707
+2026-06-22 14:56:48.764 | INFO     | app.services.frame:extract_frames:128 - Running Motion Window Service for video d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:56:56.652 | INFO     | app.services.frame:extract_frames:131 - Detected 2 motion windows.
+2026-06-22 14:56:56.670 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0001 at 0.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.695 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0002 at 1.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.724 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0003 at 2.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.756 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0004 at 3.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.793 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0005 at 4.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.835 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0006 at 5.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.873 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0007 at 6.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.913 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0008 at 7.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:56.963 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0009 at 8.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.019 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0010 at 9.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.077 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0011 at 10.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.119 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0012 at 11.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.152 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0013 at 12.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.189 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0014 at 13.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.241 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0015 at 14.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.302 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0016 at 15.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.385 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0017 at 16.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.415 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0018 at 17.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.453 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0019 at 18.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.510 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0020 at 19.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.574 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0021 at 20.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:57.752 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0023 at 22.0s (similarity: hist_diff=0.005, ssim_diff=0.040, motion=0.026)
+2026-06-22 14:56:57.851 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0024 at 23.0s (similarity: hist_diff=0.014, ssim_diff=0.069, motion=0.037)
+2026-06-22 14:56:57.950 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0025 at 24.0s (similarity: hist_diff=0.023, ssim_diff=0.067, motion=0.037)
+2026-06-22 14:56:58.064 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0026 at 25.0s (similarity: hist_diff=0.037, ssim_diff=0.071, motion=0.045)
+2026-06-22 14:56:58.392 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0029 at 28.0s (similarity: hist_diff=0.010, ssim_diff=0.059, motion=0.039)
+2026-06-22 14:56:58.492 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0030 at 29.0s (similarity: hist_diff=0.009, ssim_diff=0.061, motion=0.038)
+2026-06-22 14:56:58.567 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0031 at 30.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.658 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0032 at 31.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.689 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0033 at 32.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.727 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0034 at 33.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.773 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0035 at 34.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.836 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0036 at 35.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.923 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0037 at 36.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:58.955 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0038 at 37.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:56:59.620 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0044 at 43.0s (similarity: hist_diff=0.012, ssim_diff=0.080, motion=0.070)
+2026-06-22 14:56:59.842 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0046 at 45.0s (similarity: hist_diff=0.015, ssim_diff=0.070, motion=0.060)
+2026-06-22 14:57:00.053 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0048 at 47.0s (similarity: hist_diff=0.008, ssim_diff=0.045, motion=0.031)
+2026-06-22 14:57:00.089 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0049 at 48.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.133 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0050 at 49.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.181 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0051 at 50.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.245 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0052 at 51.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.276 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0053 at 52.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.314 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0054 at 53.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.361 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0055 at 54.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.427 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0056 at 55.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.502 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0057 at 56.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:00.617 | INFO     | app.services.frame:extract_frames:368 - 
+=============== SAMPLING DIAGNOSTICS ===============
+Frames Evaluated: 18
+Frames Retained: 9
+Frames Dropped: 9
+Retention Rate: 50.00%
+Average SSIM: 0.924
+Average Motion: 0.055
+====================================================
+
+2026-06-22 14:57:00.617 | INFO     | app.services.frame:extract_frames:381 - Motion Window 1:
+Start=21.0s
+End=29.2s
+FramesInWindow=9
+FramesSelected=3
+2026-06-22 14:57:00.617 | INFO     | app.services.frame:extract_frames:381 - Motion Window 2:
+Start=37.6s
+End=47.1s
+FramesInWindow=10
+FramesSelected=7
+2026-06-22 14:57:00.617 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: d21174a7-09d5-5ce2-9008-2773dd59b3e2
+Total Frames Extracted (1fps base): 57
+Motion Windows Detected: 2
+Frames Sent To VLM: 10
+Estimated Workload Reduction: 82.5%
+-----------------------
+2026-06-22 14:57:00.617 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 10 frame JPEG images from video: d21174a7-09d5-5ce2-9008-2773dd59b3e2. Starting VLM batch processing...
+2026-06-22 14:57:00.625 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/3 (frames 0 to 4 of 10) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:57:00.625 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:00.625 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:00.625 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/3 | Generated 4 metadata profiles.
+2026-06-22 14:57:00.633 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/3 (frames 4 to 8 of 10) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:57:00.633 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:00.633 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:00.634 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/3 | Generated 4 metadata profiles.
+2026-06-22 14:57:00.642 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/3 (frames 8 to 10 of 10) for video ID d21174a7-09d5-5ce2-9008-2773dd59b3e2...
+2026-06-22 14:57:00.642 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:00.642 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:00.643 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/3 | Generated 2 metadata profiles.
+2026-06-22 14:57:00.650 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: d21174a7-09d5-5ce2-9008-2773dd59b3e2 with 10 frames
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0027 | Timestamp=26.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0027 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0028
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0028 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0039 | Timestamp=38.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0039 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0039
+2026-06-22 14:57:00.654 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040 | Timestamp=39.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0040 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0041
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0041 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_002 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0042 | Timestamp=41.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0042 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0043 | Timestamp=42.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0043 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0045 | Timestamp=44.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0045 | Continuity Score=0.74 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.68 Act=0.68 Ctx=0.68 Flag=1.00
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0047 | Timestamp=46.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:00.655 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0047 | Continuity Score=0.86 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.82 Act=0.82 Ctx=0.82 Flag=1.00
+2026-06-22 14:57:00.656 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:00.656 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_001.json
+2026-06-22 14:57:00.657 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_002 for video d21174a7-09d5-5ce2-9008-2773dd59b3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2\evt_002.json
+2026-06-22 14:57:00.658 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\d21174a7-09d5-5ce2-9008-2773dd59b3e2_events_v2.json with 2 events.
+2026-06-22 14:57:00.658 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video d21174a7-09d5-5ce2-9008-2773dd59b3e2:
+  - Number of frames loaded: 10
+  - Number of events generated: 2
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\d21174a7-09d5-5ce2-9008-2773dd59b3e2
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\d21174a7-09d5-5ce2-9008-2773dd59b3e2_events_v2.json
+2026-06-22 14:57:00.658 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "d21174a7-09d5-5ce2-9008-2773dd59b3e2",
+  "start_time": "00:00:21",
+  "end_time": "00:00:28",
+  "timestamp_start_seconds": 21.0,
+  "timestamp_end_seconds": 28.0,
+  "timestamp_start_human": "00:00:21",
+  "timestamp_end_human": "00:00:28",
+  "duration_seconds": 7.0,
+  "frame_count": 3,
+  "objects": [
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    },
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    }
+  ],
+  "activities": [
+    "working",
+    "sitting"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "working",
+  "source_frames": [
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0022",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0027",
+    "d21174a7-09d5-5ce2-9008-2773dd59b3e2_f0028"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An indoor office meeting room workspace.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.688,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed working at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A laptop open on a table next to a grey office chair in an empty conference room. A blue car driving down a busy city street while a pedestrian walks on the sidewalk. office workplace corporate desk street traffic daylight city working sitting driving walking grey chair furniture silver laptop electronics blue car vehicle black person pedestrian",
+  "frame_events": []
+}
+2026-06-22 14:57:00.671 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 2 events in Qdrant for video d21174a7-09d5-5ce2-9008-2773dd59b3e2.
+2026-06-22 14:57:00.676 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:57:00.677 | INFO     | app.core.profiler:_generate_adaptive_sampling_report:306 - Successfully generated ADAPTIVE_SAMPLING_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\ADAPTIVE_SAMPLING_REPORT.md
+2026-06-22 14:57:00.677 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:57:00.677 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: d21174a7-09d5-5ce2-9008-2773dd59b3e2 | Processed: 10 | Success: 10 | Failed: 0
+2026-06-22 14:57:00.677 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=d21174a7-09d5-5ce2-9008-2773dd59b3e2 | processed=10 | success=10 | failed=0
+2026-06-22 14:57:00.750 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\3867299b-8b62-5525-b79f-0ee3e7aea3e2.mp4
+2026-06-22 14:57:00.750 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 3867299b-8b62-5525-b79f-0ee3e7aea3e2
+2026-06-22 14:57:00.783 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=447
+2026-06-22 14:57:02.011 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 3867299b-8b62-5525-b79f-0ee3e7aea3e2
+Total Frames Extracted (1fps base): 15
+Motion Windows Detected: N/A (Disabled)
+Frames Sent To VLM: 15
+Estimated Workload Reduction: 0.0%
+-----------------------
+2026-06-22 14:57:02.011 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 15 frame JPEG images from video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2. Starting VLM batch processing...
+2026-06-22 14:57:02.018 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/4 (frames 0 to 4 of 15) for video ID 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:02.018 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:02.018 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:02.018 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/4 | Generated 4 metadata profiles.
+2026-06-22 14:57:02.027 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/4 (frames 4 to 8 of 15) for video ID 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:02.027 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:02.027 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:02.027 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/4 | Generated 4 metadata profiles.
+2026-06-22 14:57:02.035 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/4 (frames 8 to 12 of 15) for video ID 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:02.035 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:02.035 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:02.035 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/4 | Generated 4 metadata profiles.
+2026-06-22 14:57:02.043 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 4/4 (frames 12 to 15 of 15) for video ID 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:02.043 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:02.043 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:02.043 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 4/4 | Generated 3 metadata profiles.
+2026-06-22 14:57:02.051 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 with 15 frames
+2026-06-22 14:57:02.055 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0002 | Timestamp=1.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0002 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0003
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0003 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0004 | Timestamp=3.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0004 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0005 | Timestamp=4.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0005 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0006 | Timestamp=5.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0006 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0007 | Timestamp=6.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.056 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0007 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0008 | Timestamp=7.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0008 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0009 | Timestamp=8.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0009 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0010 | Timestamp=9.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0010 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011 | Timestamp=10.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0012 | Timestamp=11.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0012 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.057 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0013 | Timestamp=12.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0013 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0014 | Timestamp=13.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0014 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0015 | Timestamp=14.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0015 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:02.058 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:02.059 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\3867299b-8b62-5525-b79f-0ee3e7aea3e2\evt_001.json
+2026-06-22 14:57:02.060 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\3867299b-8b62-5525-b79f-0ee3e7aea3e2_events_v2.json with 1 events.
+2026-06-22 14:57:02.060 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2:
+  - Number of frames loaded: 15
+  - Number of events generated: 1
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\3867299b-8b62-5525-b79f-0ee3e7aea3e2
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\3867299b-8b62-5525-b79f-0ee3e7aea3e2_events_v2.json
+2026-06-22 14:57:02.060 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "3867299b-8b62-5525-b79f-0ee3e7aea3e2",
+  "start_time": "00:00:00",
+  "end_time": "00:00:15",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 15.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:15",
+  "duration_seconds": 15.0,
+  "frame_count": 15,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    },
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0001",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0002",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0003",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0004",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0005",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0006",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0007",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0008",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0009",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0010",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0012",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0013",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0014",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0015"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.933,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. A laptop open on a table next to a grey office chair in an empty conference room. street traffic daylight city office workplace corporate desk driving walking working sitting blue car vehicle black person pedestrian grey chair furniture silver laptop electronics",
+  "frame_events": []
+}
+2026-06-22 14:57:02.073 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 1 events in Qdrant for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2.
+2026-06-22 14:57:02.078 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:57:02.079 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:57:02.079 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 | Processed: 15 | Success: 15 | Failed: 0
+2026-06-22 14:57:02.079 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=3867299b-8b62-5525-b79f-0ee3e7aea3e2 | processed=15 | success=15 | failed=0
+2026-06-22 14:57:02.083 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\3867299b-8b62-5525-b79f-0ee3e7aea3e2.mp4
+2026-06-22 14:57:02.083 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 3867299b-8b62-5525-b79f-0ee3e7aea3e2
+2026-06-22 14:57:02.115 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=447
+2026-06-22 14:57:02.115 | INFO     | app.services.frame:extract_frames:128 - Running Motion Window Service for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:03.851 | INFO     | app.services.frame:extract_frames:131 - Detected 0 motion windows.
+2026-06-22 14:57:03.972 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0002 at 1.0s (similarity: hist_diff=0.014, ssim_diff=0.062, motion=0.009)
+2026-06-22 14:57:04.074 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0003 at 2.0s (similarity: hist_diff=0.010, ssim_diff=0.065, motion=0.010)
+2026-06-22 14:57:04.212 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0004 at 3.0s (similarity: hist_diff=0.021, ssim_diff=0.065, motion=0.009)
+2026-06-22 14:57:04.360 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0005 at 4.0s (similarity: hist_diff=0.026, ssim_diff=0.064, motion=0.009)
+2026-06-22 14:57:04.528 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0006 at 5.0s (similarity: hist_diff=0.021, ssim_diff=0.064, motion=0.009)
+2026-06-22 14:57:04.601 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0007 at 6.0s (similarity: hist_diff=0.025, ssim_diff=0.065, motion=0.010)
+2026-06-22 14:57:04.695 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0008 at 7.0s (similarity: hist_diff=0.015, ssim_diff=0.065, motion=0.010)
+2026-06-22 14:57:04.803 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0009 at 8.0s (similarity: hist_diff=0.016, ssim_diff=0.064, motion=0.009)
+2026-06-22 14:57:04.927 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0010 at 9.0s (similarity: hist_diff=0.047, ssim_diff=0.066, motion=0.010)
+2026-06-22 14:57:05.144 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0012 at 11.0s (similarity: hist_diff=0.013, ssim_diff=0.063, motion=0.009)
+2026-06-22 14:57:05.231 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0013 at 12.0s (similarity: hist_diff=0.016, ssim_diff=0.064, motion=0.009)
+2026-06-22 14:57:05.335 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0014 at 13.0s (similarity: hist_diff=0.010, ssim_diff=0.065, motion=0.009)
+2026-06-22 14:57:05.459 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0015 at 14.0s (similarity: hist_diff=0.012, ssim_diff=0.064, motion=0.009)
+2026-06-22 14:57:05.568 | INFO     | app.services.frame:extract_frames:368 - 
+=============== SAMPLING DIAGNOSTICS ===============
+Frames Evaluated: 14
+Frames Retained: 1
+Frames Dropped: 13
+Retention Rate: 7.14%
+Average SSIM: 0.936
+Average Motion: 0.009
+====================================================
+
+2026-06-22 14:57:05.568 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 3867299b-8b62-5525-b79f-0ee3e7aea3e2
+Total Frames Extracted (1fps base): 15
+Motion Windows Detected: 0
+Frames Sent To VLM: 2
+Estimated Workload Reduction: 86.7%
+-----------------------
+2026-06-22 14:57:05.568 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 2 frame JPEG images from video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2. Starting VLM batch processing...
+2026-06-22 14:57:05.576 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/1 (frames 0 to 2 of 2) for video ID 3867299b-8b62-5525-b79f-0ee3e7aea3e2...
+2026-06-22 14:57:05.576 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:05.576 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:05.577 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/1 | Generated 2 metadata profiles.
+2026-06-22 14:57:05.584 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 with 2 frames
+2026-06-22 14:57:05.588 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011 | Timestamp=10.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:05.588 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:05.588 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:05.589 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2 to C:\Mukul K\vinfo1\video-search-engine\data\events\3867299b-8b62-5525-b79f-0ee3e7aea3e2\evt_001.json
+2026-06-22 14:57:05.589 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\3867299b-8b62-5525-b79f-0ee3e7aea3e2_events_v2.json with 1 events.
+2026-06-22 14:57:05.589 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2:
+  - Number of frames loaded: 2
+  - Number of events generated: 1
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\3867299b-8b62-5525-b79f-0ee3e7aea3e2
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\3867299b-8b62-5525-b79f-0ee3e7aea3e2_events_v2.json
+2026-06-22 14:57:05.589 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "3867299b-8b62-5525-b79f-0ee3e7aea3e2",
+  "start_time": "00:00:00",
+  "end_time": "00:00:11",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 11.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:11",
+  "duration_seconds": 11.0,
+  "frame_count": 2,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0001",
+    "3867299b-8b62-5525-b79f-0ee3e7aea3e2_f0011"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.653,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. street traffic daylight city driving walking blue car vehicle black person pedestrian",
+  "frame_events": []
+}
+2026-06-22 14:57:05.599 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 1 events in Qdrant for video 3867299b-8b62-5525-b79f-0ee3e7aea3e2.
+2026-06-22 14:57:05.603 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:57:05.604 | INFO     | app.core.profiler:_generate_adaptive_sampling_report:306 - Successfully generated ADAPTIVE_SAMPLING_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\ADAPTIVE_SAMPLING_REPORT.md
+2026-06-22 14:57:05.604 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:57:05.604 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 3867299b-8b62-5525-b79f-0ee3e7aea3e2 | Processed: 2 | Success: 2 | Failed: 0
+2026-06-22 14:57:05.604 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=3867299b-8b62-5525-b79f-0ee3e7aea3e2 | processed=2 | success=2 | failed=0
+2026-06-22 14:57:05.662 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 7cc55952-9947-54b5-9f13-05f5219acfbd | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\7cc55952-9947-54b5-9f13-05f5219acfbd.mp4
+2026-06-22 14:57:05.662 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 7cc55952-9947-54b5-9f13-05f5219acfbd
+2026-06-22 14:57:05.685 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=1001
+2026-06-22 14:57:08.457 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 7cc55952-9947-54b5-9f13-05f5219acfbd
+Total Frames Extracted (1fps base): 34
+Motion Windows Detected: N/A (Disabled)
+Frames Sent To VLM: 34
+Estimated Workload Reduction: 0.0%
+-----------------------
+2026-06-22 14:57:08.457 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 34 frame JPEG images from video: 7cc55952-9947-54b5-9f13-05f5219acfbd. Starting VLM batch processing...
+2026-06-22 14:57:08.464 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/9 (frames 0 to 4 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.464 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.464 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.464 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.472 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/9 (frames 4 to 8 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.472 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.472 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.473 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.481 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 3/9 (frames 8 to 12 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.481 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.481 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.481 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 3/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.486 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 4/9 (frames 12 to 16 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.486 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.486 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.487 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 4/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.492 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 5/9 (frames 16 to 20 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.492 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.492 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.492 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 5/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.497 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 6/9 (frames 20 to 24 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.497 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.497 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.498 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 6/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.504 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 7/9 (frames 24 to 28 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.504 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.504 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.504 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 7/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.509 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 8/9 (frames 28 to 32 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.509 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.509 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.509 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 8/9 | Generated 4 metadata profiles.
+2026-06-22 14:57:08.515 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 9/9 (frames 32 to 34 of 34) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:08.515 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:08.515 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:08.515 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 9/9 | Generated 2 metadata profiles.
+2026-06-22 14:57:08.523 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 7cc55952-9947-54b5-9f13-05f5219acfbd with 34 frames
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0002 | Timestamp=1.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0002 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0003
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0003 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0004 | Timestamp=3.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0004 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0005 | Timestamp=4.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0005 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0006 | Timestamp=5.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0006 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.527 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0007 | Timestamp=6.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0007 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0008 | Timestamp=7.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0008 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0009 | Timestamp=8.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0009 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0010 | Timestamp=9.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0010 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0011 | Timestamp=10.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0011 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0012 | Timestamp=11.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0012 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0013 | Timestamp=12.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0013 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0014 | Timestamp=13.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0014 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0015 | Timestamp=14.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0015 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0016 | Timestamp=15.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.528 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0016 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0017 | Timestamp=16.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0017 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0017
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018 | Timestamp=17.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0019
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0019 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_002 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0020 | Timestamp=19.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0020 | Continuity Score=0.42 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.28 Act=0.28 Ctx=0.28 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0021 | Timestamp=20.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0021 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.33 Act=0.33 Ctx=0.33 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0022 | Timestamp=21.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0022 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0023 | Timestamp=22.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0023 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0024 | Timestamp=23.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0024 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0025 | Timestamp=24.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0025 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0026 | Timestamp=25.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0026 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0027 | Timestamp=26.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0027 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.529 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0028 | Timestamp=27.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0028 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0029 | Timestamp=28.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0029 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0030 | Timestamp=29.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0030 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0031 | Timestamp=30.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0031 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0032 | Timestamp=31.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0032 | Continuity Score=0.46 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.32 Act=0.32 Ctx=0.32 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_002 | Assignment: current group
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0033 | Timestamp=32.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0033 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0034
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:562 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0034 | Continuity Score=0.00 | Decision=START_NEW_EVENT | Reason=Duration exceeded
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0033
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0034 | Timestamp=33.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0034 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:08.530 | DEBUG    | app.services.event_aggregation:process_events:707 - Event break detected. Creating new cluster for Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0034
+2026-06-22 14:57:08.531 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 7cc55952-9947-54b5-9f13-05f5219acfbd to C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd\evt_001.json
+2026-06-22 14:57:08.532 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_002 for video 7cc55952-9947-54b5-9f13-05f5219acfbd to C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd\evt_002.json
+2026-06-22 14:57:08.533 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_003 for video 7cc55952-9947-54b5-9f13-05f5219acfbd to C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd\evt_003.json
+2026-06-22 14:57:08.533 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_004 for video 7cc55952-9947-54b5-9f13-05f5219acfbd to C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd\evt_004.json
+2026-06-22 14:57:08.534 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\7cc55952-9947-54b5-9f13-05f5219acfbd_events_v2.json with 4 events.
+2026-06-22 14:57:08.534 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 7cc55952-9947-54b5-9f13-05f5219acfbd:
+  - Number of frames loaded: 34
+  - Number of events generated: 4
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\7cc55952-9947-54b5-9f13-05f5219acfbd_events_v2.json
+2026-06-22 14:57:08.534 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "7cc55952-9947-54b5-9f13-05f5219acfbd",
+  "start_time": "00:00:00",
+  "end_time": "00:00:16",
+  "timestamp_start_seconds": 0.0,
+  "timestamp_end_seconds": 16.0,
+  "timestamp_start_human": "00:00:00",
+  "timestamp_end_human": "00:00:16",
+  "duration_seconds": 16.0,
+  "frame_count": 16,
+  "objects": [
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    },
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    }
+  ],
+  "activities": [
+    "driving",
+    "walking"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "driving",
+  "source_frames": [
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0001",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0002",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0003",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0004",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0005",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0006",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0007",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0008",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0009",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0010",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0011",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0012",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0013",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0014",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0015",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0016"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An outdoor city street view under daylight.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.933,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed driving at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A blue car driving down a busy city street while a pedestrian walks on the sidewalk. A laptop open on a table next to a grey office chair in an empty conference room. street traffic daylight city office workplace corporate desk driving walking working sitting blue car vehicle black person pedestrian grey chair furniture silver laptop electronics",
+  "frame_events": []
+}
+2026-06-22 14:57:08.547 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 4 events in Qdrant for video 7cc55952-9947-54b5-9f13-05f5219acfbd.
+2026-06-22 14:57:08.551 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:57:08.551 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:57:08.551 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 7cc55952-9947-54b5-9f13-05f5219acfbd | Processed: 34 | Success: 34 | Failed: 0
+2026-06-22 14:57:08.551 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=7cc55952-9947-54b5-9f13-05f5219acfbd | processed=34 | success=34 | failed=0
+2026-06-22 14:57:08.555 | INFO     | app.services.frame:extract_frames:103 - Initiated frame extraction and VLM analysis for video ID: 7cc55952-9947-54b5-9f13-05f5219acfbd | Path: C:\Mukul K\vinfo1\video-search-engine\data\videos\7cc55952-9947-54b5-9f13-05f5219acfbd.mp4
+2026-06-22 14:57:08.555 | INFO     | app.services.frame:extract_frames:105 - Initiated frame extraction pipeline for video_id: 7cc55952-9947-54b5-9f13-05f5219acfbd
+2026-06-22 14:57:08.584 | DEBUG    | app.services.frame:extract_frames:122 - Video specs: FPS=30.0 | Total Frames=1001
+2026-06-22 14:57:08.584 | INFO     | app.services.frame:extract_frames:128 - Running Motion Window Service for video 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:13.056 | INFO     | app.services.frame:extract_frames:131 - Detected 1 motion windows.
+2026-06-22 14:57:13.079 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0001 at 0.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.136 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0002 at 1.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.221 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0003 at 2.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.325 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0004 at 3.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.452 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0005 at 4.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.594 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0006 at 5.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.639 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0007 at 6.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.699 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0008 at 7.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.780 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0009 at 8.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.880 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0010 at 9.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:13.997 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0011 at 10.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:14.033 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0012 at 11.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:14.090 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0013 at 12.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:14.170 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0014 at 13.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:14.267 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0015 at 14.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:14.586 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0017 at 16.0s (similarity: hist_diff=0.007, ssim_diff=0.063, motion=0.009)
+2026-06-22 14:57:15.244 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0022 at 21.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.295 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0023 at 22.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.368 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0024 at 23.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.464 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0025 at 24.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.581 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0026 at 25.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.716 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0027 at 26.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.766 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0028 at 27.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.833 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0029 at 28.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:15.918 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0030 at 29.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:16.023 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0031 at 30.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:16.154 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0032 at 31.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:16.196 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0033 at 32.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:16.262 | DEBUG    | app.services.frame:extract_frames:273 - Skipped frame 7cc55952-9947-54b5-9f13-05f5219acfbd_f0034 at 33.0s (similarity: hist_diff=0.000, ssim_diff=0.000, motion=0.000)
+2026-06-22 14:57:16.344 | INFO     | app.services.frame:extract_frames:368 - 
+=============== SAMPLING DIAGNOSTICS ===============
+Frames Evaluated: 5
+Frames Retained: 4
+Frames Dropped: 1
+Retention Rate: 80.00%
+Average SSIM: 0.920
+Average Motion: 0.024
+====================================================
+
+2026-06-22 14:57:16.344 | INFO     | app.services.frame:extract_frames:381 - Motion Window 1:
+Start=14.5s
+End=20.7s
+FramesInWindow=6
+FramesSelected=5
+2026-06-22 14:57:16.344 | INFO     | app.services.frame:extract_frames:389 - --- Pipeline Report ---
+Video ID: 7cc55952-9947-54b5-9f13-05f5219acfbd
+Total Frames Extracted (1fps base): 34
+Motion Windows Detected: 1
+Frames Sent To VLM: 5
+Estimated Workload Reduction: 85.3%
+-----------------------
+2026-06-22 14:57:16.344 | INFO     | app.services.frame:extract_frames:399 - Successfully extracted 5 frame JPEG images from video: 7cc55952-9947-54b5-9f13-05f5219acfbd. Starting VLM batch processing...
+2026-06-22 14:57:16.350 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 1/2 (frames 0 to 4 of 5) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:16.350 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:16.350 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:16.350 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 1/2 | Generated 4 metadata profiles.
+2026-06-22 14:57:16.355 | INFO     | app.services.frame:extract_frames:416 - Processing VLM batch 2/2 (frames 4 to 5 of 5) for video ID 7cc55952-9947-54b5-9f13-05f5219acfbd...
+2026-06-22 14:57:16.355 | INFO     | app.services.frame:extract_frames:419 - Active VLM Backend: native_hf
+2026-06-22 14:57:16.355 | INFO     | app.services.qwen_vlm:load_model:30 - Mock model mode is enabled.
+2026-06-22 14:57:16.355 | INFO     | app.services.frame:extract_frames:422 - Successfully analyzed VLM batch 2/2 | Generated 1 metadata profiles.
+2026-06-22 14:57:16.360 | INFO     | app.services.event_aggregation:process_events:540 - Starting event aggregation for video: 7cc55952-9947-54b5-9f13-05f5219acfbd with 5 frames
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018 | Timestamp=17.0 | Activity=['working', 'sitting'] | EventType=indoor office
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0018 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0019 | Timestamp=18.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0019 | Continuity Score=0.20 | Decision=START_NEW_EVENT | Reason=Low similarity, Actor change, Activity change, Scene change | Actor=0.00 Act=0.00 Ctx=0.00 Flag=1.00
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:697 - Checking tolerance frame lookahead: Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0020
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0020 | Continuity Score=1.00 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=1.00 Act=1.00 Ctx=1.00 Flag=1.00
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:702 - MergedInto=evt_001 | Assignment: glitch absorbed with next frame
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:685 - Evaluating Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0021 | Timestamp=20.0 | Activity=['driving', 'walking'] | EventType=outdoor street
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:calculate_event_continuity_score:666 - Frame=7cc55952-9947-54b5-9f13-05f5219acfbd_f0021 | Continuity Score=0.41 | Decision=CONTINUE_EVENT | Reason=Similarity ok | Actor=0.26 Act=0.26 Ctx=0.26 Flag=1.00
+2026-06-22 14:57:16.363 | DEBUG    | app.services.event_aggregation:process_events:690 - MergedInto=evt_001 | Assignment: current group
+2026-06-22 14:57:16.364 | DEBUG    | app.services.event_aggregation:process_events:1028 - Saved event evt_001 for video 7cc55952-9947-54b5-9f13-05f5219acfbd to C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd\evt_001.json
+2026-06-22 14:57:16.364 | INFO     | app.services.event_aggregation:process_events:1072 - Saved consolidated events array to C:\Mukul K\vinfo1\video-search-engine\data\metadata\7cc55952-9947-54b5-9f13-05f5219acfbd_events_v2.json with 1 events.
+2026-06-22 14:57:16.364 | INFO     | app.services.event_aggregation:process_events:1077 - Event aggregation pipeline stats for video 7cc55952-9947-54b5-9f13-05f5219acfbd:
+  - Number of frames loaded: 5
+  - Number of events generated: 1
+  - Event file save location (directory): C:\Mukul K\vinfo1\video-search-engine\data\events\7cc55952-9947-54b5-9f13-05f5219acfbd
+  - Consolidated events file: C:\Mukul K\vinfo1\video-search-engine\data\metadata\7cc55952-9947-54b5-9f13-05f5219acfbd_events_v2.json
+2026-06-22 14:57:16.364 | INFO     | app.services.event_aggregation:process_events:1086 - Example generated event (first): {
+  "event_id": "evt_001",
+  "video_id": "7cc55952-9947-54b5-9f13-05f5219acfbd",
+  "start_time": "00:00:15",
+  "end_time": "00:00:21",
+  "timestamp_start_seconds": 15.0,
+  "timestamp_end_seconds": 21.0,
+  "timestamp_start_human": "00:00:15",
+  "timestamp_end_human": "00:00:21",
+  "duration_seconds": 6.0,
+  "frame_count": 5,
+  "objects": [
+    {
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "grey",
+      "attributes": [
+        "mesh back",
+        "office chair"
+      ]
+    },
+    {
+      "type": "electronics",
+      "subtype": "laptop",
+      "color": "silver",
+      "attributes": [
+        "on table",
+        "open"
+      ]
+    },
+    {
+      "type": "vehicle",
+      "subtype": "car",
+      "color": "blue",
+      "attributes": [
+        "moving",
+        "sedan"
+      ]
+    },
+    {
+      "type": "pedestrian",
+      "subtype": "person",
+      "color": "black",
+      "attributes": [
+        "carrying bag",
+        "walking"
+      ]
+    }
+  ],
+  "activities": [
+    "working",
+    "sitting"
+  ],
+  "primary_object": "Person",
+  "color": "black",
+  "primary_activity": "working",
+  "source_frames": [
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0016",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0018",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0019",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0020",
+    "7cc55952-9947-54b5-9f13-05f5219acfbd_f0021"
+  ],
+  "event_type": "vehicle_movement",
+  "summary": "Vehicle movement involving person was detected at the monitored area. Other participants: blue car (moving).",
+  "scene_context": "An indoor office meeting room workspace.",
+  "real_world_time": null,
+  "actor_description": "black, person, carrying bag",
+  "participants": [
+    "blue car (moving)"
+  ],
+  "participant_count": 2,
+  "behavioral_flags": [
+    "two_persons"
+  ],
+  "confidence": 0.758,
+  "narrative_sentence": "Person (black, person, carrying bag) was observed working at the monitored area. Others present: blue car (moving).",
+  "location_text": "the monitored area",
+  "event_severity": 30,
+  "unified_text": "A laptop open on a table next to a grey office chair in an empty conference room. A blue car driving down a busy city street while a pedestrian walks on the sidewalk. office workplace corporate desk street traffic daylight city working sitting driving walking grey chair furniture silver laptop electronics blue car vehicle black person pedestrian",
+  "frame_events": []
+}
+2026-06-22 14:57:16.376 | INFO     | app.services.search_service:index_events:162 - Successfully indexed 1 events in Qdrant for video 7cc55952-9947-54b5-9f13-05f5219acfbd.
+2026-06-22 14:57:16.380 | INFO     | app.core.profiler:_generate_report:252 - Successfully generated PERFORMANCE_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\PERFORMANCE_REPORT.md
+2026-06-22 14:57:16.381 | INFO     | app.core.profiler:_generate_adaptive_sampling_report:306 - Successfully generated ADAPTIVE_SAMPLING_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\ADAPTIVE_SAMPLING_REPORT.md
+2026-06-22 14:57:16.381 | INFO     | app.core.profiler:_generate_event_aggregation_report:343 - Successfully generated EVENT_AGGREGATION_REPORT.md at: C:\Mukul K\vinfo1\video-search-engine\EVENT_AGGREGATION_REPORT.md
+2026-06-22 14:57:16.381 | INFO     | app.services.frame:extract_frames:520 - Completed VLM rich metadata indexing for video: 7cc55952-9947-54b5-9f13-05f5219acfbd | Processed: 5 | Success: 5 | Failed: 0
+2026-06-22 14:57:16.381 | INFO     | app.services.frame:extract_frames:524 - VLM Ingestion success | video_id=7cc55952-9947-54b5-9f13-05f5219acfbd | processed=5 | success=5 | failed=0
+[h264 @ 00000183768b0ec0] mmco: unref short failure
+[h264 @ 00000183765c4e00] mmco: unref short failure

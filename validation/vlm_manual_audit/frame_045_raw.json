@@ -1,0 +1,40 @@
+```json
+{
+  "scene_type": "jewelry store interior",
+  "scene_description": "A security camera view of a jewelry store showing three individuals interacting within the store.",
+  "objects": [
+    {
+      "id": "desk",
+      "type": "furniture",
+      "subtype": "desk",
+      "color": "brown",
+      "condition": "stationary",
+      "attributes": ["cluttered with papers"]
+    },
+    {
+      "id": "computer",
+      "type": "device",
+      "subtype": "computer",
+      "color": "black",
+      "condition": "stationary",
+      "attributes": ["on desk"]
+    },
+    {
+      "id": "laptop",
+      "type": "device",
+      "subtype": "laptop",
+      "color": "black",
+      "condition": "stationary",
+      "attributes": ["on desk"]
+    },
+    {
+      "id": "cash_register",
+      "type": "device",
+      "subtype": "cash_register",
+      "color": "white",
+      "condition": "stationary",
+      "attributes": ["on counter"]
+    },
+    {
+      "id": "display_cases",
+      "type

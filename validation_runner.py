@@ -369,7 +369,7 @@ Retention %: {retention_pct:.2f}%
             if status_file.exists():
                 status_file.unlink()
 
-            for p in [PROJECT_ROOT / "PERFORMANCE_REPORT.md", PROJECT_ROOT / "ADAPTIVE_SAMPLING_REPORT.md", PROJECT_ROOT / "EVENT_AGGREGATION_REPORT.md", PROJECT_ROOT / "ADAPTIVE_SAMPLING_DIAGNOSTIC_REPORT.md"]:
+            for p in [Path(PROJECT_ROOT) / "PERFORMANCE_REPORT.md", Path(PROJECT_ROOT) / "ADAPTIVE_SAMPLING_REPORT.md", Path(PROJECT_ROOT) / "EVENT_AGGREGATION_REPORT.md", Path(PROJECT_ROOT) / "ADAPTIVE_SAMPLING_DIAGNOSTIC_REPORT.md"]:
                 if p.exists():
                     p.unlink()
 

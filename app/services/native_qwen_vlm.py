@@ -10,7 +10,12 @@ from app.schemas.frame import FrameRichMetadata
 from app.core.utils import calculate_time_snippet, format_timestamp_human
 from app.services.ocr import OCRService
 from app.services.activity_recovery import ActivityRecoveryService
-from app.services.qwen_vlm import QwenVLMService
+from app.services.vlm_utils import (
+    clean_json_response,
+    normalize_metadata_dict,
+    format_timestamp_human_vlm,
+    generate_search_text,
+)
 
 try:
     from vllm import LLM, SamplingParams
@@ -138,8 +143,9 @@ class NativeQwenVLMService:
         cls.initialize()
 
         if settings.MOCK_MODEL:
-            # Fallback to Ollama mock generation
-            return await QwenVLMService.generate_metadata_batch(batch_frames)
+            # Fallback to MockVLMService
+            from app.services.mock_vlm import MockVLMService
+            return await MockVLMService.generate_metadata_batch(batch_frames)
 
         import asyncio
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
@@ -225,10 +231,10 @@ class NativeQwenVLMService:
                     
                 try:
                     repair_start = time.perf_counter()
-                    cleaned_out = QwenVLMService._clean_json_response(raw_out)
+                    cleaned_out = clean_json_response(raw_out)
                     import json
                     parsed_raw = json.loads(cleaned_out)
-                    parsed = QwenVLMService._normalize_metadata_dict(parsed_raw.copy())
+                    parsed = normalize_metadata_dict(parsed_raw.copy())
                     repair_duration_ms = (time.perf_counter() - repair_start) * 1000.0
 
                     time_snippet = calculate_time_snippet(ts, interval_seconds=1.0)
@@ -240,11 +246,11 @@ class NativeQwenVLMService:
                     parsed["frame_id"] = frame_id
                     parsed["video_id"] = video_id
                     parsed["timestamp_seconds"] = ts
-                    parsed["timestamp_human"] = QwenVLMService._format_timestamp_human(ts)
+                    parsed["timestamp_human"] = format_timestamp_human_vlm(ts)
                     parsed["frame_path"] = str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
 
                     parsed = ActivityRecoveryService.apply(parsed)
-                    parsed["search_text"] = QwenVLMService._generate_search_text(parsed)
+                    parsed["search_text"] = generate_search_text(parsed)
                     
                     if idx == 0:
                         try:

@@ -42,7 +42,7 @@ async def run_vlm_validation():
     report_lines = []
     report_lines.append("# VLM OUTPUT VALIDATION AUDIT")
     report_lines.append(f"**VLM Engine**: {settings.VLM_ENGINE_TYPE}")
-    report_lines.append(f"**Model**: {settings.QWEN_MODEL_ID if settings.VLM_ENGINE_TYPE == 'ollama' else 'Qwen/Qwen2.5-VL-7B-Instruct'}\n")
+    report_lines.append(f"**Model**: {'Mock' if settings.MOCK_MODEL else settings.QWEN_MODEL_ID}\n")
     
     for gt_file in gt_files:
         with open(gt_file, "r", encoding="utf-8") as f:

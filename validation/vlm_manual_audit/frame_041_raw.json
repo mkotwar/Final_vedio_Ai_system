@@ -1,0 +1,39 @@
+```json
+{
+  "scene_type": "jewelry store interior",
+  "scene_description": "A jewelry store with customers interacting with employees.",
+  "objects": [
+    {
+      "id": "customer_1",
+      "type": "person",
+      "subtype": "customer",
+      "color": "black",
+      "condition": "standing",
+      "attributes": ["wearing white cap"]
+    },
+    {
+      "id": "customer_2",
+      "type": "person",
+      "subtype": "customer",
+      "color": "white",
+      "condition": "standing",
+      "attributes": ["wearing red cap"]
+    },
+    {
+      "id": "employee_1",
+      "type": "person",
+      "subtype": "employee",
+      "color": "white",
+      "condition": "standing",
+      "attributes": ["wearing white shirt", "facing customers"]
+    },
+    {
+      "id": "employee_2",
+      "type": "person",
+      "subtype": "employee",
+      "color": "white",
+      "condition": "sitting",
+      "attributes": ["at desk", "working on laptop"]
+    }
+  ],
+  "events": [],

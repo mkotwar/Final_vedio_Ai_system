@@ -1,0 +1,37 @@
+```json
+{
+  "scene_type": "jewelry store interior",
+  "scene_description": "A jewelry store with glass display cases, a counter, and employees working.",
+  "objects": [
+    {
+      "id": "desk_1",
+      "type": "furniture",
+      "subtype": "desk",
+      "color": "brown",
+      "condition": "stationary",
+      "attributes": ["cluttered with papers"]
+    },
+    {
+      "id": "computer_1",
+      "type": "device",
+      "subtype": "computer",
+      "color": "black",
+      "condition": "stationary",
+      "attributes": ["on desk_1"]
+    },
+    {
+      "id": "laptop_1",
+      "type": "device",
+      "subtype": "laptop",
+      "color": "silver",
+      "condition": "stationary",
+      "attributes": ["on desk_1"]
+    },
+    {
+      "id": "chair_1",
+      "type": "furniture",
+      "subtype": "chair",
+      "color": "black",
+      "condition": "stationary",
+      "attributes": ["next to desk_1"]
+    },

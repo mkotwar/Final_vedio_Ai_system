@@ -1,0 +1,51 @@
+{
+    "scene_type": "interior",
+    "scene_description": "A jewelry store interior with glass display cases, a counter, and a person working at a desk.",
+    "objects": [
+        {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "desk",
+            "color": "brown",
+            "condition": "stationary",
+            "attributes": [
+                "cluttered with papers"
+            ]
+        },
+        {
+            "id": "computer",
+            "type": "device",
+            "subtype": "computer",
+            "color": "black",
+            "condition": "stationary",
+            "attributes": [
+                "on the desk"
+            ]
+        },
+        {
+            "id": "laptop",
+            "type": "device",
+            "subtype": "laptop",
+            "color": "silver",
+            "condition": "stationary",
+            "attributes": [
+                "on the desk"
+            ]
+        },
+        {
+            "id": "glass_cases",
+            "type": "furniture",
+            "subtype": "glass_cases",
+            "color": "white",
+            "condition": "stationary",
+            "attributes": [
+                "filled with jewelry"
+            ]
+        }
+    ],
+    "caption": "No description available.",
+    "activities": [],
+    "keywords": [],
+    "people_count": 0,
+    "events": []
+}

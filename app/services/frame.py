@@ -10,7 +10,7 @@ from loguru import logger
 from app.core.config import settings, PROJECT_ROOT
 from app.core.exceptions import FrameExtractionError, VideoNotFoundError, MetadataGenerationError
 from app.services.video import VideoService
-from app.services.qwen_vlm import QwenVLMService
+from app.services.vlm_factory import get_vlm_service
 from app.services.motion_window_service import MotionWindowService
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
@@ -416,8 +416,9 @@ class FrameExtractionService:
             logger.info(f"Processing VLM batch {current_batch_num}/{total_batches} (frames {i} to {i + len(batch)} of {processed_count}) for video ID {video_id}...")
 
             try:
-                # Generate rich metadata for batch
-                batch_results = await QwenVLMService.generate_metadata_batch(batch)
+                logger.info(f"Active VLM Backend: {settings.VLM_ENGINE_TYPE}")
+                vlm_service = get_vlm_service()
+                batch_results = await vlm_service.generate_metadata_batch(batch)
                 logger.info(f"Successfully analyzed VLM batch {current_batch_num}/{total_batches} | Generated {len(batch_results)} metadata profiles.")
 
                 # Process batch results
@@ -494,12 +495,22 @@ class FrameExtractionService:
 
         # Trigger Event Aggregation service to group consecutive similar frames into events
         from app.services.event_aggregation import EventAggregationService
+        from app.services.event_aggregation_v2 import EventAggregationServiceV2
         from app.services.search_service import SearchService
         try:
-            events = EventAggregationService.process_events(video_id, rich_frames)
-            if events:
+            logger.info("Running V1 Event Aggregation...")
+            events_v1 = EventAggregationService.process_events(video_id, rich_frames)
+            
+            logger.info("Running V2 Event Aggregation side-by-side...")
+            try:
+                events_v2 = EventAggregationServiceV2.process_events(video_id, rich_frames)
+                logger.info(f"V1 produced {len(events_v1)} events, V2 produced {len(events_v2)} events.")
+            except Exception as v2_exc:
+                logger.exception(f"V2 Event Aggregation failed for video: {video_id}")
+
+            if events_v1:
                 try:
-                    SearchService.index_events(video_id, events)
+                    SearchService.index_events(video_id, events_v1)
                 except Exception as search_exc:
                     logger.exception(f"Failed to index events in vector store for video: {video_id}")
         except Exception as event_exc:

@@ -1,0 +1,53 @@
+{
+    "scene_type": "jewelry store interior",
+    "scene_description": "A security camera view of a jewelry store showing two individuals inside.",
+    "objects": [
+        {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "desk",
+            "color": "brown",
+            "condition": "stationary",
+            "attributes": [
+                "laptop",
+                "documents",
+                "phone"
+            ]
+        },
+        {
+            "id": "computer_monitor",
+            "type": "electronic device",
+            "subtype": "monitor",
+            "color": "black",
+            "condition": "stationary",
+            "attributes": [
+                "on"
+            ]
+        },
+        {
+            "id": "jewelry_cases",
+            "type": "furniture",
+            "subtype": "case",
+            "color": "white",
+            "condition": "stationary",
+            "attributes": [
+                "glass doors"
+            ]
+        },
+        {
+            "id": "chair",
+            "type": "furniture",
+            "subtype": "office chair",
+            "color": "black",
+            "condition": "stationary",
+            "attributes": [
+                "under desk"
+            ]
+        }
+    ],
+    "caption": "No description available.",
+    "activities": [],
+    "keywords": [],
+    "people_count": 0,
+    "events": []
+}

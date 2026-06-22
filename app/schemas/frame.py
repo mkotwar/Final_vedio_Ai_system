@@ -42,6 +42,19 @@ class ObjectMetadata(BaseModel):
     """Additional descriptive attributes, e.g. ['carrying bag', 'parked', 'damaged front end']."""
 
 
+class LocationContextMetadata(BaseModel):
+    """Represents the spatial location of a specific object."""
+    object_id: str = ""
+    location: str = ""
+
+
+class RelationshipMetadata(BaseModel):
+    """Represents a physical or semantic interaction between two objects."""
+    subject_id: str = ""
+    target_id: str = ""
+    relation: str = ""
+
+
 class OCRMetadata(BaseModel):
     """OCR extraction results from a frame."""
 
@@ -65,6 +78,8 @@ class FrameRichMetadata(BaseModel):
 
     # ── Detected Objects ──────────────────────────────────────────────────
     objects: List[ObjectMetadata] = Field(default_factory=list)
+    location_context: List[LocationContextMetadata] = Field(default_factory=list)
+    relationships: List[RelationshipMetadata] = Field(default_factory=list)
 
     # ── Detected Events / Incidents ───────────────────────────────────────
     events: List[EventMetadata] = Field(default_factory=list)

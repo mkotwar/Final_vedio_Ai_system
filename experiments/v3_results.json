@@ -1,0 +1,250 @@
+{
+  "averages": {
+    "objects": 6.333333333333333,
+    "activities": 1.6666666666666667,
+    "relationships": 1.6666666666666667,
+    "location_context": 1.3333333333333333
+  },
+  "results": [
+    {
+      "frame": "empy_room_ts7.jpg",
+      "raw": "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office chair\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"monitor\",\n      \"type\": \"electronic device\",\n      \"subtype\": \"computer monitor\",\n      \"condition\": \"off\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building feature\",\n      \"subtype\": \"office door\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"lockers\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"empty\"\n    }\n  ],\n  \"activities\": [],\n  \"relationships\": [],\n  \"location_context\": []\n}\n```",
+      "parsed": {
+        "scene_type": "office",
+        "objects": [
+          {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "workstation",
+            "condition": "empty"
+          },
+          {
+            "id": "chair",
+            "type": "furniture",
+            "subtype": "office chair",
+            "condition": "unoccupied"
+          },
+          {
+            "id": "cabinet",
+            "type": "furniture",
+            "subtype": "storage",
+            "condition": "closed"
+          },
+          {
+            "id": "monitor",
+            "type": "electronic device",
+            "subtype": "computer monitor",
+            "condition": "off"
+          },
+          {
+            "id": "door",
+            "type": "building feature",
+            "subtype": "office door",
+            "condition": "open"
+          },
+          {
+            "id": "lockers",
+            "type": "furniture",
+            "subtype": "storage",
+            "condition": "empty"
+          }
+        ],
+        "activities": [],
+        "relationships": [],
+        "location_context": []
+      },
+      "metrics": {
+        "objects": 6,
+        "activities": 0,
+        "relationships": 0,
+        "location_context": 0
+      }
+    },
+    {
+      "frame": "person_walk_ts18.jpg",
+      "raw": "```json\n{\n  \"scene_type\": \"office\",\n  \"objects\": [\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"empty\"\n    },\n    {\n      \"id\": \"chair\",\n      \"type\": \"furniture\",\n      \"subtype\": \"office\",\n      \"condition\": \"unoccupied\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"building\",\n      \"subtype\": \"interior\",\n      \"condition\": \"open\"\n    },\n    {\n      \"id\": \"blackboard\",\n      \"type\": \"furniture\",\n      \"subtype\": \"educational\",\n      \"condition\": \"clean\"\n    },\n    {\n      \"id\": \"cabinet\",\n      \"type\": \"furniture\",\n      \"subtype\": \"storage\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"desk\",\n      \"type\": \"furniture\",\n      \"subtype\": \"workstation\",\n      \"condition\": \"occupied\"\n    }\n  ],\n  \"activities\": [\n    {\n      \"subject_id\": \"person\",\n      \"type\": \"standing\",\n      \"condition\": \"holding phone\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"subject_id\": \"person\",\n      \"target_id\": \"desk\",\n      \"relation\": \"standing_near\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"person\",\n      \"location\": \"center_area\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "scene_type": "office",
+        "objects": [
+          {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "workstation",
+            "condition": "empty"
+          },
+          {
+            "id": "chair",
+            "type": "furniture",
+            "subtype": "office",
+            "condition": "unoccupied"
+          },
+          {
+            "id": "door",
+            "type": "building",
+            "subtype": "interior",
+            "condition": "open"
+          },
+          {
+            "id": "blackboard",
+            "type": "furniture",
+            "subtype": "educational",
+            "condition": "clean"
+          },
+          {
+            "id": "cabinet",
+            "type": "furniture",
+            "subtype": "storage",
+            "condition": "closed"
+          },
+          {
+            "id": "desk",
+            "type": "furniture",
+            "subtype": "workstation",
+            "condition": "occupied"
+          }
+        ],
+        "activities": [
+          {
+            "subject_id": "person",
+            "type": "standing",
+            "condition": "holding phone"
+          }
+        ],
+        "relationships": [
+          {
+            "subject_id": "person",
+            "target_id": "desk",
+            "relation": "standing_near"
+          }
+        ],
+        "location_context": [
+          {
+            "object_id": "person",
+            "location": "center_area"
+          }
+        ]
+      },
+      "metrics": {
+        "objects": 6,
+        "activities": 1,
+        "relationships": 1,
+        "location_context": 1
+      }
+    },
+    {
+      "frame": "customer_int_ts35.jpg",
+      "raw": "```json\n{\n  \"scene_type\": \"jewelry_store\",\n  \"objects\": [\n    {\n      \"id\": \"counter\",\n      \"type\": \"desk\",\n      \"subtype\": \"cashier\",\n      \"condition\": \"occupied\"\n    },\n    {\n      \"id\": \"glass_cases\",\n      \"type\": \"display_cases\",\n      \"subtype\": \"jewelry\",\n      \"condition\": \"closed\"\n    },\n    {\n      \"id\": \"computer_monitor\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"monitor\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"laptop\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"laptop\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"phone\",\n      \"type\": \"electronic_device\",\n      \"subtype\": \"landline_phone\",\n      \"condition\": \"on\"\n    },\n    {\n      \"id\": \"wall_decor\",\n      \"type\": \"artwork\",\n      \"subtype\": \"painting\",\n      \"condition\": \"hanging\"\n    },\n    {\n      \"id\": \"door\",\n      \"type\": \"entrance\",\n      \"subtype\": \"main\",\n      \"condition\": \"open\"\n    }\n  ],\n  \"activities\": [\n    {\n      \"subject_id\": \"person_1\",\n      \"target_id\": \"counter\",\n      \"relation\": \"standing\"\n    },\n    {\n      \"subject_id\": \"person_2\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    },\n    {\n      \"subject_id\": \"person_3\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    },\n    {\n      \"subject_id\": \"person_4\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"standing_near\"\n    }\n  ],\n  \"relationships\": [\n    {\n      \"subject_id\": \"person_1\",\n      \"target_id\": \"counter\",\n      \"relation\": \"talking_to\"\n    },\n    {\n      \"subject_id\": \"person_2\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"facing\"\n    },\n    {\n      \"subject_id\": \"person_3\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"facing\"\n    },\n    {\n      \"subject_id\": \"person_4\",\n      \"target_id\": \"glass_cases\",\n      \"relation\": \"facing\"\n    }\n  ],\n  \"location_context\": [\n    {\n      \"object_id\": \"counter\",\n      \"location\": \"near_counter\"\n    },\n    {\n      \"object_id\": \"glass_cases\",\n      \"location\": \"center_area\"\n    },\n    {\n      \"object_id\": \"door\",\n      \"location\": \"right_side\"\n    }\n  ]\n}\n```",
+      "parsed": {
+        "scene_type": "jewelry_store",
+        "objects": [
+          {
+            "id": "counter",
+            "type": "desk",
+            "subtype": "cashier",
+            "condition": "occupied"
+          },
+          {
+            "id": "glass_cases",
+            "type": "display_cases",
+            "subtype": "jewelry",
+            "condition": "closed"
+          },
+          {
+            "id": "computer_monitor",
+            "type": "electronic_device",
+            "subtype": "monitor",
+            "condition": "on"
+          },
+          {
+            "id": "laptop",
+            "type": "electronic_device",
+            "subtype": "laptop",
+            "condition": "on"
+          },
+          {
+            "id": "phone",
+            "type": "electronic_device",
+            "subtype": "landline_phone",
+            "condition": "on"
+          },
+          {
+            "id": "wall_decor",
+            "type": "artwork",
+            "subtype": "painting",
+            "condition": "hanging"
+          },
+          {
+            "id": "door",
+            "type": "entrance",
+            "subtype": "main",
+            "condition": "open"
+          }
+        ],
+        "activities": [
+          {
+            "subject_id": "person_1",
+            "target_id": "counter",
+            "relation": "standing"
+          },
+          {
+            "subject_id": "person_2",
+            "target_id": "glass_cases",
+            "relation": "standing_near"
+          },
+          {
+            "subject_id": "person_3",
+            "target_id": "glass_cases",
+            "relation": "standing_near"
+          },
+          {
+            "subject_id": "person_4",
+            "target_id": "glass_cases",
+            "relation": "standing_near"
+          }
+        ],
+        "relationships": [
+          {
+            "subject_id": "person_1",
+            "target_id": "counter",
+            "relation": "talking_to"
+          },
+          {
+            "subject_id": "person_2",
+            "target_id": "glass_cases",
+            "relation": "facing"
+          },
+          {
+            "subject_id": "person_3",
+            "target_id": "glass_cases",
+            "relation": "facing"
+          },
+          {
+            "subject_id": "person_4",
+            "target_id": "glass_cases",
+            "relation": "facing"
+          }
+        ],
+        "location_context": [
+          {
+            "object_id": "counter",
+            "location": "near_counter"
+          },
+          {
+            "object_id": "glass_cases",
+            "location": "center_area"
+          },
+          {
+            "object_id": "door",
+            "location": "right_side"
+          }
+        ]
+      },
+      "metrics": {
+        "objects": 7,
+        "activities": 4,
+        "relationships": 4,
+        "location_context": 3
+      }
+    }
+  ]
+}
