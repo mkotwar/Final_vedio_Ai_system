@@ -4,6 +4,11 @@ from typing import List, Optional, Dict, Any, Tuple
 
 from loguru import logger
 from app.core.config import settings
+from app.services.event_taxonomy import (
+    get_notable_severity,
+    is_notable_event_type,
+    normalize_event_type,
+)
 from app.services.pipeline_contract import (
     event_catalog_path,
     load_event_catalog,
@@ -166,24 +171,6 @@ class SummaryService:
         analytics_kws = config.get("analytics", [])
 
         # ── NEW: incident event types that are always notable ────────────
-        ALWAYS_NOTABLE_INCIDENT_TYPES = {
-            "collision", "vehicle_collision", "crash", "accident",
-            "intrusion", "restricted_area_activity",
-            "fall", "person_fall",
-            "fire", "smoke", "fire_smoke_detected",
-            "fight", "physical_altercation",
-            "abandonment", "abandoned_object",
-            "speeding", "vehicle_speeding",
-        }
-        INCIDENT_SEVERITY_MAP = {
-            "collision": "high", "vehicle_collision": "high", "crash": "high", "accident": "high",
-            "intrusion": "high", "restricted_area_activity": "high",
-            "fall": "medium", "person_fall": "medium",
-            "fire": "critical", "smoke": "high", "fire_smoke_detected": "critical",
-            "fight": "high", "physical_altercation": "high",
-            "abandonment": "medium", "abandoned_object": "medium",
-            "speeding": "medium", "vehicle_speeding": "medium",
-        }
         # ── END NEW ─────────────────────────────────────────────────────
 
         for event in events:
@@ -194,10 +181,10 @@ class SummaryService:
 
             # ── NEW: Check frame-level VLM events first (highest priority) ──
             for fe in event.frame_events:
-                fe_type = fe.event_type.lower().strip()
-                if fe_type in ALWAYS_NOTABLE_INCIDENT_TYPES:
+                fe_type = normalize_event_type(fe.event_type)
+                if is_notable_event_type(fe_type):
                     is_notable = True
-                    auto_severity = INCIDENT_SEVERITY_MAP.get(fe_type, "medium")
+                    auto_severity = get_notable_severity(fe_type)
                     # Escalate severity only
                     sev_order = ["low", "medium", "high", "critical"]
                     if sev_order.index(auto_severity) > sev_order.index(severity):
@@ -211,11 +198,12 @@ class SummaryService:
             text_to_search = (event.event_type + " " + event.description).lower()
 
             # Also check event_type against incident taxonomy
-            if not is_notable and event.event_type.lower() in ALWAYS_NOTABLE_INCIDENT_TYPES:
+            normalized_event_type = normalize_event_type(event.event_type)
+            if not is_notable and is_notable_event_type(normalized_event_type):
                 is_notable = True
-                severity = INCIDENT_SEVERITY_MAP.get(event.event_type.lower(), "medium")
+                severity = get_notable_severity(normalized_event_type)
                 reason = f"Incident type detected: {event.event_type.replace('_', ' ')}"
-                tags.append(event.event_type)
+                tags.append(normalized_event_type)
 
             # Keyword-based checks
             if not is_notable:

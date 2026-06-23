@@ -9,6 +9,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 
 from app.core.config import settings
 from app.services.embedding_service import EmbeddingService
+from app.services.event_taxonomy import get_event_search_boost, normalize_event_type
 from app.services.pipeline_contract import EVENT_CATALOG_SUFFIX
 from app.services.status_service import JobStatusService
 
@@ -265,17 +266,13 @@ class SearchService:
                 normalized = cls.normalize_score(float(hit.score))
                 
                 event_type = hit.payload.get("event_type", "unknown")
+                normalized_event_type = normalize_event_type(event_type)
                 severity_num = hit.payload.get("event_severity", 0)
                 
                 # Search Relevance Boosting
                 # Apply boost only if base similarity is >= 0.40 to prevent irrelevant events leaping to the top
                 if normalized >= 0.40:
-                    if event_type == "weapon_drawn":
-                        normalized += 1.00
-                    elif event_type == "fire_incident":
-                        normalized += 0.75
-                    elif event_type in ["fall_incident", "medical_emergency", "collision_or_accident", "intrusion", "robbery_incident"]:
-                        normalized += 0.50
+                    normalized += get_event_search_boost(normalized_event_type)
                 
                 normalized = min(1.0, normalized)
                 

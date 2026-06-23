@@ -10,6 +10,7 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.utils import format_timestamp_human
+from app.services.event_taxonomy import get_event_severity, normalize_event_type
 from app.services.pipeline_contract import event_dir, write_event_catalog
 from app.services.status_service import JobStatusService
 
@@ -660,8 +661,11 @@ class EventAggregationService:
                 for inc in f.get("events", []):
                     if not isinstance(inc, dict):
                         continue
-                    inc_type = str(inc.get("event_type", "")).lower().strip()
-                    if not inc_type or inc_type == "none" or inc_type in seen_incident_types:
+                    raw_inc_type = str(inc.get("event_type", "")).lower().strip()
+                    if not raw_inc_type or raw_inc_type == "none":
+                        continue
+                    inc_type = normalize_event_type(raw_inc_type)
+                    if inc_type in seen_incident_types:
                         continue
                     seen_incident_types.add(inc_type)
                     frame_events.append({
@@ -812,7 +816,7 @@ class EventAggregationService:
 
             # Infer event type with full taxonomy
             scene_type = first_frame.get("scene_type", "unknown")
-            event_type = cls.infer_event_type(merged_objects, activities, scene_type, group_unified_text)
+            event_type = normalize_event_type(cls.infer_event_type(merged_objects, activities, scene_type, group_unified_text))
 
             # 4. Description synthesis
             joined_activities = " and ".join(activities) if activities else ""
@@ -854,21 +858,7 @@ class EventAggregationService:
                 
             summary = " ".join(summary_parts)
 
-            # Map event type to severity
-            severity_map = {
-                "collision_or_accident": 100,
-                "fire_incident": 100,
-                "robbery_incident": 100,
-                "medical_emergency": 95,
-                "weapon_drawn": 95,
-                "fall_incident": 90,
-                "intrusion": 85,
-                "loitering": 60,
-                "vehicle_movement": 30,
-                "pedestrian_activity": 20,
-                "normal_activity": 10
-            }
-            event_severity = severity_map.get(event_type, 15)
+            event_severity = get_event_severity(event_type)
 
             # Construct final event dictionary
             event_data = {
