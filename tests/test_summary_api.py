@@ -78,7 +78,7 @@ def test_summary_api_no_events(tmp_path):
             data = response.json()
             assert data["video_id"] == video_id
             assert data["status"] == "no_events"
-            assert data["overview"] == "No aggregated events found for this video yet."
+            assert data["overview"] == "No significant incidents detected."
             assert len(data["timeline"]) == 0
             assert len(data["notable_events"]) == 0
             

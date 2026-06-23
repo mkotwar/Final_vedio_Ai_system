@@ -1,0 +1,30 @@
+HUMAN:
+  - person
+  - customer
+  - employee
+  - staff
+  - worker
+  - guard
+  - security
+  - visitor
+  - pedestrian
+  - suspect
+  - driver
+  - cyclist
+  - shopper
+  - cashier
+
+VEHICLE:
+  - vehicle
+  - car
+  - truck
+  - bus
+  - motorcycle
+  - bicycle
+  - forklift
+
+ANIMAL:
+  - animal
+  - dog
+  - cat
+  - horse

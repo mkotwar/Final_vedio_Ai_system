@@ -9,6 +9,7 @@ from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, Fi
 
 from app.core.config import settings
 from app.services.embedding_service import EmbeddingService
+from app.services.pipeline_contract import EVENT_CATALOG_SUFFIX
 from app.services.status_service import JobStatusService
 
 class SearchService:
@@ -175,12 +176,12 @@ class SearchService:
         try:
             logger.info("Scanning metadata directory to auto-index existing events in Qdrant...")
             indexed_count = 0
-            for path in settings.METADATA_DIR.glob("*_events.json"):
+            for path in settings.METADATA_DIR.glob(f"*{EVENT_CATALOG_SUFFIX}"):
                 stem = path.name
-                if stem == "mock-video-id_events.json":
+                if stem == f"mock-video-id{EVENT_CATALOG_SUFFIX}":
                     video_id = "mock-video-id"
                 else:
-                    video_id = stem.replace("_events.json", "")
+                    video_id = stem.removesuffix(EVENT_CATALOG_SUFFIX)
                 
                 try:
                     with open(path, "r", encoding="utf-8") as f:

@@ -12,6 +12,7 @@ from app.core.exceptions import FrameExtractionError, VideoNotFoundError, Metada
 from app.services.video import VideoService
 from app.services.vlm_factory import get_vlm_service
 from app.services.motion_window_service import MotionWindowService
+from app.services.pipeline_contract import frame_catalog_path, frame_metadata_dir
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
 
@@ -399,13 +400,13 @@ class FrameExtractionService:
         logger.info(f"Successfully extracted {processed_count} frame JPEG images from video: {video_id}. Starting VLM batch processing...")
         JobStatusService.update(video_id, current_step=f"Starting VLM Analysis (0/{processed_count})...", total_frames=processed_count, progress_percent=10.0)
 
-        # 3. Process extracted frames in batches using QwenVLMService
+        # 3. Process extracted frames in batches using the configured native VLM backend
         rich_frames: List[Dict[str, Any]] = []
         successful_count = 0
         failed_count = 0
 
         # Create video-specific metadata directory: data/metadata/{video_id}/
-        video_metadata_dir = settings.METADATA_DIR / video_id
+        video_metadata_dir = frame_metadata_dir(video_id)
         video_metadata_dir.mkdir(parents=True, exist_ok=True)
 
         batch_size = settings.BATCH_SIZE
@@ -468,7 +469,7 @@ class FrameExtractionService:
         failed_count = processed_count - successful_count
 
         # 4. Save aggregated frames metadata list catalog: data/metadata/{video_id}_frames.json
-        metadata_catalog_path = settings.METADATA_DIR / f"{video_id}_frames.json"
+        metadata_catalog_path = frame_catalog_path(video_id)
         try:
             with open(metadata_catalog_path, "w", encoding="utf-8") as cat_file:
                 json.dump(rich_frames, cat_file, indent=4)
@@ -495,22 +496,14 @@ class FrameExtractionService:
 
         # Trigger Event Aggregation service to group consecutive similar frames into events
         from app.services.event_aggregation import EventAggregationService
-        from app.services.event_aggregation_v2 import EventAggregationServiceV2
         from app.services.search_service import SearchService
         try:
-            logger.info("Running V1 Event Aggregation...")
-            events_v1 = EventAggregationService.process_events(video_id, rich_frames)
-            
-            logger.info("Running V2 Event Aggregation side-by-side...")
-            try:
-                events_v2 = EventAggregationServiceV2.process_events(video_id, rich_frames)
-                logger.info(f"V1 produced {len(events_v1)} events, V2 produced {len(events_v2)} events.")
-            except Exception as v2_exc:
-                logger.exception(f"V2 Event Aggregation failed for video: {video_id}")
+            logger.info("Running Event Aggregation...")
+            events = EventAggregationService.process_events(video_id, rich_frames)
 
-            if events_v1:
+            if events:
                 try:
-                    SearchService.index_events(video_id, events_v1)
+                    SearchService.index_events(video_id, events)
                 except Exception as search_exc:
                     logger.exception(f"Failed to index events in vector store for video: {video_id}")
         except Exception as event_exc:
@@ -554,7 +547,7 @@ class FrameExtractionService:
         # Validate video existence first
         VideoService.get_video(video_id)
 
-        metadata_path = settings.METADATA_DIR / f"{video_id}_frames.json"
+        metadata_path = frame_catalog_path(video_id)
         if not metadata_path.exists():
             logger.warning(f"Lookup failed. Rich frames have not been extracted for video: {video_id}")
             raise VideoNotFoundError(f"Frames for video ID '{video_id}' have not been extracted yet.")

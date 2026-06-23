@@ -1,4 +1,4 @@
-import json
+﻿import json
 import torch
 import time
 from pathlib import Path
@@ -7,14 +7,11 @@ from loguru import logger
 
 from app.core.config import settings, PROJECT_ROOT
 from app.schemas.frame import FrameRichMetadata
-from app.core.utils import calculate_time_snippet, format_timestamp_human
 from app.services.ocr import OCRService
-from app.services.activity_recovery import ActivityRecoveryService
+from app.services.vlm_prompt import VLM_FRAME_METADATA_PROMPT
 from app.services.vlm_utils import (
     clean_json_response,
-    normalize_metadata_dict,
-    format_timestamp_human_vlm,
-    generate_search_text,
+    finalize_frame_metadata,
 )
 
 try:
@@ -150,53 +147,7 @@ class NativeQwenVLMService:
         import asyncio
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 
-        prompt_guidelines = (
-            "Analyze the image and return a raw JSON object detailing its visual contents objectively. "
-            "You MUST return a single JSON object (enclosed in curly braces {}), NOT a JSON array. "
-            "The JSON object MUST strictly adhere to this schema:\n"
-            "{\n"
-            '  "scene_type": "string",\n'
-            '  "scene_description": "string",\n'
-            '  "objects": [\n'
-            "    {\n"
-            '      "id": "string",\n'
-            '      "type": "string",\n'
-            '      "subtype": "string",\n'
-            '      "color": "string",\n'
-            '      "condition": "standing/walking/sitting/lying/bending/moving/stationary/unknown",\n'
-            '      "attributes": ["string"]\n'
-            "    }\n"
-            "  ],\n"
-            '  "events": [\n'
-            "    {\n"
-            '      "event_type": "interaction/observation/none",\n'
-            '      "description": "string",\n'
-            '      "actors": ["string"],\n'
-            '      "severity": "low/medium/high/critical"\n'
-            "    }\n"
-            "  ],\n"
-            '  "people_count": 0,\n'
-            '  "activities": ["string"],\n'
-            '  "keywords": ["string"],\n'
-            '  "caption": "string"\n'
-            "}\n"
-            "CRITICAL RULES:\n"
-            "- DO NOT output placeholder text like 'unique id e.g. person_1'. Generate actual values only.\n"
-            "- If no value is known, return null. If no actor exists, return an empty array.\n"
-            "- For 'subtype', you MUST use ONLY the following allowed values:\n"
-            "    Actors: person, employee, customer\n"
-            "    Vehicles: car, truck, motorcycle, bus\n"
-            "    Objects: bag, backpack, suitcase, box\n"
-            "- If uncertain, fallback to: person, vehicle, or object.\n"
-            "- NEVER invent new subtype names. NEVER output: adult male, individual, pedestrian, visitor, shopper.\n"
-            "- Give each object a unique 'id' so events can reference them via 'actors'.\n"
-            "- Describe the scene objectively. Extract visual facts only.\n"
-            "- NEVER infer incidents, causality, or intent from a single frame.\n"
-            "- NEVER assume a person has fallen; use neutral posture descriptors like 'lying' or 'bending'.\n"
-            "- NEVER assume a collision, speeding, abandonment, or criminal activity occurred.\n"
-            "- If the scene has no notable interactions, return: \"events\": []\n"
-            "- Respond ONLY with raw JSON. No markdown, no backticks, no commentary."
-        )
+        prompt_guidelines = VLM_FRAME_METADATA_PROMPT
 
         try:
             logger.debug(f"Preparing batch of {len(batch_frames)} images for vLLM...")
@@ -234,31 +185,17 @@ class NativeQwenVLMService:
                     cleaned_out = clean_json_response(raw_out)
                     import json
                     parsed_raw = json.loads(cleaned_out)
-                    parsed = normalize_metadata_dict(parsed_raw.copy())
                     repair_duration_ms = (time.perf_counter() - repair_start) * 1000.0
 
-                    time_snippet = calculate_time_snippet(ts, interval_seconds=1.0)
-                    parsed.update(time_snippet)
-
-                    parsed["ocr"] = ocr_results[idx]
                     ocr_duration_ms = ocr_duration_ms_avg
 
-                    parsed["frame_id"] = frame_id
-                    parsed["video_id"] = video_id
-                    parsed["timestamp_seconds"] = ts
-                    parsed["timestamp_human"] = format_timestamp_human_vlm(ts)
-                    parsed["frame_path"] = str(path.relative_to(PROJECT_ROOT)).replace("\\", "/")
-
-                    parsed = ActivityRecoveryService.apply(parsed)
-                    parsed["search_text"] = generate_search_text(parsed)
-                    
                     if idx == 0:
                         try:
                             trace_data = {
                                 "1_raw_qwen_output": raw_out,
                                 "2_cleaned_json_string": cleaned_out,
                                 "2b_parsed_dict": parsed_raw,
-                                "3_normalized_metadata": parsed.copy(),
+                                "3_normalized_metadata": None,
                                 "4_final_framerichmetadata": None
                             }
                             with open("debug_metadata_trace.json", "w", encoding="utf-8") as f:
@@ -267,7 +204,15 @@ class NativeQwenVLMService:
                             logger.error(f"Failed to write debug trace: {e}")
 
                     val_start = time.perf_counter()
-                    rich_meta = FrameRichMetadata(**parsed)
+                    rich_meta = finalize_frame_metadata(
+                        parsed_raw=parsed_raw,
+                        frame_id=frame_id,
+                        video_id=video_id,
+                        timestamp_seconds=ts,
+                        frame_path=path,
+                        ocr_result=ocr_results[idx],
+                        project_root=PROJECT_ROOT,
+                    )
                     val_duration_ms = (time.perf_counter() - val_start) * 1000.0
 
                     if idx == 0:
@@ -275,6 +220,7 @@ class NativeQwenVLMService:
                             import json
                             with open("debug_metadata_trace.json", "r", encoding="utf-8") as f:
                                 trace_data = json.load(f)
+                            trace_data["3_normalized_metadata"] = rich_meta.model_dump()
                             trace_data["4_final_framerichmetadata"] = rich_meta.model_dump()
                             with open("debug_metadata_trace.json", "w", encoding="utf-8") as f:
                                 json.dump(trace_data, f, indent=4)
@@ -302,3 +248,5 @@ class NativeQwenVLMService:
             raise RuntimeError(f"Batch generation failed: {str(exc)}")
 
         return results
+
+

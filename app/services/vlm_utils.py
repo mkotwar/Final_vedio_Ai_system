@@ -1,9 +1,12 @@
 import json
 import re
+from pathlib import Path
 from typing import Dict, Any, List
 from loguru import logger
 
-from app.core.utils import format_timestamp_human
+from app.core.utils import calculate_time_snippet, format_timestamp_human
+from app.schemas.frame import FrameRichMetadata
+from app.services.activity_recovery import ActivityRecoveryService
 
 
 def format_timestamp_human_vlm(seconds: float) -> str:
@@ -159,6 +162,9 @@ def normalize_metadata_dict(parsed: Dict[str, Any]) -> Dict[str, Any]:
                 else:
                     cleaned_list.append(str(item))
             parsed[list_field] = cleaned_list
+
+        if list_field == "activities":
+            parsed[list_field] = ActivityRecoveryService.normalize_activities(parsed[list_field])
 
     # Ensure people_count is int
     pc = parsed.get("people_count")
@@ -317,3 +323,42 @@ def generate_search_text(meta: Dict[str, Any]) -> str:
     full_text = " ".join(parts).lower()
     cleaned_text = re.sub(r"\s+", " ", full_text).strip()
     return cleaned_text
+
+
+def finalize_frame_metadata(
+    parsed_raw: Dict[str, Any],
+    frame_id: str,
+    video_id: str,
+    timestamp_seconds: float,
+    frame_path: Path,
+    ocr_result: Any,
+    project_root: Path,
+) -> FrameRichMetadata:
+    """Convert one parsed VLM JSON object into the canonical frame metadata model.
+
+    This is the shared post-VLM contract used by every backend:
+    schema normalization -> timestamp fields -> OCR merge -> activity recovery
+    -> search text -> Pydantic validation -> metadata postprocessing.
+    """
+    parsed = normalize_metadata_dict(parsed_raw.copy())
+    parsed.update(calculate_time_snippet(timestamp_seconds, interval_seconds=1.0))
+
+    parsed["ocr"] = ocr_result
+    parsed["frame_id"] = frame_id
+    parsed["video_id"] = video_id
+    parsed["timestamp_seconds"] = timestamp_seconds
+    parsed["timestamp_human"] = format_timestamp_human_vlm(timestamp_seconds)
+
+    try:
+        parsed["frame_path"] = str(frame_path.relative_to(project_root)).replace("\\", "/")
+    except ValueError:
+        parsed["frame_path"] = str(frame_path).replace("\\", "/")
+
+    parsed = ActivityRecoveryService.apply(parsed)
+    parsed["search_text"] = generate_search_text(parsed)
+
+    rich_meta = FrameRichMetadata(**parsed)
+
+    from app.services.metadata_postprocessor import MetadataPostprocessor
+
+    return MetadataPostprocessor.process(rich_meta)

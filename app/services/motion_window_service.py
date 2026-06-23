@@ -44,6 +44,7 @@ class MotionWindowService:
         window_start_sec = 0.0
         
         frame_idx = 0
+        previous_gray = None
         
         # Use MOG2 Background Subtractor to handle smooth/slow motion correctly
         # instead of simplistic frame-to-frame absdiff.
@@ -58,17 +59,30 @@ class MotionWindowService:
             
             # Downscale for performance
             small_frame = cv2.resize(frame, (320, 240))
+            gray_frame = cv2.cvtColor(small_frame, cv2.COLOR_BGR2GRAY)
             
             # Apply MOG2 mask
             fg_mask = back_sub.apply(small_frame)
+
+            # The first frame initializes the background model; treating it as
+            # motion would create a false window in static videos.
+            if previous_gray is None:
+                previous_gray = gray_frame
+                frame_idx += 1
+                continue
             
             # Clean up noise
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel)
             
-            non_zero = np.count_nonzero(fg_mask)
-            total_pixels = fg_mask.size
-            motion_percent = non_zero / total_pixels
+            bg_motion_percent = np.count_nonzero(fg_mask) / fg_mask.size
+
+            frame_delta = cv2.absdiff(previous_gray, gray_frame)
+            _, delta_mask = cv2.threshold(frame_delta, 25, 255, cv2.THRESH_BINARY)
+            delta_motion_percent = np.count_nonzero(delta_mask) / delta_mask.size
+            previous_gray = gray_frame
+
+            motion_percent = max(bg_motion_percent, delta_motion_percent)
             
             if motion_percent >= threshold_percent:
                 consecutive_motion += 1

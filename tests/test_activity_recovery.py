@@ -147,6 +147,11 @@ class TestRecoverFromCaption:
         result = ActivityRecoveryService.recover_from_caption(caption)
         assert "crossing road" in result
 
+    def test_crossing_caption_intersection(self):
+        caption = "A pedestrian is walking across the intersection."
+        result = ActivityRecoveryService.recover_from_caption(caption)
+        assert "crossing road" in result
+
     def test_standing_caption(self):
         caption = "Two guards standing near the entrance gate."
         result = ActivityRecoveryService.recover_from_caption(caption)
@@ -252,6 +257,17 @@ class TestRecoverFromKeywords:
 # ------------------------------------------------------------------ #
 
 class TestRecover:
+
+    def test_original_activities_are_normalized(self):
+        frame = {
+            "activities": ["crossing", "walking_with", "none"],
+            "objects": [],
+            "caption": "",
+            "keywords": [],
+        }
+        activities, source = ActivityRecoveryService.recover(frame)
+        assert activities == ["crossing road", "walking"]
+        assert source == "original"
 
     def test_original_activities_preserved(self):
         """Non-empty activities must be returned as-is without recovery."""

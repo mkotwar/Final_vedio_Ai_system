@@ -1,6 +1,0 @@
-ERROR:
-Traceback (most recent call last):
-  File "C:\Mukul K\vinfo1\video-search-engine\test_agg.py", line 9, in <module>
-    frames = json.load(open(f"c:/Mukul K/vinfo1/video-search-engine/data/metadata/{video_id}_frames.json", encoding="utf-8"))
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-FileNotFoundError: [Errno 2] No such file or directory: 'c:/Mukul K/vinfo1/video-search-engine/data/metadata/3a8c4b20-f45a-4334-ba0a-4824b796b750_frames.json'

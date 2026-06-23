@@ -89,6 +89,7 @@ class ActivityRecoveryService:
         (r"\brevers(?:ing|ed|es)\b",        "reversing"),
         (r"\bmoving?\b",                    "moving"),
         # Person motion
+        (r"\b(?:walk(?:ing|s|ed)?|cross(?:ing|es|ed)?)\b.*\b(?:across|crosswalk|intersection|road|street)\b", "crossing road"),
         (r"\bwalk(?:ing|s|ed|er)\b",        "walking"),
         (r"\brun(?:ning|s|ner)\b",          "running"),
         (r"\bcross(?:ing|es|ed)\b",         "crossing road"),
@@ -117,6 +118,53 @@ class ActivityRecoveryService:
         ("traveling",               "moving"),
     ]
 
+    ACTIVITY_ALIASES: Dict[str, str] = {
+        "crossing": "crossing road",
+        "crossing street": "crossing road",
+        "crossing road": "crossing road",
+        "pedestrian crossing": "crossing road",
+        "walking across road": "crossing road",
+        "walking across street": "crossing road",
+        "walking_with": "walking",
+        "walking with": "walking",
+        "walk": "walking",
+        "walks": "walking",
+        "walking": "walking",
+        "run": "running",
+        "runs": "running",
+        "running": "running",
+        "drive": "driving",
+        "drives": "driving",
+        "driving": "driving",
+        "parked": "vehicle parked",
+        "parking": "vehicle parked",
+        "vehicle parked": "vehicle parked",
+        "stationary": "vehicle stationary",
+        "vehicle stationary": "vehicle stationary",
+        "stopped": "vehicle stopped",
+        "vehicle stopped": "vehicle stopped",
+        "moving": "moving",
+        "vehicle moving": "vehicle moving",
+        "enter": "entering",
+        "entering": "entering",
+        "exit": "exiting",
+        "exiting": "exiting",
+        "arrive": "arriving",
+        "arriving": "arriving",
+        "depart": "departing",
+        "departing": "departing",
+        "reverse": "reversing",
+        "reversing": "reversing",
+        "stand": "standing",
+        "standing": "standing",
+        "sit": "sitting",
+        "sitting": "sitting",
+        "seated": "seated",
+        "carrying": "carrying object",
+        "holding": "carrying object",
+        "carrying object": "carrying object",
+    }
+
     # Captions with these exact values carry no useful information
     _EMPTY_CAPTIONS: frozenset = frozenset({
         "",
@@ -128,6 +176,26 @@ class ActivityRecoveryService:
     # ------------------------------------------------------------------ #
     # Recovery methods                                                     #
     # ------------------------------------------------------------------ #
+
+    @classmethod
+    def normalize_activity_label(cls, activity: Any) -> str:
+        """Normalize model/recovery activity variants to the pipeline vocabulary."""
+        label = str(activity or "").strip().lower()
+        if not label or label == "none":
+            return ""
+        label = re.sub(r"[_\-]+", " ", label)
+        label = re.sub(r"\s+", " ", label).strip()
+        return cls.ACTIVITY_ALIASES.get(label, label)
+
+    @classmethod
+    def normalize_activities(cls, activities: List[Any]) -> List[str]:
+        """Normalize and deduplicate an activity list while preserving order."""
+        normalized: List[str] = []
+        for activity in activities or []:
+            label = cls.normalize_activity_label(activity)
+            if label and label not in normalized:
+                normalized.append(label)
+        return normalized
 
     @classmethod
     def recover_from_attributes(cls, objects: List[Dict[str, Any]]) -> List[str]:
@@ -147,8 +215,9 @@ class ActivityRecoveryService:
             for attr in attrs:
                 attr_lower = str(attr).lower()
                 for trigger, activity in cls.ATTRIBUTE_RULES:
-                    if trigger in attr_lower and activity not in recovered:
-                        recovered.append(activity)
+                    normalized = cls.normalize_activity_label(activity)
+                    if trigger in attr_lower and normalized not in recovered:
+                        recovered.append(normalized)
                         break  # one activity per attribute string
         return recovered
 
@@ -167,8 +236,9 @@ class ActivityRecoveryService:
         if caption_stripped in cls._EMPTY_CAPTIONS:
             return recovered
         for pattern, activity in cls.CAPTION_RULES:
-            if re.search(pattern, caption_stripped) and activity not in recovered:
-                recovered.append(activity)
+            normalized = cls.normalize_activity_label(activity)
+            if re.search(pattern, caption_stripped) and normalized not in recovered:
+                recovered.append(normalized)
         return recovered
 
     @classmethod
@@ -186,8 +256,9 @@ class ActivityRecoveryService:
             return recovered
         keywords_text = " ".join(keywords).lower()
         for trigger, activity in cls.KEYWORD_RULES:
-            if trigger in keywords_text and activity not in recovered:
-                recovered.append(activity)
+            normalized = cls.normalize_activity_label(activity)
+            if trigger in keywords_text and normalized not in recovered:
+                recovered.append(normalized)
         return recovered
 
     # ------------------------------------------------------------------ #
@@ -214,7 +285,7 @@ class ActivityRecoveryService:
         """
         existing = frame_data.get("activities", [])
         if existing:
-            return list(existing), "original"
+            return cls.normalize_activities(existing), "original"
 
         frame_id = frame_data.get("frame_id", "unknown")
         objects  = frame_data.get("objects", [])

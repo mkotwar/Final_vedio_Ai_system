@@ -28,13 +28,13 @@ from app.schemas.frame import (
 _PERSON_ACTIVITIES: frozenset = frozenset({
     "standing", "walking", "running", "sitting", "talking",
     "interacting", "waiting", "working", "driving",
-    "entering", "exiting",
+    "entering", "exiting", "crossing road",
 })
 
 _APPROVED_ACTIVITIES: frozenset = frozenset({
     "standing", "walking", "running", "sitting", "talking",
     "interacting", "waiting", "working", "driving",
-    "entering", "exiting", "none",
+    "entering", "exiting", "crossing road", "none",
 })
 
 # Regex to strip a trailing _N suffix so we can find the base name.

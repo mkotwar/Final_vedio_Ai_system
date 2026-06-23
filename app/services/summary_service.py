@@ -1,11 +1,17 @@
-import json
 import re
 from collections import defaultdict
-from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 
 from loguru import logger
 from app.core.config import settings
+from app.services.pipeline_contract import (
+    event_catalog_path,
+    load_event_catalog,
+    load_frame_records,
+    load_legacy_event_files,
+    normalize_event_record,
+    write_event_catalog,
+)
 from app.schemas.summary import (
     AggregatedEvent,
     ActivityStatistics,
@@ -37,69 +43,65 @@ class SummaryService:
 
     @classmethod
     def load_events(cls, video_id: str) -> List[AggregatedEvent]:
-        """Loads events from the consolidated metadata file or falls back to individual files."""
-        events_path = settings.METADATA_DIR / f"{video_id}_events_v2.json"
+        """Load events from the canonical catalog, rebuilding from known fallbacks if needed."""
+        events_path = event_catalog_path(video_id)
 
         logger.info(f"Summary service loading events for video {video_id} from path: {events_path}")
 
-        if not events_path.exists():
-            frames_metadata = []
-            frames_path = settings.METADATA_DIR / f"{video_id}_frames.json"
-            if frames_path.exists():
-                logger.info(f"Events not found, but found frames metadata file: {frames_path}. Running event aggregation on-the-fly...")
-                try:
-                    with open(frames_path, "r", encoding="utf-8") as f:
-                        frames_metadata = json.load(f)
-                except Exception as e:
-                    logger.error(f"Error reading frames metadata file {frames_path}: {e}")
-            else:
-                frames_dir = settings.METADATA_DIR / video_id
-                if frames_dir.exists():
-                    logger.info(f"Events not found, but found frames metadata directory: {frames_dir}. Running event aggregation on-the-fly...")
-                    frame_files = sorted(list(frames_dir.glob("*.json")))
-                    for fp in frame_files:
-                        try:
-                            with open(fp, "r", encoding="utf-8") as f:
-                                frames_metadata.append(json.load(f))
-                        except Exception as e:
-                            logger.error(f"Error loading frame file {fp}: {e}")
-
-            if frames_metadata:
-                logger.info(f"Dynamically generating events from {len(frames_metadata)} frame metadata records...")
-                try:
-                    from app.services.event_aggregation import EventAggregationService
-                    from app.services.search_service import SearchService
-                    events = EventAggregationService.process_events(video_id, frames_metadata)
-                    if events:
-                        try:
-                            SearchService.index_events(video_id, events)
-                        except Exception as search_exc:
-                            logger.warning(f"Failed to index dynamically generated events for video {video_id}: {search_exc}")
-
-                    if events_path.exists():
-                        with open(events_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        loaded_events = [AggregatedEvent(**event) for event in data]
-                        logger.info(f"Successfully generated, indexed, and loaded {len(loaded_events)} events dynamically.")
-                        return loaded_events
-                except Exception as e:
-                    logger.error(f"Failed to dynamically generate events for video {video_id}: {e}")
-
-            logger.info(f"No events found or rebuildable for video {video_id} at {events_path}")
-            return []
-
         try:
-            with open(events_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-            loaded_events = [AggregatedEvent(**event) for event in data]
-            logger.info(
-                f"Summary service loaded {len(loaded_events)} events for video {video_id} from {events_path}."
-            )
-            return loaded_events
+            data = load_event_catalog(video_id)
+            if data:
+                loaded_events = [AggregatedEvent(**normalize_event_record(event, video_id)) for event in data]
+                logger.info(
+                    f"Summary service loaded {len(loaded_events)} events for video {video_id} from {events_path}."
+                )
+                return loaded_events
         except Exception as e:
             logger.error(f"Failed to load events for video {video_id} from {events_path}: {e}")
-            return []
+
+        legacy_events = []
+        try:
+            legacy_events = load_legacy_event_files(video_id)
+        except Exception as e:
+            logger.error(f"Failed to load legacy event files for video {video_id}: {e}")
+
+        if legacy_events:
+            logger.info(f"Rebuilding canonical event catalog for video {video_id} from {len(legacy_events)} legacy event files.")
+            normalized = [normalize_event_record(event, video_id) for event in legacy_events]
+            try:
+                write_event_catalog(video_id, normalized)
+            except Exception as e:
+                logger.error(f"Failed to write rebuilt event catalog for video {video_id}: {e}")
+            return [AggregatedEvent(**event) for event in normalized]
+
+        frames_metadata = []
+        try:
+            frames_metadata = load_frame_records(video_id)
+        except Exception as e:
+            logger.error(f"Failed to load frame metadata for video {video_id}: {e}")
+
+        if frames_metadata:
+            logger.info(f"Dynamically generating events from {len(frames_metadata)} frame metadata records...")
+            try:
+                from app.services.event_aggregation import EventAggregationService
+                from app.services.search_service import SearchService
+
+                events = EventAggregationService.process_events(video_id, frames_metadata)
+                if events:
+                    try:
+                        SearchService.index_events(video_id, events)
+                    except Exception as search_exc:
+                        logger.warning(f"Failed to index dynamically generated events for video {video_id}: {search_exc}")
+
+                data = load_event_catalog(video_id)
+                loaded_events = [AggregatedEvent(**normalize_event_record(event, video_id)) for event in data]
+                logger.info(f"Successfully generated, indexed, and loaded {len(loaded_events)} events dynamically.")
+                return loaded_events
+            except Exception as e:
+                logger.error(f"Failed to dynamically generate events for video {video_id}: {e}")
+
+        logger.info(f"No events found or rebuildable for video {video_id} at {events_path}")
+        return []
 
     @classmethod
     def compute_statistics(cls, events: List[AggregatedEvent]) -> ActivityStatistics:

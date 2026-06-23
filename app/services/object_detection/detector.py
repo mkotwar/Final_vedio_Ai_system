@@ -34,6 +34,13 @@ class ObjectDetector:
         load_time = time.time() - start_time
         logger.info(f"Model loaded successfully. Model load time: {load_time:.4f} seconds.")
 
+    @staticmethod
+    def _to_list(value: Any) -> list:
+        """Convert tensor-like or list-like YOLO values to a plain Python list."""
+        if hasattr(value, "tolist"):
+            return value.tolist()
+        return list(value)
+
     def detect_frame(self, frame_path: Path, frame_id: str, video_id: str, timestamp_seconds: float) -> FrameDetection:
         """
         Detect objects in a single frame.
@@ -79,9 +86,9 @@ class ObjectDetector:
                     # box.xyxy is [x1, y1, x2, y2]
                     # box.conf is confidence
                     # box.cls is class id
-                    xyxy = box.xyxy[0].tolist()
-                    conf = float(box.conf[0])
-                    cls_id = int(box.cls[0])
+                    xyxy = self._to_list(box.xyxy[0])
+                    conf = float(self._to_list(box.conf)[0])
+                    cls_id = int(self._to_list(box.cls)[0])
                     class_name = names.get(cls_id, str(cls_id))
                     
                     x1, y1, x2, y2 = xyxy

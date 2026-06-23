@@ -4,7 +4,7 @@
 
 **Project Name:** AI Video Review & Investigation System
 
-**Last Updated:** 2026-06-04
+**Last Updated:** 2026-06-23
 
 **Overall Progress:** ~45%
 
@@ -45,6 +45,9 @@ We have successfully implemented the **Event Abstraction Layer**, completing Pha
 
 * [x] Qwen2.5-VL Integration
 * [x] 4-bit NF4 Quantization
+* [x] Native HF backend selected as current runtime backend
+* [x] Native vLLM backend retained for future high-throughput batching
+* [x] Ollama VLM backend removed from active architecture
 * [x] Rich Scene Understanding
 * [x] Object Detection Metadata
 * [x] Activity Metadata
@@ -395,7 +398,7 @@ Event abstraction and summary quality improvements.
 
 * Implemented Investigation Narrative Engine (Phase 1C) to replace statistical overviews with dynamic, deterministic narrative synthesis.
 * Enriched events with intelligence fields: `scene_context`, `real_world_time`, `participants`, `behavioral_flags`, and `disposition`.
-* Fixed Uvicorn file lock truncation bugs by routing output to `_events_v2.json` and removing legacy fallbacks.
+* Fixed Uvicorn file lock truncation bugs by routing output to `_events.json` and removing legacy fallbacks.
 * Implemented semantic state-tracking algorithm in Event Abstraction Layer.
 * Validated and completely resolved 1-second event fragmentation issue. Phase 1B complete.
 

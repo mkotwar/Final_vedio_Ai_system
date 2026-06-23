@@ -1,11 +1,23 @@
-"""Unit tests for EventAggregationService.
-"""
-
 import json
+
 import pytest
-from pathlib import Path
-from app.core.config import settings, PROJECT_ROOT
+
+from app.core.config import settings
 from app.services.event_aggregation import EventAggregationService
+
+
+@pytest.fixture
+def isolated_event_dirs(tmp_path):
+    original_events_dir = settings.EVENTS_DIR
+    original_metadata_dir = settings.METADATA_DIR
+    settings.EVENTS_DIR = tmp_path / "events"
+    settings.METADATA_DIR = tmp_path / "metadata"
+    settings.METADATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        yield
+    finally:
+        settings.EVENTS_DIR = original_events_dir
+        settings.METADATA_DIR = original_metadata_dir
 
 
 def test_jaccard_similarity():
@@ -49,13 +61,8 @@ def test_calculate_similarity():
     assert EventAggregationService.calculate_similarity(frame1, frame3) < 0.25
 
 
-def test_event_aggregation_processing(tmp_path):
+def test_event_aggregation_processing(isolated_event_dirs):
     """Verify frames are grouped into events and serialized to the target directory correctly."""
-    original_events_dir = settings.EVENTS_DIR
-    settings.EVENTS_DIR = tmp_path / "events"
-    original_metadata_dir = settings.METADATA_DIR
-    settings.METADATA_DIR = tmp_path / "metadata"
-    settings.METADATA_DIR.mkdir(parents=True, exist_ok=True)
     original_threshold = settings.EVENT_SIMILARITY_THRESHOLD
     settings.EVENT_SIMILARITY_THRESHOLD = 0.60
     
@@ -139,21 +146,25 @@ def test_event_aggregation_processing(tmp_path):
         evt1 = events[0]
         assert evt1["event_id"] == "evt_001"
         assert evt1["video_id"] == video_id
-        assert evt1["start_time"] == 0.0
-        assert evt1["end_time"] == 3.0
+        assert evt1["start_time"] == "00:00:00"
+        assert evt1["end_time"] == "00:00:03"
+        assert evt1["timestamp_start_seconds"] == 0.0
+        assert evt1["timestamp_end_seconds"] == 3.0
         assert evt1["duration_seconds"] == 3.0
         assert evt1["frame_count"] == 3
-        assert evt1["event_type"] == "vehicle_entry"
+        assert evt1["event_type"] == "vehicle_movement"
         assert evt1["source_frames"] == [f"{video_id}_f0001", f"{video_id}_f0002", f"{video_id}_f0003"]
         assert len(evt1["objects"]) == 2
         
         evt2 = events[1]
         assert evt2["event_id"] == "evt_002"
-        assert evt2["start_time"] == 3.0
-        assert evt2["end_time"] == 5.0
+        assert evt2["start_time"] == "00:00:03"
+        assert evt2["end_time"] == "00:00:05"
+        assert evt2["timestamp_start_seconds"] == 3.0
+        assert evt2["timestamp_end_seconds"] == 5.0
         assert evt2["duration_seconds"] == 2.0
         assert evt2["frame_count"] == 2
-        assert evt2["event_type"] == "indoor_activity"
+        assert evt2["event_type"] == "normal_activity"
         assert evt2["source_frames"] == [f"{video_id}_f0004", f"{video_id}_f0005"]
         assert len(evt2["objects"]) == 1
         
@@ -175,11 +186,70 @@ def test_event_aggregation_processing(tmp_path):
             catalog = json.load(f)
             assert len(catalog) == 2
             assert catalog[0]["event_id"] == "evt_001"
-            assert catalog[0]["description"] == "A blue car driving on the street. A blue car driving on the street with a pedestrian."
+            assert catalog[0]["event_type"] == "vehicle_movement"
+            assert catalog[0]["description"] == "Vehicle movement involving person was detected at the monitored area. Other participants: blue car."
             assert catalog[0]["start_time"] == "00:00:00"
             assert catalog[0]["end_time"] == "00:00:03"
             
     finally:
-        settings.EVENTS_DIR = original_events_dir
-        settings.METADATA_DIR = original_metadata_dir
         settings.EVENT_SIMILARITY_THRESHOLD = original_threshold
+
+
+def test_person_is_selected_over_furniture(isolated_event_dirs):
+    frame = {
+        "frame_id": "f01",
+        "timestamp_seconds": 0.0,
+        "objects": [
+            {"id": "desk_1", "type": "furniture", "subtype": "desk", "attributes": []},
+            {"id": "chair_1", "type": "furniture", "subtype": "chair", "attributes": []},
+            {"id": "person_1", "type": "person", "subtype": "employee", "attributes": []},
+        ],
+        "activities": ["walking"],
+        "relationships": [],
+        "location_context": [],
+    }
+
+    events = EventAggregationService.process_events("test_video_1", [frame])
+
+    assert len(events) == 1
+    assert events[0]["primary_object"] == "Person"
+    assert events[0]["event_type"] == "pedestrian_activity"
+
+
+def test_vehicle_is_selected_over_furniture(isolated_event_dirs):
+    frame = {
+        "frame_id": "f01",
+        "timestamp_seconds": 0.0,
+        "objects": [
+            {"id": "monitor_1", "type": "electronics", "subtype": "monitor", "attributes": []},
+            {"id": "vehicle_1", "type": "vehicle", "subtype": "car", "attributes": []},
+        ],
+        "activities": ["moving"],
+        "relationships": [],
+        "location_context": [],
+    }
+
+    events = EventAggregationService.process_events("test_video_2", [frame])
+
+    assert len(events) == 1
+    assert events[0]["primary_object"] == "Vehicle"
+
+
+def test_empty_furniture_scene_is_not_classified_as_person_or_vehicle(isolated_event_dirs):
+    frame = {
+        "frame_id": "f01",
+        "timestamp_seconds": 0.0,
+        "scene_type": "office",
+        "objects": [
+            {"id": "desk_1", "type": "furniture", "subtype": "desk", "attributes": []},
+            {"id": "chair_1", "type": "furniture", "subtype": "chair", "attributes": []},
+        ],
+        "activities": ["waiting"],
+        "relationships": [],
+        "location_context": [],
+    }
+
+    events = EventAggregationService.process_events("test_video_3", [frame])
+
+    assert len(events) == 1
+    assert events[0]["primary_object"] not in {"Person", "Vehicle"}

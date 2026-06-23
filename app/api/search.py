@@ -13,15 +13,15 @@ router = APIRouter(prefix="/api/v1/search", tags=["Search"])
 @router.get("/reprocess_test_video")
 def reprocess_test_video():
     import json
-    from pathlib import Path
     from app.services.event_aggregation import EventAggregationService
     from app.services.search_service import SearchService
     from app.core.config import settings
+    from app.services.pipeline_contract import frame_catalog_path
     from qdrant_client.models import Filter, FieldCondition, MatchValue
     
     try:
         video_id = "284e527c-888c-4c80-96c8-3cd7d50731b3"
-        frames_path = settings.METADATA_DIR / f"{video_id}_frames.json"
+        frames_path = frame_catalog_path(video_id)
         
         with open(frames_path, "r", encoding="utf-8") as f:
             frames = json.load(f)
