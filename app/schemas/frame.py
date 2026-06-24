@@ -62,6 +62,19 @@ class OCRMetadata(BaseModel):
     license_plates: List[str] = Field(default_factory=list)
 
 
+class DetectionContextMetadata(BaseModel):
+    class_name: str = ""
+    confidence: float = 0.0
+    bbox: List[float] = Field(default_factory=list)
+
+
+class TrackedEntityMetadata(BaseModel):
+    track_id: int = 0
+    class_name: str = ""
+    confidence: float = 0.0
+    bbox: List[float] = Field(default_factory=list)
+
+
 class FrameRichMetadata(BaseModel):
     """Complete rich metadata record for a single extracted video frame."""
 
@@ -100,6 +113,11 @@ class FrameRichMetadata(BaseModel):
 
     # ── OCR ───────────────────────────────────────────────────────────────
     ocr: Optional[Any] = None
+    detected_objects: List[DetectionContextMetadata] = Field(default_factory=list)
+    tracked_entities: List[TrackedEntityMetadata] = Field(default_factory=list)
+    track_ids: List[int] = Field(default_factory=list)
+    candidate_reasons: List[str] = Field(default_factory=list)
+    object_counts: Dict[str, int] = Field(default_factory=dict)
 
     # ── Activity Recovery Provenance ─────────────────────────────────────
     activity_recovery_source: Optional[str] = None
@@ -125,6 +143,8 @@ class FrameExtractionResponse(BaseModel):
     failed_frames: int = Field(..., description="Count of frames where VLM analysis or validation failed.")
     frames: List[FrameRichMetadata] = Field(..., description="Collection of successfully analyzed frame records.")
     total_frames_extracted: int = Field(0, description="Total count of video frames extracted/read from the video file.")
+    frames_retained_for_coverage: int = Field(0, description="Frames kept on disk for coverage before VLM candidate filtering.")
     frames_sent_to_qwen: int = Field(0, description="Count of frames sent to the Qwen VLM for rich analysis.")
+    frames_filtered_before_vlm: int = Field(0, description="Retained frames judged empty or non-event-like and therefore not sent to VLM.")
     frames_skipped: int = Field(0, description="Count of frames skipped due to visual similarity thresholds.")
     reduction_percent: float = Field(0.0, description="Percentage of frames skipped (saved inference).")

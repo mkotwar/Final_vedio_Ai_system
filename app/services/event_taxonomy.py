@@ -16,6 +16,7 @@ class EventTypeDefinition:
 
 
 EVENT_NORMAL_ACTIVITY = "normal_activity"
+EVENT_EMPTY_SCENE = "empty_scene"
 EVENT_VEHICLE_MOVEMENT = "vehicle_movement"
 EVENT_PEDESTRIAN_ACTIVITY = "pedestrian_activity"
 EVENT_COLLISION_OR_ACCIDENT = "collision_or_accident"
@@ -73,6 +74,9 @@ EVENT_TAXONOMY: Dict[str, EventTypeDefinition] = {
     EVENT_NORMAL_ACTIVITY: EventTypeDefinition(
         EVENT_NORMAL_ACTIVITY, "Normal activity", 10, "normal",
     ),
+    EVENT_EMPTY_SCENE: EventTypeDefinition(
+        EVENT_EMPTY_SCENE, "Empty scene", 0, "empty",
+    ),
     EVENT_PHYSICAL_ALTERCATION: EventTypeDefinition(
         EVENT_PHYSICAL_ALTERCATION, "Physical altercation", 90, "security",
         notable=True, notable_severity="high", search_boost=0.50,
@@ -103,6 +107,13 @@ EVENT_TYPE_ALIASES = {
     "restricted_area_activity": EVENT_INTRUSION,
     "fight": EVENT_PHYSICAL_ALTERCATION,
     "abandonment": EVENT_ABANDONED_OBJECT,
+    "object_left": EVENT_ABANDONED_OBJECT,
+    "object_removed": EVENT_ABANDONED_OBJECT,
+    "package_left": EVENT_ABANDONED_OBJECT,
+    "package_removed": EVENT_ABANDONED_OBJECT,
+    "empty": EVENT_EMPTY_SCENE,
+    "empty_scene": EVENT_EMPTY_SCENE,
+    "no_activity": EVENT_EMPTY_SCENE,
     "speeding": EVENT_VEHICLE_SPEEDING,
 }
 

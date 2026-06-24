@@ -26,6 +26,7 @@ class AggregatedEvent(BaseModel):
     duration_seconds: float = 0.0
     objects: List[Any] = Field(default_factory=list)
     activities: List[str] = Field(default_factory=list)
+    activity: str = ""
     primary_object: str = ""
     location_text: str = "the monitored area"
 
@@ -40,6 +41,7 @@ class AggregatedEvent(BaseModel):
     narrative_sentence: str = ""
     thumbnail_path: Optional[str] = None
     event_severity: int = 15
+    unified_text: str = ""
 
     # ── NEW: Aggregated frame-level VLM incidents ───────────────────────
     frame_events: List[FrameEventDetail] = Field(default_factory=list)

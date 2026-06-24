@@ -67,6 +67,22 @@ class Settings(BaseSettings):
         default=True,
         description="Enable dense motion windowing preprocessing pass to filter out static video segments entirely",
     )
+    OUT_OF_WINDOW_BASELINE_SECONDS: float = Field(
+        default=5.0,
+        description="Retain one baseline frame every N seconds outside motion windows so missed motion does not erase long stretches",
+    )
+    MAX_FRAME_GAP_SECONDS: float = Field(
+        default=3.0,
+        description="Hard upper bound on retained-frame gaps so extraction never creates long blind windows",
+    )
+    ENABLE_TEMPORAL_CONTEXT_STRIPS: bool = Field(
+        default=True,
+        description="Send previous/current/next frame strips to the VLM so short object interactions are visible",
+    )
+    VLM_EVENT_CONTEXT_SECONDS: float = Field(
+        default=2.0,
+        description="Retain 1-2 seconds of context before and after detected event windows when selecting frames for VLM analysis",
+    )
     MOTION_THRESHOLD_PERCENT: float = Field(
         default=0.01,
         description="Percentage of pixels (0.0 to 1.0) that must change to trigger a motion frame",
@@ -82,6 +98,10 @@ class Settings(BaseSettings):
     POST_EVENT_BUFFER_SECONDS: int = Field(
         default=2,
         description="Padding added after a motion window ends",
+    )
+    MIN_MOTION_WINDOW_SECONDS: int = Field(
+        default=6,
+        description="Minimum duration for a motion window so short actions retain surrounding context",
     )
     MAX_FRAMES_PER_WINDOW: int = Field(
         default=30,

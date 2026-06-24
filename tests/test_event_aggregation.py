@@ -61,6 +61,25 @@ def test_calculate_similarity():
     assert EventAggregationService.calculate_similarity(frame1, frame3) < 0.25
 
 
+def test_extract_real_world_time_prefers_full_cctv_hour():
+    frames = [
+        {"ocr": {"detected_text": ["Office Cam", "1:02:24"]}},
+        {"ocr": {"detected_text": ["2026-06-24 14:02:24"]}},
+        {"ocr": {"detected_text": ["2026-06-24 14:02:25"]}},
+    ]
+
+    assert EventAggregationService._extract_real_world_time(frames) == "14:02:24"
+
+
+def test_extract_real_world_time_ignores_single_weak_read():
+    frames = [
+        {"ocr": {"detected_text": ["Office Cam", "1:02:24"]}},
+        {"ocr": {"detected_text": ["Empty office space"]}},
+    ]
+
+    assert EventAggregationService._extract_real_world_time(frames) is None
+
+
 def test_event_aggregation_processing(isolated_event_dirs):
     """Verify frames are grouped into events and serialized to the target directory correctly."""
     original_threshold = settings.EVENT_SIMILARITY_THRESHOLD
@@ -253,3 +272,52 @@ def test_empty_furniture_scene_is_not_classified_as_person_or_vehicle(isolated_e
 
     assert len(events) == 1
     assert events[0]["primary_object"] not in {"Person", "Vehicle"}
+
+
+def test_empty_office_scene_does_not_create_event(isolated_event_dirs):
+    frame = {
+        "frame_id": "f01",
+        "timestamp_seconds": 0.0,
+        "timestamp_start_seconds": 0.0,
+        "timestamp_end_seconds": 1.0,
+        "scene_type": "office",
+        "scene_description": "Empty office space with desks and equipment.",
+        "caption": "No visible activity in the office space.",
+        "objects": [],
+        "activities": [],
+        "keywords": ["office", "empty"],
+    }
+
+    events = EventAggregationService.process_events("test_video_empty", [frame])
+
+    assert events == []
+
+
+def test_same_person_id_is_deduplicated_across_appearance_variants(isolated_event_dirs):
+    frames = [
+        {
+            "frame_id": "f01",
+            "timestamp_seconds": 0.0,
+            "objects": [
+                {"id": "person_1", "type": "person", "subtype": "employee", "color": "purple", "attributes": ["wearing purple shirt"]},
+            ],
+            "activities": ["walking"],
+            "caption": "Person walking in office.",
+        },
+        {
+            "frame_id": "f02",
+            "timestamp_seconds": 1.0,
+            "objects": [
+                {"id": "person_1", "type": "person", "subtype": "employee", "color": "purple shirt, blue jeans", "attributes": ["short hair"]},
+            ],
+            "activities": ["walking"],
+            "caption": "Person walking near desk.",
+        },
+    ]
+
+    events = EventAggregationService.process_events("test_video_dedupe", frames)
+
+    assert len(events) == 1
+    assert events[0]["participant_count"] == 1
+    assert events[0]["participants"] == []
+    assert len(events[0]["objects"]) == 1

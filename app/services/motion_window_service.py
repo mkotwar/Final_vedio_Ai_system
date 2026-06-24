@@ -35,6 +35,7 @@ class MotionWindowService:
         consecutive_frames_needed = settings.MOTION_CONSECUTIVE_FRAMES
         pre_buffer = settings.PRE_EVENT_BUFFER_SECONDS
         post_buffer = settings.POST_EVENT_BUFFER_SECONDS
+        min_duration = settings.MIN_MOTION_WINDOW_SECONDS
         max_duration = settings.MAX_FRAMES_PER_WINDOW
         
         # State
@@ -120,9 +121,42 @@ class MotionWindowService:
             padded_end = end_sec + post_buffer
             buffered_windows.append((padded_start, padded_end))
             
-        merged_windows = cls._merge_windows(buffered_windows)
+        context_windows = cls._expand_short_windows(buffered_windows, min_duration, total_frames / fps)
+        merged_windows = cls._merge_windows(context_windows)
         
         return merged_windows
+
+    @classmethod
+    def _expand_short_windows(
+        cls,
+        windows: List[Tuple[float, float]],
+        min_duration_seconds: float,
+        video_duration_seconds: float,
+    ) -> List[Tuple[float, float]]:
+        """Expand very short motion windows so actions retain before/after context."""
+        if min_duration_seconds <= 0:
+            return windows
+
+        expanded = []
+        for start_sec, end_sec in windows:
+            duration = end_sec - start_sec
+            if duration >= min_duration_seconds:
+                expanded.append((start_sec, end_sec))
+                continue
+
+            pad_total = min_duration_seconds - duration
+            new_start = max(0.0, start_sec - (pad_total / 2.0))
+            new_end = min(video_duration_seconds, end_sec + (pad_total / 2.0))
+
+            if (new_end - new_start) < min_duration_seconds:
+                if new_start == 0.0:
+                    new_end = min(video_duration_seconds, min_duration_seconds)
+                elif new_end == video_duration_seconds:
+                    new_start = max(0.0, video_duration_seconds - min_duration_seconds)
+
+            expanded.append((new_start, new_end))
+
+        return expanded
         
     @classmethod
     def _merge_windows(cls, windows: List[Tuple[float, float]]) -> List[Tuple[float, float]]:

@@ -10,11 +10,13 @@ def mock_settings():
     original_consecutive = settings.MOTION_CONSECUTIVE_FRAMES
     original_pre = settings.PRE_EVENT_BUFFER_SECONDS
     original_post = settings.POST_EVENT_BUFFER_SECONDS
+    original_min = settings.MIN_MOTION_WINDOW_SECONDS
     
     settings.MOTION_THRESHOLD_PERCENT = 0.05
     settings.MOTION_CONSECUTIVE_FRAMES = 2
     settings.PRE_EVENT_BUFFER_SECONDS = 1
     settings.POST_EVENT_BUFFER_SECONDS = 1
+    settings.MIN_MOTION_WINDOW_SECONDS = 6
     
     yield
     
@@ -22,6 +24,7 @@ def mock_settings():
     settings.MOTION_CONSECUTIVE_FRAMES = original_consecutive
     settings.PRE_EVENT_BUFFER_SECONDS = original_pre
     settings.POST_EVENT_BUFFER_SECONDS = original_post
+    settings.MIN_MOTION_WINDOW_SECONDS = original_min
 
 def test_merge_windows():
     windows = [(0.0, 2.0), (1.5, 3.0), (4.0, 5.0)]
@@ -31,6 +34,13 @@ def test_merge_windows():
     windows_2 = [(0.0, 1.0), (2.0, 3.0), (2.5, 4.0), (3.5, 5.0)]
     merged_2 = MotionWindowService._merge_windows(windows_2)
     assert merged_2 == [(0.0, 1.0), (2.0, 5.0)]
+
+def test_expand_short_windows():
+    windows = [(10.0, 11.0)]
+
+    expanded = MotionWindowService._expand_short_windows(windows, 6.0, 120.0)
+
+    assert expanded == [(7.5, 13.5)]
 
 @patch("cv2.VideoCapture")
 def test_detect_motion_windows_static(mock_cap, mock_settings, tmp_path):

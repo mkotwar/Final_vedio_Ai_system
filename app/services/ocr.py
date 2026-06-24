@@ -4,8 +4,10 @@ OCR Service for text extraction and Indian license plate pattern matching in vid
 
 import re
 import threading
+from pathlib import Path
 from typing import Dict, Any, List
 
+import cv2
 from loguru import logger
 
 
@@ -17,6 +19,7 @@ class OCRService:
 
     _reader: Any = None
     _lock = threading.Lock()
+    _inference_lock = threading.Lock()
 
     @classmethod
     def get_reader(cls) -> Any:
@@ -77,6 +80,22 @@ class OCRService:
 
         return cls._reader
 
+    @staticmethod
+    def _load_ocr_ready_image(image_path: Any) -> Any:
+        """
+        Load and normalize an image into a stable grayscale array for OCR.
+
+        EasyOCR can accept raw file paths, but CCTV frames are more reliable when
+        we normalize channel layout ourselves before inference.
+        """
+
+        image = cv2.imread(str(Path(image_path)), cv2.IMREAD_COLOR)
+        if image is None:
+            raise ValueError(f"Unable to read image for OCR: {image_path}")
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        return gray
+
     @classmethod
     def extract_text(cls, image_path: Any) -> Dict[str, List[str]]:
         """
@@ -106,7 +125,12 @@ class OCRService:
                 )
                 return result
 
-            ocr_results = reader.readtext(str(image_path))
+            ocr_image = cls._load_ocr_ready_image(image_path)
+
+            # EasyOCR reader instances are not reliably thread-safe when shared
+            # across parallel batch tasks, so protect inference with a lock.
+            with cls._inference_lock:
+                ocr_results = reader.readtext(ocr_image)
 
             detected_texts = []
 

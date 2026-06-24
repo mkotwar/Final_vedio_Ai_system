@@ -2,12 +2,15 @@ import os
 from pathlib import Path
 from typing import List
 from loguru import logger
+from app.core.config import settings
 
 try:
     from vllm import LLM, SamplingParams
 except ImportError:
     LLM = None
     SamplingParams = None
+
+FRAME_METADATA_MAX_TOKENS_CAP = 256
 
 class NativeQwenVLLMService:
     _llm = None
@@ -55,7 +58,10 @@ class NativeQwenVLLMService:
             
         sampling_params = SamplingParams(
             temperature=0.0,
-            max_tokens=256,
+            max_tokens=min(
+                max(int(settings.QWEN_MAX_NEW_TOKENS or FRAME_METADATA_MAX_TOKENS_CAP), 64),
+                FRAME_METADATA_MAX_TOKENS_CAP,
+            ),
         )
         
         logger.info(f"--- TRUE BATCHING AUDIT ---")

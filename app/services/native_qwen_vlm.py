@@ -14,11 +14,52 @@ from app.services.vlm_utils import (
     finalize_frame_metadata,
 )
 
+
+def _unpack_frame_tuple(frame_tuple: Tuple[Any, ...]) -> Tuple[str, str, float, Path, Path]:
+    if len(frame_tuple) >= 5:
+        frame_id, video_id, ts, analysis_path, original_path = frame_tuple[:5]
+    else:
+        frame_id, video_id, ts, analysis_path = frame_tuple[:4]
+        original_path = analysis_path
+    return frame_id, video_id, ts, Path(analysis_path), Path(original_path)
+
+
+def _frame_detection_context(frame_tuple: Tuple[Any, ...]) -> Dict[str, Any]:
+    if len(frame_tuple) >= 6 and isinstance(frame_tuple[5], dict):
+        return frame_tuple[5]
+    return {}
+
+
+def _prompt_with_detection_context(frame_tuple: Tuple[Any, ...]) -> str:
+    context = _frame_detection_context(frame_tuple)
+    if not context:
+        return VLM_FRAME_METADATA_PROMPT
+
+    lines = []
+    detected_objects = context.get("detected_objects", [])
+    if detected_objects:
+        object_names = ", ".join(
+            det.get("class_name", "unknown") for det in detected_objects[:10]
+        )
+        lines.append(f"Detector hints for CURRENT frame: {object_names}.")
+    track_ids = context.get("track_ids", [])
+    if track_ids:
+        lines.append(f"Tracking hints: stable entities visible with track ids {track_ids}.")
+    reasons = context.get("candidate_reasons", [])
+    if reasons:
+        lines.append(f"Frame selected because: {', '.join(reasons)}.")
+
+    if not lines:
+        return VLM_FRAME_METADATA_PROMPT
+    return VLM_FRAME_METADATA_PROMPT + "\n\nAdditional detector context:\n- " + "\n- ".join(lines)
+
 try:
     from vllm import LLM, SamplingParams
 except ImportError:
     LLM = None
     SamplingParams = None
+
+FRAME_METADATA_MAX_TOKENS_CAP = 256
 
 class NativeQwenVLMService:
     """Service managing Qwen2.5-VL model using vLLM for true batch inference."""
@@ -57,7 +98,7 @@ class NativeQwenVLMService:
             
             cls._sampling_params = SamplingParams(
                 temperature=0.0,
-                max_tokens=256,
+                max_tokens=min(max(int(settings.QWEN_MAX_NEW_TOKENS or FRAME_METADATA_MAX_TOKENS_CAP), 64), FRAME_METADATA_MAX_TOKENS_CAP),
             )
             
             cls._is_initialized = True
@@ -147,13 +188,14 @@ class NativeQwenVLMService:
         import asyncio
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 
-        prompt_guidelines = VLM_FRAME_METADATA_PROMPT
-
         try:
             logger.debug(f"Preparing batch of {len(batch_frames)} images for vLLM...")
             
             # Format all prompts for vLLM True Batching
-            vllm_messages = [cls._create_vllm_prompt(path, prompt_guidelines) for _, _, _, path in batch_frames]
+            vllm_messages = [
+                cls._create_vllm_prompt(_unpack_frame_tuple(frame_tuple)[3], _prompt_with_detection_context(frame_tuple))
+                for frame_tuple in batch_frames
+            ]
 
             vlm_start = time.perf_counter()
             # Pass entire batch to vLLM at once (Task 4)
@@ -167,12 +209,13 @@ class NativeQwenVLMService:
                 res = await asyncio.to_thread(OCRService.extract_text, path)
                 return res
 
-            ocr_tasks = [timed_ocr(path, batch_frames[idx][0]) for idx, path in enumerate([f[3] for f in batch_frames])]
+            ocr_paths = [_unpack_frame_tuple(frame_tuple)[4] for frame_tuple in batch_frames]
+            ocr_tasks = [timed_ocr(path, batch_frames[idx][0]) for idx, path in enumerate(ocr_paths)]
             ocr_results = await asyncio.gather(*ocr_tasks)
             ocr_duration_ms_avg = ((time.perf_counter() - ocr_start_global) * 1000.0) / len(batch_frames) if batch_frames else 0.0
 
             for idx, raw_out in enumerate(vlm_outputs):
-                frame_id, video_id, ts, path = batch_frames[idx]
+                frame_id, video_id, ts, path, original_path = _unpack_frame_tuple(batch_frames[idx])
                 
                 logger.info(f"\nRAW_QWEN_OUTPUT_START\n{raw_out}\nRAW_QWEN_OUTPUT_END\n")
                 
@@ -209,9 +252,10 @@ class NativeQwenVLMService:
                         frame_id=frame_id,
                         video_id=video_id,
                         timestamp_seconds=ts,
-                        frame_path=path,
+                        frame_path=original_path,
                         ocr_result=ocr_results[idx],
                         project_root=PROJECT_ROOT,
+                        detection_context=_frame_detection_context(batch_frames[idx]),
                     )
                     val_duration_ms = (time.perf_counter() - val_start) * 1000.0
 

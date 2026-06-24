@@ -105,3 +105,39 @@ def test_finalize_frame_metadata_uses_canonical_postprocess(tmp_path):
     assert rich_meta.objects[0].type == "person"
     assert rich_meta.timestamp_human == "00:00:02"
     assert rich_meta.frame_path == "frames/frame_0001.jpg"
+
+
+def test_finalize_frame_metadata_merges_detection_context(tmp_path):
+    frame_path = tmp_path / "frames" / "frame_0002.jpg"
+    frame_path.parent.mkdir(parents=True)
+    frame_path.touch()
+
+    rich_meta = finalize_frame_metadata(
+        parsed_raw={
+            "scene_type": "office",
+            "scene_description": "employee near desk",
+            "caption": "Person standing near desk.",
+            "people_count": 1,
+            "activities": ["standing"],
+            "objects": [],
+            "keywords": [],
+        },
+        frame_id="video-1_f0002",
+        video_id="video-1",
+        timestamp_seconds=3.0,
+        frame_path=frame_path,
+        ocr_result={"detected_text": [], "license_plates": []},
+        project_root=tmp_path,
+        detection_context={
+            "detected_objects": [{"class_name": "person", "confidence": 0.9, "bbox": [0, 0, 1, 1]}],
+            "tracked_entities": [{"track_id": 7, "class_name": "person", "confidence": 0.9, "bbox": [0, 0, 1, 1]}],
+            "track_ids": [7],
+            "candidate_reasons": ["object_detected", "new_track"],
+            "object_counts": {"person": 1},
+        },
+    )
+
+    assert rich_meta.track_ids == [7]
+    assert rich_meta.candidate_reasons == ["object_detected", "new_track"]
+    assert rich_meta.detected_objects[0].class_name == "person"
+    assert "object_detected" in rich_meta.search_text

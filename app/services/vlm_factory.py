@@ -8,7 +8,7 @@ def get_vlm_service() -> Any:
     It lazily loads the required service to prevent initializing heavy 
     models like vLLM if they are not active.
     """
-    if settings.MOCK_MODEL:
+    if settings.MOCK_MODEL or settings.VLM_ENGINE_TYPE == "mock":
         from app.services.mock_vlm import MockVLMService
         return MockVLMService
 

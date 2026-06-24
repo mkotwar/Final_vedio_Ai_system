@@ -111,6 +111,7 @@ def normalize_event_record(event: Dict[str, Any], video_id: str) -> Dict[str, An
         "duration_seconds": event.get("duration_seconds", 0.0),
         "objects": event.get("objects", []),
         "activities": event.get("activities", []),
+        "activity": event.get("activity", event.get("primary_activity", "")),
         "primary_object": event.get("primary_object", ""),
         "location_text": event.get("location_text", "the monitored area"),
         "scene_context": event.get("scene_context", ""),

@@ -66,6 +66,12 @@ class TestRecoverFromAttributes:
         result = ActivityRecoveryService.recover_from_attributes(objects)
         assert "crossing road" in result
 
+    def test_generic_crossing_attribute_does_not_force_road(self):
+        objects = [{"type": "pedestrian", "subtype": "person", "color": "pink",
+                    "attributes": ["crossing", "carrying bag"]}]
+        result = ActivityRecoveryService.recover_from_attributes(objects)
+        assert "crossing road" not in result
+
     def test_empty_attributes_list(self):
         objects = [{"type": "vehicle", "subtype": "sedan", "color": "gray", "attributes": []}]
         result = ActivityRecoveryService.recover_from_attributes(objects)
@@ -151,6 +157,11 @@ class TestRecoverFromCaption:
         caption = "A pedestrian is walking across the intersection."
         result = ActivityRecoveryService.recover_from_caption(caption)
         assert "crossing road" in result
+
+    def test_generic_crossing_caption_does_not_force_road(self):
+        caption = "A person is crossing the office corridor."
+        result = ActivityRecoveryService.recover_from_caption(caption)
+        assert "crossing road" not in result
 
     def test_standing_caption(self):
         caption = "Two guards standing near the entrance gate."
@@ -270,7 +281,7 @@ class TestRecover:
         assert source == "original"
 
     def test_original_activities_preserved(self):
-        """Non-empty activities must be returned as-is without recovery."""
+        """Non-empty activities are preserved when no extra evidence is available."""
         frame = {
             "activities": ["crossing road"],
             "objects": [],
@@ -280,6 +291,51 @@ class TestRecover:
         activities, source = ActivityRecoveryService.recover(frame)
         assert activities == ["crossing road"]
         assert source == "original"
+
+    def test_original_activity_enriched_from_object_interaction_caption(self):
+        frame = {
+            "activities": ["bending"],
+            "objects": [{"type": "person", "subtype": "employee", "attributes": []}],
+            "caption": "Person bending over to pick something up.",
+            "keywords": [],
+        }
+
+        activities, source = ActivityRecoveryService.recover(frame)
+
+        assert source == "original"
+        assert activities == ["bending", "picking up object"]
+
+    def test_crossing_in_office_context_normalizes_to_walking(self):
+        frame = {
+            "activities": ["crossing"],
+            "objects": [{"type": "person", "subtype": "employee", "attributes": []}],
+            "scene_type": "office",
+            "scene_description": "Person moving through office corridor.",
+            "caption": "Person crossing the office corridor.",
+            "keywords": ["office", "employee"],
+            "location_context": [{"object_id": "person_1", "location": "corridor"}],
+        }
+
+        activities, source = ActivityRecoveryService.recover(frame)
+
+        assert source == "original"
+        assert activities == ["walking"]
+
+    def test_crossing_in_road_context_stays_crossing_road(self):
+        frame = {
+            "activities": ["crossing"],
+            "objects": [{"type": "person", "subtype": "pedestrian", "attributes": []}],
+            "scene_type": "street",
+            "scene_description": "Pedestrian at crosswalk.",
+            "caption": "Person crossing the street.",
+            "keywords": ["crosswalk", "street"],
+            "location_context": [{"object_id": "person_1", "location": "road"}],
+        }
+
+        activities, source = ActivityRecoveryService.recover(frame)
+
+        assert source == "original"
+        assert activities == ["crossing road"]
 
     def test_attributes_take_priority_over_caption(self):
         """Attributes are checked before caption; if attrs succeed, caption is skipped."""

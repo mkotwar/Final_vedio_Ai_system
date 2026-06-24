@@ -10,12 +10,22 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.utils import format_timestamp_human
+from app.services.activity_recovery import ActivityRecoveryService
 from app.services.event_taxonomy import get_event_severity, normalize_event_type
 from app.services.pipeline_contract import event_dir, write_event_catalog
 from app.services.status_service import JobStatusService
 
 class EventAggregationService:
     """Service to group consecutive frames into semantic events based on metadata similarity."""
+
+    EMPTY_SCENE_TEXT = (
+        "no visible activity",
+        "empty office",
+        "empty scene",
+        "unoccupied",
+        "no person",
+        "no people",
+    )
 
     # ------------------------------------------------------------------ #
     # Intelligence extraction helpers                                       #
@@ -46,15 +56,38 @@ class EventAggregationService:
     def _extract_real_world_time(frames: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the real-world clock time from OCR-detected text overlay on CCTV footage.
 
-        Scans the first frame's OCR data for a HH:MM:SS timestamp pattern.
+        CCTV overlays are normally zero-padded (HH:MM:SS). EasyOCR can drop the
+        leading digit from an hour such as 14:02:24, so prefer full two-digit
+        hours and only accept single-digit hours when they repeat.
         """
-        for frame in frames[:3]:  # Only look at first 3 frames
+        full_hour_candidates: List[str] = []
+        weak_hour_candidates: List[str] = []
+
+        for frame in frames[:10]:
             texts = frame.get("ocr", {}).get("detected_text", [])
             for text in texts:
-                # Match HH:MM:SS or H:MM:SS
-                m = re.search(r'\b(\d{1,2}:\d{2}:\d{2})\b', str(text))
-                if m:
-                    return m.group(1)
+                text_value = str(text)
+                for m in re.finditer(r'(?<!\d)(\d{1,2})[:.](\d{2})[:.](\d{2})(?!\d)', text_value):
+                    hour = int(m.group(1))
+                    minute = int(m.group(2))
+                    second = int(m.group(3))
+                    if hour > 23 or minute > 59 or second > 59:
+                        continue
+
+                    normalized = f"{hour:02d}:{minute:02d}:{second:02d}"
+                    if len(m.group(1)) == 2:
+                        full_hour_candidates.append(normalized)
+                    else:
+                        weak_hour_candidates.append(normalized)
+
+        if full_hour_candidates:
+            return Counter(full_hour_candidates).most_common(1)[0][0]
+
+        if weak_hour_candidates:
+            candidate, count = Counter(weak_hour_candidates).most_common(1)[0]
+            if count >= 2:
+                return candidate
+
         return None
 
     @staticmethod
@@ -77,6 +110,34 @@ class EventAggregationService:
                 parts.append(useful_attrs[0])
         return ", ".join(parts) if parts else ""
 
+    @classmethod
+    def _is_empty_scene_group(
+        cls,
+        group: List[Dict[str, Any]],
+        merged_objects: List[Dict[str, Any]],
+        activities: List[str],
+        frame_events: Optional[List[Dict[str, Any]]] = None,
+    ) -> bool:
+        """Return true only when no actor/action evidence exists in the group."""
+        if activities or frame_events:
+            return False
+
+        actor_terms = (
+            "person", "pedestrian", "employee", "customer", "guard", "vehicle", "car",
+            "truck", "bike", "motorcycle", "bag", "backpack", "box", "package",
+            "phone", "weapon",
+        )
+        for obj in merged_objects:
+            obj_text = f"{obj.get('type', '')} {obj.get('subtype', '')}".lower()
+            if any(term in obj_text for term in actor_terms):
+                return False
+
+        text = " ".join(
+            f"{frame.get('caption', '')} {frame.get('scene_description', '')} {' '.join(frame.get('keywords', []) or [])}"
+            for frame in group
+        ).lower()
+        return any(term in text for term in cls.EMPTY_SCENE_TEXT)
+
     @staticmethod
     def _build_participants(merged_objects: List[Dict[str, Any]], primary_agent: Optional[Dict[str, Any]]) -> Tuple[List[str], int]:
         """Build a list of participant descriptions (non-primary actors) and a total count.
@@ -88,6 +149,7 @@ class EventAggregationService:
         VEHICLE_TYPES = {"vehicle", "motorcycle", "car", "truck", "bus", "scooter", "bicycle", "bike"}
 
         primary_key = None
+        primary_id = str(primary_agent.get("id", "")).lower() if primary_agent else ""
         if primary_agent:
             pa_type = primary_agent.get("type", "").lower()
             pa_sub = primary_agent.get("subtype", "").lower()
@@ -95,6 +157,7 @@ class EventAggregationService:
             primary_key = (pa_type, pa_sub, pa_col)
 
         participants = []
+        seen_entity_keys = set()
         entity_count = 0
 
         for obj in merged_objects:
@@ -102,6 +165,7 @@ class EventAggregationService:
             sub = obj.get("subtype", "").lower()
             col = obj.get("color", "").strip()
             attrs = obj.get("attributes", [])
+            obj_id = str(obj.get("id", "")).lower()
 
             is_person = any(p in t or p in sub for p in PERSON_TYPES)
             is_vehicle = any(v in t or v in sub for v in VEHICLE_TYPES)
@@ -109,11 +173,15 @@ class EventAggregationService:
             if not is_person and not is_vehicle:
                 continue
 
+            entity_key = obj_id if obj_id else (t, sub, col.lower())
+            if entity_key in seen_entity_keys:
+                continue
+            seen_entity_keys.add(entity_key)
             entity_count += 1
 
             # Skip primary agent
             obj_key = (t, sub, col.lower())
-            if obj_key == primary_key:
+            if (obj_id and obj_id == primary_id) or obj_key == primary_key:
                 continue
 
             # Build a concise description for this participant
@@ -228,6 +296,31 @@ class EventAggregationService:
         confidence = (frame_score * 0.35) + (activity_score * 0.45) + (richness_score * 0.20)
         return round(confidence, 3)
 
+    @staticmethod
+    def _rank_activities_by_importance(activity_counts: Counter) -> List[str]:
+        """Prefer rare investigative actions over repeated generic movement labels."""
+        priority = {
+            "dropping object": 100,
+            "placing object": 95,
+            "picking up object": 95,
+            "carrying object": 70,
+            "holding": 65,
+            "bending": 60,
+            "interacting": 50,
+            "entering": 45,
+            "exiting": 45,
+            "running": 40,
+            "walking": 10,
+            "standing": 5,
+        }
+        return [
+            activity for activity, _count in sorted(
+                activity_counts.items(),
+                key=lambda item: (priority.get(str(item[0]).lower(), 20), item[1]),
+                reverse=True,
+            )
+        ]
+
     @classmethod
     def _build_narrative_sentence(
         cls,
@@ -240,6 +333,9 @@ class EventAggregationService:
         behavioral_flags: List[str],
     ) -> str:
         """Build a single investigation-grade sentence for this event."""
+        if agent_name == "":
+            return f"No visible activity at {location_text}."
+
         acts_lower = " ".join(activities).lower()
         time_prefix = f"At {real_world_time}, " if real_world_time else ""
 
@@ -260,6 +356,12 @@ class EventAggregationService:
             action = "was running"
         elif "loitering" in behavioral_flags:
             action = "was loitering"
+        elif "dropping object" in acts_lower or "placing object" in acts_lower:
+            action = "placed or dropped an object"
+        elif "picking up object" in acts_lower:
+            action = "picked up an object"
+        elif "carrying object" in acts_lower:
+            action = "was carrying or holding an object"
         elif "collision_impact" in behavioral_flags:
             action = "was involved in a collision/accident"
         elif "fire_explosion" in behavioral_flags:
@@ -346,6 +448,9 @@ class EventAggregationService:
             unified_text = f"{scene_lower} {activities_lower}"
             
         text = unified_text.lower()
+
+        if not objects and not activities and any(term in text for term in cls.EMPTY_SCENE_TEXT):
+            return "empty_scene"
         
         # Priority 1: Fire Incident
         if any(kw in text for kw in ["fire", "explosion", "smoke"]):
@@ -404,11 +509,183 @@ class EventAggregationService:
             return "vehicle_movement"
             
         # Priority 8: Pedestrian Activity
-        if has_person and any(kw in text for kw in ["walk", "run", "cross", "enter", "exit", "stand", "sit", "arriv", "depart", "walking", "running"]):
+        if has_person and any(kw in text for kw in [
+            "walk", "run", "cross", "enter", "exit", "stand", "sit", "arriv", "depart",
+            "walking", "running", "holding", "carrying", "placing", "dropping", "picking up",
+            "picked up", "object", "bag", "box", "package",
+        ]):
             return "pedestrian_activity"
             
         # Fallback
         return "normal_activity"
+
+    @staticmethod
+    def _extract_location_text(first_frame: Dict[str, Any]) -> str:
+        """Extract a concise location label from CCTV OCR text."""
+        location_texts = []
+        for text in first_frame.get("ocr", {}).get("detected_text", []):
+            text_clean = str(text).strip()
+            # Skip pure dates/times and common short noise, keep meaningful words.
+            if not re.match(r'^[\d\-\:\s\%\/]+$', text_clean) and text_clean.lower() not in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]:
+                if len(text_clean) > 2:
+                    location_texts.append(text_clean)
+
+        location_text = " ".join(location_texts).strip()
+        if not location_text or "Gate" not in location_text:
+            return "the monitored area"
+
+        match = re.search(r'(Gate\s+\d+\s+Enterance\s+Area|Gate\s+\d+\s+Entrance\s+Area)', location_text, re.IGNORECASE)
+        return match.group(1) if match else location_text
+
+    @staticmethod
+    def _select_primary_agent(merged_objects: List[Dict[str, Any]]) -> Tuple[Optional[Dict[str, Any]], str]:
+        """Select the main actor using person > vehicle > animal > object > furniture priority."""
+        ignore_terms = [
+            "floor", "wall", "road", "tile", "ground", "ceiling", "sky", "background",
+            "gray metal", "silver/grey metal", "white security booth", "white entrance building",
+            "gray metallic", "metal security gate", "security gate", "entrance building",
+            "gatehouse", "metal fence", "tree", "signboard", "building", "pole",
+        ]
+
+        def is_valid_agent(obj_dict: Dict[str, Any]) -> bool:
+            desc = f'{obj_dict.get("color","")} {obj_dict.get("subtype","")} {obj_dict.get("type","")}'.lower()
+            return not any(term in desc for term in ignore_terms)
+
+        valid_objects = [obj for obj in merged_objects if is_valid_agent(obj)]
+
+        persons = []
+        vehicles = []
+        animals = []
+        objects_list = []
+        furnitures = []
+
+        for obj in valid_objects:
+            obj_type = str(obj.get("type", "")).lower()
+            subtype = str(obj.get("subtype", "")).lower()
+            text = f"{obj_type} {subtype}"
+
+            if any(k in text for k in ["person", "pedestrian", "guard", "rider", "man", "woman"]):
+                persons.append(obj)
+            elif any(k in text for k in ["vehicle", "car", "truck", "bike", "motorcycle", "scooter", "bus"]):
+                vehicles.append(obj)
+            elif any(k in text for k in ["animal", "dog", "cat", "bird"]):
+                animals.append(obj)
+            elif any(k in text for k in ["furniture", "chair", "table", "desk", "sofa", "couch"]):
+                furnitures.append(obj)
+            else:
+                objects_list.append(obj)
+
+        primary_agent = None
+        if persons:
+            primary_agent = persons[0]
+        elif vehicles:
+            primary_agent = vehicles[0]
+        elif animals:
+            primary_agent = animals[0]
+        elif objects_list:
+            primary_agent = objects_list[0]
+        elif furnitures:
+            primary_agent = furnitures[0]
+
+        agent_name = "Subject"
+        if primary_agent:
+            obj_type = str(primary_agent.get("type", "")).lower()
+            subtype = str(primary_agent.get("subtype", "")).lower()
+            if "guard" in subtype or "officer" in subtype:
+                agent_name = "Security guard"
+            elif "rider" in subtype or "motorcyclist" in subtype:
+                agent_name = "Motorcyclist"
+            elif "person" in obj_type or "pedestrian" in subtype:
+                agent_name = "Person"
+            elif "motorcycle" in obj_type or "motorcycle" in subtype or "scooter" in subtype or "bike" in subtype:
+                agent_name = "Motorcycle"
+            elif "car" in subtype or "vehicle" in obj_type:
+                agent_name = "Vehicle"
+            else:
+                agent_name = (subtype or obj_type).capitalize()
+
+        return primary_agent, agent_name
+
+    @staticmethod
+    def _build_group_unified_text(group: List[Dict[str, Any]], merged_objects: List[Dict[str, Any]]) -> str:
+        """Build a deduplicated evidence string used for event type and behavior inference."""
+        unique_captions = []
+        for frame in group:
+            caption = str(frame.get("caption", "")).strip()
+            if caption and caption not in unique_captions:
+                unique_captions.append(caption)
+
+        unique_keywords = []
+        for frame in group:
+            for keyword in frame.get("keywords", []):
+                if keyword not in unique_keywords:
+                    unique_keywords.append(keyword)
+
+        unique_activities = []
+        for frame in group:
+            for activity in frame.get("activities", []):
+                if activity not in unique_activities:
+                    unique_activities.append(activity)
+
+        unique_objects_desc = []
+        for obj in merged_objects:
+            desc = f"{obj.get('color', '')} {obj.get('subtype', '')} {obj.get('type', '')}".strip()
+            if desc and desc not in unique_objects_desc:
+                unique_objects_desc.append(desc)
+
+        return " ".join(unique_captions + unique_keywords + unique_activities + unique_objects_desc).strip()
+
+    @staticmethod
+    def _build_event_summary(
+        event_type: str,
+        agent_name: str,
+        actor_description: str,
+        activities: List[str],
+        location_text: str,
+        participants: List[str],
+    ) -> str:
+        """Build the user-facing event summary text."""
+        if event_type == "empty_scene":
+            return f"No visible activity at {location_text}."
+
+        joined_activities = " and ".join(activities) if activities else ""
+        summary_parts = []
+
+        if event_type == "collision_or_accident":
+            summary_parts.append(f"A collision or accident occurred involving {agent_name.lower()}")
+        elif event_type == "fire_incident":
+            summary_parts.append("A fire or explosion incident was detected")
+        elif event_type == "medical_emergency":
+            summary_parts.append(f"A medical emergency was observed involving {agent_name.lower()}")
+        elif event_type == "weapon_drawn":
+            summary_parts.append(f"A weapon was detected in possession of {agent_name.lower()}")
+        elif event_type == "robbery_incident":
+            summary_parts.append(f"A robbery or theft was detected involving {agent_name.lower()}")
+        elif event_type == "fall_incident":
+            summary_parts.append(f"A fall incident was detected where {agent_name.lower()} fell")
+        elif event_type == "intrusion":
+            summary_parts.append(f"An intrusion or unauthorized access was detected by {agent_name.lower()}")
+        elif event_type == "loitering":
+            summary_parts.append(f"{agent_name} was observed loitering")
+        elif event_type == "vehicle_movement":
+            vehicle_label = agent_name.lower()
+            if agent_name.lower() == "vehicle" and actor_description:
+                vehicle_label = actor_description.replace(",", "").lower()
+            summary_parts.append(f"Vehicle movement involving {vehicle_label} was detected")
+        elif event_type == "pedestrian_activity":
+            summary_parts.append(f"Pedestrian activity involving {agent_name.lower()} was detected")
+        else:
+            if activities:
+                summary_parts.append(f"{agent_name} was observed {joined_activities}")
+            else:
+                summary_parts.append(f"{agent_name} was present")
+
+        summary_parts[0] += f" at {location_text}."
+
+        if participants:
+            summary_parts.append(f"Other participants: {', '.join(participants)}.")
+
+        return " ".join(summary_parts)
 
     @classmethod
     def process_events(cls, video_id: str, frames_metadata: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -428,8 +705,10 @@ class EventAggregationService:
             logger.warning(f"No frame metadata provided for event aggregation (video: {video_id})")
             return []
 
+        enriched_frames = [ActivityRecoveryService.apply(dict(frame)) for frame in frames_metadata]
+
         # Sort frames by timestamp_seconds to ensure temporal sequence
-        sorted_frames = sorted(frames_metadata, key=lambda x: x.get("timestamp_seconds", 0.0))
+        sorted_frames = sorted(enriched_frames, key=lambda x: x.get("timestamp_seconds", 0.0))
 
         # Group consecutive frames based on state tracking with 1-frame tolerance
         groups: List[List[Dict[str, Any]]] = []
@@ -604,7 +883,6 @@ class EventAggregationService:
         events: List[Dict[str, Any]] = []
 
         for idx, group in enumerate(groups, 1):
-            event_id = f"evt_{idx:03d}"
             first_frame = group[0]
             last_frame = group[-1]
 
@@ -620,7 +898,7 @@ class EventAggregationService:
                     all_acts.append(act)
             if all_acts:
                 act_counts = Counter(all_acts)
-                activities = [act for act, _ in act_counts.most_common(2)]
+                activities = cls._rank_activities_by_importance(act_counts)[:3]
             else:
                 activities = []
 
@@ -634,21 +912,34 @@ class EventAggregationService:
                     st = obj.get("subtype", "")
                     col = obj.get("color", "")
                     attrs = obj.get("attributes", [])
-                    
-                    key = (t.lower(), st.lower(), col.lower())
+
+                    obj_id = str(obj.get("id", "")).strip().lower()
+                    object_text = f"{t} {st}".lower()
+                    if obj_id and any(kind in object_text for kind in ("person", "pedestrian", "employee", "customer", "guard", "vehicle", "car", "truck", "bike", "motorcycle")):
+                        key = (t.lower(), obj_id)
+                    else:
+                        key = (t.lower(), st.lower(), col.lower())
+
                     if key not in merged_objects_dict:
                         merged_objects_dict[key] = {
+                            "id": obj_id,
                             "type": t,
                             "subtype": st,
                             "color": col,
+                            "colors": Counter([col]) if col else Counter(),
                             "attributes": set(attrs)
                         }
                     else:
+                        if col:
+                            merged_objects_dict[key]["colors"][col] += 1
                         merged_objects_dict[key]["attributes"].update(attrs)
 
             merged_objects = []
             for obj in merged_objects_dict.values():
                 obj["attributes"] = sorted(list(obj["attributes"]))
+                colors = obj.pop("colors", Counter())
+                if colors:
+                    obj["color"] = colors.most_common(1)[0][0]
                 merged_objects.append(obj)
 
             # Gather source frame IDs
@@ -675,86 +966,21 @@ class EventAggregationService:
                         "severity": inc.get("severity", "medium")
                     })
 
+            is_empty_scene = cls._is_empty_scene_group(group, merged_objects, activities, frame_events)
+
+            if is_empty_scene:
+                logger.debug(
+                    f"Skipping empty-scene group from event catalog | video_id={video_id} "
+                    f"start={start_time:.2f}s end={end_time:.2f}s"
+                )
+                continue
+
+            event_id = f"evt_{len(events) + 1:03d}"
+
             # 1. Location text extraction (scoped per group — fixes location_text scope leak)
-            location_texts = []
-            for t in first_frame.get("ocr", {}).get("detected_text", []):
-                t_clean = t.strip()
-                # Skip pure dates/times and common short noise, keep meaningful words
-                if not re.match(r'^[\d\-\:\s\%\/]+$', t_clean) and t_clean.lower() not in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]:
-                    if len(t_clean) > 2:
-                        location_texts.append(t_clean)
-
-            location_text = " ".join(location_texts).strip()
-            if not location_text or "Gate" not in location_text:
-                location_text = "the monitored area"
-            else:
-                match = re.search(r'(Gate\s+\d+\s+Enterance\s+Area|Gate\s+\d+\s+Entrance\s+Area)', location_text, re.IGNORECASE)
-                if match:
-                    location_text = match.group(1)
+            location_text = cls._extract_location_text(first_frame)
             
-            # 2. Identify agent (Priority: Person > Vehicle > Animal > Object > Furniture > Background)
-            # Floor, wall, road, tile must never become primary actors.
-            ignore_terms = ["floor", "wall", "road", "tile", "ground", "ceiling", "sky", "background", "gray metal", "silver/grey metal", "white security booth", "white entrance building", "gray metallic", "metal security gate", "security gate", "entrance building", "gatehouse", "metal fence", "tree", "signboard", "building", "pole"]
-
-            def is_valid_agent(obj_dict):
-                desc = f'{obj_dict.get("color","")} {obj_dict.get("subtype","")} {obj_dict.get("type","")}'.lower()
-                for term in ignore_terms:
-                    if term in desc:
-                        return False
-                return True
-
-            valid_objects = [o for o in merged_objects if is_valid_agent(o)]
-
-            persons = []
-            vehicles = []
-            animals = []
-            objects_list = []
-            furnitures = []
-
-            for o in valid_objects:
-                t = str(o.get("type", "")).lower()
-                st = str(o.get("subtype", "")).lower()
-                text = f"{t} {st}"
-                
-                if any(k in text for k in ["person", "pedestrian", "guard", "rider", "man", "woman"]):
-                    persons.append(o)
-                elif any(k in text for k in ["vehicle", "car", "truck", "bike", "motorcycle", "scooter", "bus"]):
-                    vehicles.append(o)
-                elif any(k in text for k in ["animal", "dog", "cat", "bird"]):
-                    animals.append(o)
-                elif any(k in text for k in ["furniture", "chair", "table", "desk", "sofa", "couch"]):
-                    furnitures.append(o)
-                else:
-                    objects_list.append(o)
-
-            primary_agent = None
-            if persons:
-                primary_agent = persons[0]
-            elif vehicles:
-                primary_agent = vehicles[0]
-            elif animals:
-                primary_agent = animals[0]
-            elif objects_list:
-                primary_agent = objects_list[0]
-            elif furnitures:
-                primary_agent = furnitures[0]
-
-            agent_name = "Subject"
-            if primary_agent:
-                t = primary_agent.get("type", "").lower()
-                st = primary_agent.get("subtype", "").lower()
-                if "guard" in st or "officer" in st:
-                    agent_name = "Security guard"
-                elif "rider" in st or "motorcyclist" in st:
-                    agent_name = "Motorcyclist"
-                elif "person" in t or "pedestrian" in st:
-                    agent_name = "Person"
-                elif "motorcycle" in t or "motorcycle" in st or "scooter" in st or "bike" in st:
-                    agent_name = "Motorcycle"
-                elif "car" in st or "vehicle" in t:
-                    agent_name = "Vehicle"
-                else:
-                    agent_name = (st or t).capitalize()
+            primary_agent, agent_name = cls._select_primary_agent(merged_objects)
 
             # --- Intelligence Enrichment (Phase A) ---
             # Scene context: carry forward VLM's scene understanding from first frame
@@ -769,34 +995,7 @@ class EventAggregationService:
             # Participants: other persons/vehicles in the scene
             participants, participant_count = cls._build_participants(merged_objects, primary_agent)
 
-            # 3. Remove unified_text duplication
-            unique_captions = []
-            for f in group:
-                cap = str(f.get("caption", "")).strip()
-                if cap and cap not in unique_captions:
-                    unique_captions.append(cap)
-            
-            unique_keywords = []
-            for f in group:
-                for kw in f.get("keywords", []):
-                    if kw not in unique_keywords:
-                        unique_keywords.append(kw)
-                        
-            unique_activities = []
-            for f in group:
-                for a in f.get("activities", []):
-                    if a not in unique_activities:
-                        unique_activities.append(a)
-                        
-            unique_objects_desc = []
-            for obj in merged_objects:
-                desc = f"{obj.get('color', '')} {obj.get('subtype', '')} {obj.get('type', '')}".strip()
-                if desc and desc not in unique_objects_desc:
-                    unique_objects_desc.append(desc)
-                    
-            group_unified_text = " ".join(unique_captions + unique_keywords + unique_activities + unique_objects_desc).strip()
-
-
+            group_unified_text = cls._build_group_unified_text(group, merged_objects)
 
             # Behavioral flags: pattern analysis
             behavioral_flags = cls._compute_behavioral_flags(activities, duration, participant_count, merged_objects, group_unified_text)
@@ -818,45 +1017,9 @@ class EventAggregationService:
             scene_type = first_frame.get("scene_type", "unknown")
             event_type = normalize_event_type(cls.infer_event_type(merged_objects, activities, scene_type, group_unified_text))
 
-            # 4. Description synthesis
-            joined_activities = " and ".join(activities) if activities else ""
-            summary_parts = []
-            
-            if event_type == "collision_or_accident":
-                summary_parts.append(f"A collision or accident occurred involving {agent_name.lower()}")
-            elif event_type == "fire_incident":
-                summary_parts.append(f"A fire or explosion incident was detected")
-            elif event_type == "medical_emergency":
-                summary_parts.append(f"A medical emergency was observed involving {agent_name.lower()}")
-            elif event_type == "weapon_drawn":
-                summary_parts.append(f"A weapon was detected in possession of {agent_name.lower()}")
-            elif event_type == "robbery_incident":
-                summary_parts.append(f"A robbery or theft was detected involving {agent_name.lower()}")
-            elif event_type == "fall_incident":
-                summary_parts.append(f"A fall incident was detected where {agent_name.lower()} fell")
-            elif event_type == "intrusion":
-                summary_parts.append(f"An intrusion or unauthorized access was detected by {agent_name.lower()}")
-            elif event_type == "loitering":
-                summary_parts.append(f"{agent_name} was observed loitering")
-            elif event_type == "vehicle_movement":
-                vehicle_label = agent_name.lower()
-                if agent_name.lower() == "vehicle" and actor_description:
-                    vehicle_label = actor_description.replace(",", "").lower()
-                summary_parts.append(f"Vehicle movement involving {vehicle_label} was detected")
-            elif event_type == "pedestrian_activity":
-                summary_parts.append(f"Pedestrian activity involving {agent_name.lower()} was detected")
-            else:
-                if activities:
-                    summary_parts.append(f"{agent_name} was observed {joined_activities}")
-                else:
-                    summary_parts.append(f"{agent_name} was present")
-                    
-            summary_parts[0] += f" at {location_text}."
-            
-            if participants:
-                summary_parts.append(f"Other participants: {', '.join(participants)}.")
-                
-            summary = " ".join(summary_parts)
+            summary = cls._build_event_summary(
+                event_type, agent_name, actor_description, activities, location_text, participants
+            )
 
             event_severity = get_event_severity(event_type)
 
@@ -874,6 +1037,7 @@ class EventAggregationService:
                 "frame_count": len(group),
                 "objects": merged_objects,
                 "activities": activities,
+                "activity": activity_summary,
                 "primary_object": primary_object_type,
                 "color": primary_color,
                 "primary_activity": activity_summary,
@@ -922,6 +1086,7 @@ class EventAggregationService:
                 "duration_seconds": e["duration_seconds"],
                 "objects": e.get("objects", []),
                 "activities": e.get("activities", []),
+                "activity": e.get("activity", e.get("primary_activity", "")),
                 "primary_object": e.get("primary_object", ""),
                 "location_text": e.get("location_text", "the monitored area"),
                 # --- Narrative Intelligence Fields (Phase D) ---

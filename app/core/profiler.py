@@ -15,6 +15,7 @@ class PerformanceTracker:
         self.video_id = video_id
         self.frames_data: List[Dict[str, Any]] = []
         self.video_upload_ms = 0.0
+        self.video_duration_seconds = 0.0
         self.start_time = 0.0
         self.end_time = 0.0
         self.sampling_enabled = False
@@ -34,6 +35,10 @@ class PerformanceTracker:
     def set_upload_time(self, ms: float):
         """Sets the video file upload duration in milliseconds."""
         self.video_upload_ms = ms
+
+    def set_video_duration(self, seconds: float):
+        """Stores the source video duration for real-time performance checks."""
+        self.video_duration_seconds = max(0.0, float(seconds or 0.0))
 
     def start_pipeline(self):
         """Starts timing the frame ingestion and analysis pipeline."""
@@ -84,6 +89,16 @@ class PerformanceTracker:
 
         pipeline_duration_seconds = self.end_time - self.start_time
         total_ingestion_seconds = round(pipeline_duration_seconds + (self.video_upload_ms / 1000.0), 2)
+        realtime_ratio = (
+            round(total_ingestion_seconds / self.video_duration_seconds, 3)
+            if self.video_duration_seconds > 0
+            else 0.0
+        )
+        faster_than_video_length = (
+            total_ingestion_seconds < self.video_duration_seconds
+            if self.video_duration_seconds > 0
+            else None
+        )
 
         frames_processed = len(self.frames_data)
         if frames_processed > 0:
@@ -102,6 +117,9 @@ class PerformanceTracker:
             "avg_vlm_ms": round(avg_vlm, 2),
             "avg_write_ms": round(avg_write, 2),
             "total_ingestion_seconds": total_ingestion_seconds,
+            "video_duration_seconds": round(self.video_duration_seconds, 2),
+            "realtime_ratio": realtime_ratio,
+            "faster_than_video_length": faster_than_video_length,
         }
 
         # Append to performance.log
@@ -137,7 +155,12 @@ class PerformanceTracker:
         print(f" Avg OCR Time:            {summary['avg_ocr_ms']} ms")
         print(f" Avg VLM Inference:       {summary['avg_vlm_ms']} ms")
         print(f" Avg Metadata Write:      {summary['avg_write_ms']} ms")
+        if summary["video_duration_seconds"] > 0:
+            print(f" Video Duration:          {summary['video_duration_seconds']} seconds")
         print(f" Total Ingestion Time:    {summary['total_ingestion_seconds']} seconds")
+        if summary["video_duration_seconds"] > 0:
+            print(f" Realtime Ratio:          {summary['realtime_ratio']}x")
+            print(f" Faster Than Video:       {summary['faster_than_video_length']}")
         print("=" * 60 + "\n")
 
     def _generate_report(self, summary: Dict[str, Any]):
@@ -194,7 +217,10 @@ This report summarizes the performance metrics collected during the video ingest
 * **Video ID**: `{summary['video_id']}`
 * **Frames Processed**: {summary['frames_processed']}
 * **Video Upload Time**: {self.video_upload_ms / 1000.0:.2f} seconds
+* **Source Video Duration**: {summary['video_duration_seconds']:.2f} seconds
 * **Total Ingestion Time**: {summary['total_ingestion_seconds']:.2f} seconds
+* **Realtime Ratio**: {summary['realtime_ratio']:.3f}x
+* **Faster Than Video Length**: {summary['faster_than_video_length']}
 
 ---
 

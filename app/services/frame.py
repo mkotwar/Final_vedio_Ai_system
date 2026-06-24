@@ -15,10 +15,111 @@ from app.services.motion_window_service import MotionWindowService
 from app.services.pipeline_contract import frame_catalog_path, frame_metadata_dir
 from app.core.profiler import PerformanceTracker
 from app.services.status_service import JobStatusService
+from app.services.object_detection.detector import ObjectDetector
+from app.services.object_tracker import ObjectTrackerService
+from app.services.event_candidate_selector import EventCandidateSelector
 
 
 class FrameExtractionService:
     """Service layer managing video frame extraction and coordinating VLM analysis runs."""
+
+    @staticmethod
+    def _timestamp_in_windows(
+        timestamp_seconds: float,
+        windows: List[Tuple[float, float]],
+        context_seconds: float = 0.0,
+    ) -> bool:
+        """Return true when a timestamp falls inside any window, optionally padded by context."""
+        pad = max(0.0, float(context_seconds or 0.0))
+        return any((start - pad) <= timestamp_seconds <= (end + pad) for start, end in windows)
+
+    @classmethod
+    def _select_vlm_candidate_tuples(
+        cls,
+        extracted_tuples: List[Tuple[str, str, float, Path]],
+        motion_windows: List[Tuple[float, float]],
+    ) -> List[Tuple[str, str, float, Path, Dict[str, Any]]]:
+        """Send only event-likely frames to the VLM, not empty background frames."""
+        if not extracted_tuples:
+            return []
+        detector = ObjectDetector()
+        frame_detections = [
+            detector.detect_frame(path, frame_id, video_id, ts)
+            for frame_id, video_id, ts, path in extracted_tuples
+        ]
+        tracking_map = ObjectTrackerService.track_frames(frame_detections)
+        selection_map = EventCandidateSelector.select(
+            extracted_tuples=extracted_tuples,
+            frame_detections=frame_detections,
+            tracking_map=tracking_map,
+            motion_windows=motion_windows,
+        )
+
+        candidate_tuples: List[Tuple[str, str, float, Path, Dict[str, Any]]] = []
+        for frame_id, video_id, ts, path in extracted_tuples:
+            selection = selection_map.get(frame_id, {})
+            if selection.get("selected"):
+                candidate_tuples.append((frame_id, video_id, ts, path, selection))
+
+        if not candidate_tuples and extracted_tuples:
+            logger.info("No event-like frames selected for VLM; skipping empty/background-only coverage frames.")
+
+        return candidate_tuples
+
+    @classmethod
+    def _build_temporal_context_strips(
+        cls,
+        extracted_tuples: List[Tuple[str, str, float, Path]],
+        frame_dir: Path,
+    ) -> List[Tuple[str, str, float, Path, Path]]:
+        """Create prev/current/next analysis strips while preserving original frame paths."""
+        if not settings.ENABLE_TEMPORAL_CONTEXT_STRIPS or len(extracted_tuples) < 2:
+            return [(frame_id, video_id, ts, path, path) for frame_id, video_id, ts, path in extracted_tuples]
+
+        import cv2
+        import numpy as np
+
+        context_dir = frame_dir / "context"
+        context_dir.mkdir(parents=True, exist_ok=True)
+
+        context_tuples: List[Tuple[str, str, float, Path, Path]] = []
+        labels = ("PREVIOUS", "CURRENT", "NEXT")
+
+        for idx, (frame_id, video_id, ts, original_path) in enumerate(extracted_tuples):
+            neighbor_paths = [
+                extracted_tuples[max(0, idx - 1)][3],
+                original_path,
+                extracted_tuples[min(len(extracted_tuples) - 1, idx + 1)][3],
+            ]
+
+            panels = []
+            for label, path in zip(labels, neighbor_paths):
+                image = cv2.imread(str(path))
+                if image is None:
+                    image = np.zeros((360, 640, 3), dtype=np.uint8)
+                image = cv2.resize(image, (512, 288), interpolation=cv2.INTER_AREA)
+                cv2.rectangle(image, (0, 0), (512, 34), (0, 0, 0), thickness=-1)
+                cv2.putText(
+                    image,
+                    label,
+                    (12, 24),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.72,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
+                panels.append(image)
+
+            strip = cv2.hconcat(panels)
+            out_path = context_dir / f"{original_path.stem}_context.jpg"
+            if not cv2.imwrite(str(out_path), strip):
+                logger.warning(f"Failed to write temporal context strip for {frame_id}; using original frame.")
+                out_path = original_path
+
+            context_tuples.append((frame_id, video_id, ts, out_path, original_path))
+
+        return context_tuples
 
     @classmethod
     def compute_similarity_metrics(
@@ -116,6 +217,8 @@ class FrameExtractionService:
 
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        source_video_duration_seconds = (total_frames / fps) if fps > 0 else 0.0
+        tracker.set_video_duration(source_video_duration_seconds)
         
         estimated_analysis_frames = int(total_frames / fps) if fps > 0 else 0
         JobStatusService.update(video_id, total_frames=estimated_analysis_frames)
@@ -147,10 +250,13 @@ class FrameExtractionService:
 
         last_sent_frame = None
         last_retained_timestamp = 0.0
+        last_out_of_window_timestamp = None
         
         retained_by_motion = 0
         retained_by_ssim = 0
         retained_by_temporal = 0
+        retained_by_baseline = 0
+        retained_by_gap_safeguard = 0
         
         total_extracted = 0
         skipped_count = 0
@@ -173,20 +279,40 @@ class FrameExtractionService:
 
                 should_send = True
                 hist_diff, ssim_diff, motion_score = 0.0, 0.0, 0.0
+                retained_by_outside_baseline = False
+                retained_by_coverage_safeguard = False
+                passed_temporal = False
+                passed_ssim = False
+                passed_histogram = False
+                passed_motion = False
+                decision_reasons: List[str] = []
 
                 current_window_idx = None
+                in_motion_window = False
                 if is_motion_windowing_enabled and motion_windows:
-                    in_window = False
                     for idx, (start_w, end_w) in enumerate(motion_windows):
                         if start_w <= second <= end_w:
-                            in_window = True
+                            in_motion_window = True
                             window_stats[idx]["frames_in"] += 1
                             current_window_idx = idx
                             break
-                    if not in_window:
-                        should_send = False
+                    if not in_motion_window:
+                        baseline_interval = max(1.0, float(settings.OUT_OF_WINDOW_BASELINE_SECONDS))
+                        if last_out_of_window_timestamp is None or (second - last_out_of_window_timestamp) >= baseline_interval:
+                            should_send = True
+                            retained_by_outside_baseline = True
+                            last_out_of_window_timestamp = second
+                            retained_by_baseline += 1
+                        else:
+                            should_send = False
 
-                if should_send and settings.ENABLE_ADAPTIVE_SAMPLING and last_sent_frame is not None:
+                if (
+                    should_send
+                    and settings.ENABLE_ADAPTIVE_SAMPLING
+                    and last_sent_frame is not None
+                    and not in_motion_window
+                    and not retained_by_outside_baseline
+                ):
                     hist_diff, ssim_diff, motion_score = cls.compute_similarity_metrics(frame, last_sent_frame)
 
                     ssim_score = 1.0 - ssim_diff
@@ -225,25 +351,14 @@ class FrameExtractionService:
                             retained_by_motion += 1
                         else:
                             retained_by_ssim += 1
+                    decision_reasons = reasons[:]
 
-                    adaptive_telemetry.append({
-                        "frame_id": frame_id,
-                        "timestamp": second,
-                        "ssim_score": ssim_score,
-                        "histogram_score": histogram_score,
-                        "motion_score": motion_score,
-                        "thresholds_used": {
-                            "ssim": settings.SSIM_THRESHOLD,
-                            "histogram": settings.HISTOGRAM_THRESHOLD,
-                            "motion": settings.MOTION_THRESHOLD
-                        },
-                        "passed_ssim": passed_ssim,
-                        "passed_histogram": passed_histogram,
-                        "passed_motion": passed_motion,
-                        "passed_temporal": passed_temporal,
-                        "final_decision": "KEEP" if should_send else "DROP",
-                        "decision_reason": " | ".join(reasons)
-                    })
+                max_gap_seconds = max(1.0, float(settings.MAX_FRAME_GAP_SECONDS))
+                if not should_send and (second - last_retained_timestamp) >= max_gap_seconds:
+                    should_send = True
+                    retained_by_coverage_safeguard = True
+                    retained_by_gap_safeguard += 1
+                    decision_reasons.append("Coverage safeguard")
 
                 if should_send:
                     last_retained_timestamp = second
@@ -270,11 +385,37 @@ class FrameExtractionService:
                         prog = min(10.0, (total_extracted / estimated_analysis_frames) * 10.0)
                         JobStatusService.update(video_id, progress_percent=round(prog, 1))
                 else:
+                    if not decision_reasons:
+                        decision_reasons.append("Outside motion windows without baseline slot")
                     skipped_count += 1
                     logger.debug(
                         f"Skipped frame {frame_id} at {second}s (similarity: hist_diff={hist_diff:.3f}, "
                         f"ssim_diff={ssim_diff:.3f}, motion={motion_score:.3f})"
                     )
+
+                if settings.ENABLE_ADAPTIVE_SAMPLING or is_motion_windowing_enabled:
+                    adaptive_telemetry.append({
+                        "frame_id": frame_id,
+                        "timestamp": second,
+                        "ssim_score": 1.0 - ssim_diff,
+                        "histogram_score": 1.0 - hist_diff,
+                        "motion_score": motion_score,
+                        "thresholds_used": {
+                            "ssim": settings.SSIM_THRESHOLD,
+                            "histogram": settings.HISTOGRAM_THRESHOLD,
+                            "motion": settings.MOTION_THRESHOLD,
+                            "max_gap_seconds": settings.MAX_FRAME_GAP_SECONDS,
+                        },
+                        "passed_ssim": passed_ssim,
+                        "passed_histogram": passed_histogram,
+                        "passed_motion": passed_motion,
+                        "passed_temporal": passed_temporal,
+                        "passed_baseline": retained_by_outside_baseline,
+                        "passed_coverage_safeguard": retained_by_coverage_safeguard,
+                        "in_motion_window": in_motion_window,
+                        "final_decision": "KEEP" if should_send else "DROP",
+                        "decision_reason": " | ".join(decision_reasons) if decision_reasons else "Initial retention"
+                    })
 
                 # Increment states
                 frame_idx += 1
@@ -294,10 +435,10 @@ class FrameExtractionService:
         finally:
             cap.release()
 
-        processed_count = len(extracted_tuples)
+        retained_count = len(extracted_tuples)
         reduction_percentage = 0.0
         if total_extracted > 0:
-            reduction_percentage = ((total_extracted - processed_count) / total_extracted) * 100.0
+            reduction_percentage = ((total_extracted - retained_count) / total_extracted) * 100.0
 
         if adaptive_telemetry:
             eval_count = len(adaptive_telemetry)
@@ -326,6 +467,8 @@ class FrameExtractionService:
                 "frames_retained_by_motion": retained_by_motion,
                 "frames_retained_by_ssim": retained_by_ssim,
                 "frames_retained_by_temporal": retained_by_temporal,
+                "frames_retained_by_baseline": retained_by_baseline,
+                "frames_retained_by_gap_safeguard": retained_by_gap_safeguard,
                 "avg_ssim": avg_ssim,
                 "avg_histogram": avg_hist,
                 "avg_motion": avg_motion,
@@ -349,6 +492,8 @@ class FrameExtractionService:
                 f"  - By Motion: {retained_by_motion}",
                 f"  - By SSIM/Hist: {retained_by_ssim}",
                 f"  - By Temporal Safeguard: {retained_by_temporal}",
+                f"  - By Out-of-Window Baseline: {retained_by_baseline}",
+                f"  - By Coverage Safeguard: {retained_by_gap_safeguard}",
                 f"**Frames Dropped:** {dropped}",
                 f"**Retention Rate:** {ret_rate:.2f}%\n",
                 f"**Average SSIM:** {avg_ssim:.3f}",
@@ -392,13 +537,27 @@ class FrameExtractionService:
             f"Video ID: {video_id}\n"
             f"Total Frames Extracted (1fps base): {total_extracted}\n"
             f"Motion Windows Detected: {len(motion_windows) if is_motion_windowing_enabled else 'N/A (Disabled)'}\n"
-            f"Frames Sent To VLM: {processed_count}\n"
+            f"Frames Retained For Coverage: {retained_count}\n"
             f"Estimated Workload Reduction: {reduction_percentage:.1f}%\n"
             f"-----------------------"
         )
         
-        logger.info(f"Successfully extracted {processed_count} frame JPEG images from video: {video_id}. Starting VLM batch processing...")
-        JobStatusService.update(video_id, current_step=f"Starting VLM Analysis (0/{processed_count})...", total_frames=processed_count, progress_percent=10.0)
+        vlm_candidate_tuples = cls._select_vlm_candidate_tuples(extracted_tuples, motion_windows)
+        candidate_frame_ids = {frame_id for frame_id, _video_id, _ts, _path, _context in vlm_candidate_tuples}
+        candidate_context_map = {
+            frame_id: context for frame_id, _video_id, _ts, _path, context in vlm_candidate_tuples
+        }
+
+        logger.info(
+            f"Retained {retained_count} frames for coverage and selected {len(vlm_candidate_tuples)} "
+            f"event-like frames for VLM analysis for video: {video_id}."
+        )
+        JobStatusService.update(
+            video_id,
+            current_step=f"Starting VLM Analysis (0/{len(vlm_candidate_tuples)})...",
+            total_frames=len(vlm_candidate_tuples),
+            progress_percent=10.0,
+        )
 
         # 3. Process extracted frames in batches using the configured native VLM backend
         rich_frames: List[Dict[str, Any]] = []
@@ -409,9 +568,16 @@ class FrameExtractionService:
         video_metadata_dir = frame_metadata_dir(video_id)
         video_metadata_dir.mkdir(parents=True, exist_ok=True)
 
+        analysis_pool = cls._build_temporal_context_strips(extracted_tuples, frame_dir)
+        analysis_tuples = [
+            (item[0], item[1], item[2], item[3], item[4], candidate_context_map.get(item[0], {}))
+            for item in analysis_pool if item[0] in candidate_frame_ids
+        ]
+        processed_count = len(analysis_tuples)
+
         batch_size = settings.BATCH_SIZE
         for i in range(0, processed_count, batch_size):
-            batch = extracted_tuples[i : i + batch_size]
+            batch = analysis_tuples[i : i + batch_size]
             current_batch_num = i // batch_size + 1
             total_batches = (processed_count + batch_size - 1) // batch_size
             logger.info(f"Processing VLM batch {current_batch_num}/{total_batches} (frames {i} to {i + len(batch)} of {processed_count}) for video ID {video_id}...")
@@ -479,6 +645,7 @@ class FrameExtractionService:
             raise FrameExtractionError(f"Failed saving frame catalog index: {str(cat_exc)}")
 
         # 5. Formulate final stats and log success
+        frames_filtered_before_vlm = max(0, retained_count - processed_count)
         reduction_percent = round((skipped_count / total_extracted) * 100.0, 2) if total_extracted > 0 else 0.0
         stats = {
             "video_id": video_id,
@@ -487,7 +654,9 @@ class FrameExtractionService:
             "failed_frames": failed_count,
             "frames": rich_frames,
             "total_frames_extracted": total_extracted,
+            "frames_retained_for_coverage": retained_count,
             "frames_sent_to_qwen": processed_count,
+            "frames_filtered_before_vlm": frames_filtered_before_vlm,
             "frames_skipped": skipped_count,
             "reduction_percent": reduction_percent,
             "frames_extracted": total_extracted,

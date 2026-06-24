@@ -31,6 +31,18 @@ from app.schemas.summary import (
 class SummaryService:
     """Service for generating deterministic video summaries from aggregated events."""
 
+    OBJECT_INTERACTION_TERMS = (
+        "pick something up",
+        "pick up",
+        "picked up",
+        "picking up",
+        "holding object",
+        "placing object",
+        "dropping object",
+        "dropped object",
+        "putting down",
+    )
+
     @staticmethod
     def _time_to_seconds(time_str: str) -> int:
         """Helper to convert HH:MM:SS to seconds for easy calculation."""
@@ -47,6 +59,48 @@ class SummaryService:
             return 0
 
     @classmethod
+    def _catalog_misses_frame_object_interactions(
+        cls,
+        events: List[AggregatedEvent],
+        video_id: str,
+    ) -> bool:
+        """Detect old event catalogs that flattened frame-level object handling."""
+        event_text = " ".join(
+            [
+                event.description or "",
+                event.narrative_sentence or "",
+                " ".join(event.activities or []),
+                event.unified_text or "",
+            ]
+            for event in events
+        ).lower()
+
+        if any(term in event_text for term in ("picking up object", "dropping object", "placing object")):
+            return False
+
+        try:
+            frames = load_frame_records(video_id)
+        except Exception as exc:
+            logger.warning(f"Could not inspect frames for object interaction rebuild check: {exc}")
+            return False
+
+        for frame in frames:
+            frame_text_parts = [
+                str(frame.get("caption", "") or ""),
+                " ".join(str(a) for a in frame.get("activities", []) or []),
+                " ".join(str(k) for k in frame.get("keywords", []) or []),
+            ]
+            for obj in frame.get("objects", []) or []:
+                if isinstance(obj, dict):
+                    frame_text_parts.extend(str(a) for a in obj.get("attributes", []) or [])
+
+            frame_text = " ".join(frame_text_parts).lower()
+            if any(term in frame_text for term in cls.OBJECT_INTERACTION_TERMS):
+                return True
+
+        return False
+
+    @classmethod
     def load_events(cls, video_id: str) -> List[AggregatedEvent]:
         """Load events from the canonical catalog, rebuilding from known fallbacks if needed."""
         events_path = event_catalog_path(video_id)
@@ -57,6 +111,24 @@ class SummaryService:
             data = load_event_catalog(video_id)
             if data:
                 loaded_events = [AggregatedEvent(**normalize_event_record(event, video_id)) for event in data]
+                if cls._catalog_misses_frame_object_interactions(loaded_events, video_id):
+                    logger.info(
+                        f"Event catalog for video {video_id} missed frame-level object interactions; rebuilding from frames."
+                    )
+                    frames_metadata = load_frame_records(video_id)
+                    from app.services.event_aggregation import EventAggregationService
+                    from app.services.search_service import SearchService
+
+                    rebuilt = EventAggregationService.process_events(video_id, frames_metadata)
+                    if rebuilt:
+                        try:
+                            SearchService.index_events(video_id, rebuilt)
+                        except Exception as search_exc:
+                            logger.warning(f"Failed to index rebuilt events for video {video_id}: {search_exc}")
+
+                    data = load_event_catalog(video_id)
+                    loaded_events = [AggregatedEvent(**normalize_event_record(event, video_id)) for event in data]
+
                 logger.info(
                     f"Summary service loaded {len(loaded_events)} events for video {video_id} from {events_path}."
                 )
@@ -328,6 +400,8 @@ class SummaryService:
         cast_list = []
 
         for event in events:
+            if event.event_type == "empty_scene":
+                continue
             if event.primary_object:
                 actor_key = (event.primary_object, event.actor_description or "")
                 if actor_key not in seen_actors:
@@ -352,6 +426,18 @@ class SummaryService:
         sorted_events = sorted(events, key=lambda x: cls._time_to_seconds(x.start_time))
         flow = []
         for event in sorted_events:
+            if event.event_type == "empty_scene":
+                phase = "EMPTY"
+                flow.append({
+                    "time_range": f"{event.start_time} â€“ {event.end_time}",
+                    "real_world_time": event.real_world_time or "",
+                    "phase": phase,
+                    "actor": "",
+                    "sentence": event.narrative_sentence or event.description,
+                    "duration": event.duration_seconds,
+                })
+                continue
+
             flags = event.behavioral_flags or []
             acts = " ".join(event.activities or []).lower()
 
@@ -453,13 +539,15 @@ class SummaryService:
         duration_str = f"{duration_s // 60}m {duration_s % 60}s" if duration_s >= 60 else f"{duration_s}s"
 
         real_world_time = scene["real_world_time"]
+        duration_label = "clip" if duration_s >= 10 else "of detected activity"
+
         if real_world_time:
             opening = (
-                f"This {duration_str} clip captures activity at the {location} ({scene_type}) "
+                f"This {duration_str} {duration_label} captures activity at the {location} ({scene_type}) "
                 f"recorded at {real_world_time}."
             )
         else:
-            opening = f"This {duration_str} clip captures activity at the {location} ({scene_type})."
+            opening = f"This {duration_str} {duration_label} captures activity at the {location} ({scene_type})."
         parts.append(opening)
 
         if scene["scene_description"]:

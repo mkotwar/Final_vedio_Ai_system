@@ -21,6 +21,73 @@ from app.services.vlm_utils import (
 )
 from qwen_vl_utils import process_vision_info
 
+MODEL_ID_ALIASES = {
+    "qwen2.5vl:7b": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "qwen2.5-vl:7b": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "qwen2-vl-7b": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "qwen2vl:2b": "Qwen/Qwen2-VL-2B-Instruct",
+    "qwen2-vl:2b": "Qwen/Qwen2-VL-2B-Instruct",
+}
+FRAME_METADATA_MAX_TOKENS_CAP = 256
+
+
+def _resolve_model_source(model_id: str) -> Tuple[str, bool]:
+    """Resolve configured model ID to either a local HF snapshot path or a repo ID."""
+    configured = (model_id or "").strip()
+    normalized = MODEL_ID_ALIASES.get(configured.lower(), configured or "Qwen/Qwen2.5-VL-7B-Instruct")
+
+    if "/" not in normalized:
+        return normalized, False
+
+    cache_root = Path.home() / ".cache" / "huggingface" / "hub" / f"models--{normalized.replace('/', '--')}"
+    ref_path = cache_root / "refs" / "main"
+    if ref_path.exists():
+        revision = ref_path.read_text(encoding="utf-8").strip()
+        snapshot_path = cache_root / "snapshots" / revision
+        if snapshot_path.exists():
+            return str(snapshot_path), True
+
+    return normalized, False
+
+
+def _unpack_frame_tuple(frame_tuple: Tuple[Any, ...]) -> Tuple[str, str, float, Path, Path]:
+    if len(frame_tuple) >= 5:
+        frame_id, video_id, ts, analysis_path, original_path = frame_tuple[:5]
+    else:
+        frame_id, video_id, ts, analysis_path = frame_tuple[:4]
+        original_path = analysis_path
+    return frame_id, video_id, ts, Path(analysis_path), Path(original_path)
+
+
+def _frame_detection_context(frame_tuple: Tuple[Any, ...]) -> Dict[str, Any]:
+    if len(frame_tuple) >= 6 and isinstance(frame_tuple[5], dict):
+        return frame_tuple[5]
+    return {}
+
+
+def _prompt_with_detection_context(frame_tuple: Tuple[Any, ...]) -> str:
+    context = _frame_detection_context(frame_tuple)
+    if not context:
+        return VLM_FRAME_METADATA_PROMPT
+
+    lines = []
+    detected_objects = context.get("detected_objects", [])
+    if detected_objects:
+        object_names = ", ".join(
+            det.get("class_name", "unknown") for det in detected_objects[:10]
+        )
+        lines.append(f"Detector hints for CURRENT frame: {object_names}.")
+    track_ids = context.get("track_ids", [])
+    if track_ids:
+        lines.append(f"Tracking hints: stable entities visible with track ids {track_ids}.")
+    reasons = context.get("candidate_reasons", [])
+    if reasons:
+        lines.append(f"Frame selected because: {', '.join(reasons)}.")
+
+    if not lines:
+        return VLM_FRAME_METADATA_PROMPT
+    return VLM_FRAME_METADATA_PROMPT + "\n\nAdditional detector context:\n- " + "\n- ".join(lines)
+
 class NativeQwenTransformersService:
     _model = None
     _processor = None
@@ -36,19 +103,29 @@ class NativeQwenTransformersService:
 
         return {
             "engine_type": "native_hf",
-            "model_loaded": "Qwen/Qwen2.5-VL-7B-Instruct" if cls._model else "None",
+            "model_loaded": settings.QWEN_MODEL_ID if cls._model else "None",
             "gpu_memory": f"{gpu_memory:.2f} GB",
             "cuda_available": is_cuda_avail,
             "status": "healthy" if cls._model else "uninitialized"
         }
+
+    @staticmethod
+    def _effective_max_new_tokens() -> int:
+        """Clamp frame-metadata generation to a sane token budget for speed."""
+        configured = int(settings.QWEN_MAX_NEW_TOKENS or FRAME_METADATA_MAX_TOKENS_CAP)
+        return max(64, min(configured, FRAME_METADATA_MAX_TOKENS_CAP))
 
     @classmethod
     def load_model(cls):
         if cls._model is not None:
             return
             
-        logger.info(f"Loading Qwen2.5-VL-7B-Instruct via Transformers on {cls._device}...")
-        model_id = "Qwen/Qwen2.5-VL-7B-Instruct"
+        configured_model_id = settings.QWEN_MODEL_ID
+        model_source, local_files_only = _resolve_model_source(configured_model_id)
+        logger.info(
+            f"Loading {configured_model_id} via Transformers on {cls._device} "
+            f"(resolved_source={model_source}, local_only={local_files_only})..."
+        )
         
         # CRITICAL: 4-bit quantization reduces 14.5GB VRAM footprint to ~5GB, 
         # eliminating the PCIe thrashing OOM slowdown on RTX 5070 Ti.
@@ -59,17 +136,26 @@ class NativeQwenTransformersService:
             bnb_4bit_use_double_quant=True,
             bnb_4bit_quant_type="nf4"
         )
-        cls._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-            model_id,
-            quantization_config=quantization_config,
-            device_map={"": "cuda:0"},
-            attn_implementation="sdpa",
-        )
-        cls._processor = AutoProcessor.from_pretrained(
-            model_id, 
-            min_pixels=256*28*28, 
-            max_pixels=512*28*28
-        )
+        try:
+            cls._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                model_source,
+                quantization_config=quantization_config,
+                device_map={"": "cuda:0"},
+                attn_implementation="sdpa",
+                local_files_only=local_files_only,
+            )
+            cls._processor = AutoProcessor.from_pretrained(
+                model_source,
+                min_pixels=256*28*28, 
+                max_pixels=512*28*28,
+                local_files_only=local_files_only,
+            )
+        except Exception as exc:
+            logger.exception(f"Failed to load HF VLM model '{configured_model_id}'")
+            raise RuntimeError(
+                f"Unable to load VLM model '{configured_model_id}'. "
+                "Use MOCK_MODEL=true or configure an accessible local/remote model."
+            ) from exc
         
         # Add startup logging
         logger.info(f"Active VLM Backend: native_hf")
@@ -79,7 +165,7 @@ class NativeQwenTransformersService:
             logger.info(f"GPU Name: {torch.cuda.get_device_name(0)}")
             logger.info(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
             logger.info(f"VRAM used after load: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
-        logger.info(f"Model Loaded: {model_id}")
+        logger.info(f"Model Loaded: {configured_model_id}")
         logger.info(f"Model dtype: {cls._model.dtype}")
         logger.info(f"First param dtype: {next(cls._model.parameters()).dtype}")
         logger.info(f"First param device: {next(cls._model.parameters()).device}")
@@ -89,14 +175,20 @@ class NativeQwenTransformersService:
             logger.info("No accelerate device map (all on single device). GOOD.")
         
     @classmethod
-    def generate_batch(cls, image_paths: List[Path], prompt: str) -> List[str]:
+    def generate_batch(cls, image_paths: List[Path], prompts: Any) -> List[str]:
         cls.load_model()
         
         batch_start_time = time.perf_counter()
         batch_size = len(image_paths)
+        if isinstance(prompts, str):
+            prompt_list = [prompts] * batch_size
+        else:
+            prompt_list = list(prompts)
+        if len(prompt_list) != batch_size:
+            raise ValueError("Prompt count must match image batch size.")
         
         messages_batch = []
-        for path in image_paths:
+        for path, prompt in zip(image_paths, prompt_list):
             messages = [
                 {
                     "role": "user",
@@ -147,8 +239,9 @@ class NativeQwenTransformersService:
         mem_res_before = torch.cuda.memory_reserved() / (1024**3)
         
         t0 = time.perf_counter()
+        effective_max_new_tokens = cls._effective_max_new_tokens()
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            generated_ids = cls._model.generate(**inputs, max_new_tokens=settings.QWEN_MAX_NEW_TOKENS)
+            generated_ids = cls._model.generate(**inputs, max_new_tokens=effective_max_new_tokens)
         t1 = time.perf_counter()
         generate_ms = (t1 - t0) * 1000.0
         
@@ -157,7 +250,7 @@ class NativeQwenTransformersService:
         
         logger.info(f"Generate Time: {generate_ms:.2f} ms")
         logger.info(f"Batch size: {batch_size}")
-        logger.info(f"max_new_tokens: {settings.QWEN_MAX_NEW_TOKENS}")
+        logger.info(f"max_new_tokens: {effective_max_new_tokens}")
         logger.info(f"GPU memory allocated before: {mem_alloc_before:.2f} GB")
         logger.info(f"GPU memory allocated after: {mem_alloc_after:.2f} GB")
         logger.info(f"GPU memory reserved before: {mem_res_before:.2f} GB")
@@ -228,10 +321,10 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
         return output_texts
 
     @classmethod
-    async def _async_hf_generate(cls, image_paths: List[Path], prompt: str) -> List[str]:
+    async def _async_hf_generate(cls, image_paths: List[Path], prompts: Any) -> List[str]:
         """Wrapper for HF generate to keep the async interface without blocking."""
         def run_hf():
-            return cls.generate_batch(image_paths, prompt)
+            return cls.generate_batch(image_paths, prompts)
             
         return await asyncio.to_thread(run_hf)
 
@@ -240,24 +333,23 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
         cls, batch_frames: List[Tuple[str, str, float, Path]]
     ) -> List[Tuple[FrameRichMetadata, Dict[str, float]]]:
         """Runs batch image inference on Qwen2.5-VL to extract structured metadata using Native HF."""
-        cls.load_model()
-
         if settings.MOCK_MODEL:
             # Fallback to MockVLMService
             from app.services.mock_vlm import MockVLMService
             return await MockVLMService.generate_metadata_batch(batch_frames)
 
-        results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
+        cls.load_model()
 
-        prompt_guidelines = VLM_FRAME_METADATA_PROMPT
+        results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 
         try:
             logger.debug(f"Preparing batch of {len(batch_frames)} images for Native HF...")
             
-            image_paths = [path for _, _, _, path in batch_frames]
+            image_paths = [_unpack_frame_tuple(frame_tuple)[3] for frame_tuple in batch_frames]
 
             vlm_start = time.perf_counter()
-            vlm_outputs = await cls._async_hf_generate(image_paths, prompt_guidelines)
+            prompts = [_prompt_with_detection_context(frame_tuple) for frame_tuple in batch_frames]
+            vlm_outputs = await cls._async_hf_generate(image_paths, prompts)
             vlm_ms_avg = ((time.perf_counter() - vlm_start) * 1000.0) / len(batch_frames) if batch_frames else 0.0
 
             # Fully parallel OCR batch extraction
@@ -267,12 +359,13 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
                 res = await asyncio.to_thread(OCRService.extract_text, path)
                 return res
 
-            ocr_tasks = [timed_ocr(path, batch_frames[idx][0]) for idx, path in enumerate(image_paths)]
+            ocr_paths = [_unpack_frame_tuple(frame_tuple)[4] for frame_tuple in batch_frames]
+            ocr_tasks = [timed_ocr(path, batch_frames[idx][0]) for idx, path in enumerate(ocr_paths)]
             ocr_results = await asyncio.gather(*ocr_tasks)
             ocr_duration_ms_avg = ((time.perf_counter() - ocr_start_global) * 1000.0) / len(batch_frames) if batch_frames else 0.0
 
             for idx, raw_out in enumerate(vlm_outputs):
-                frame_id, video_id, ts, path = batch_frames[idx]
+                frame_id, video_id, ts, path, original_path = _unpack_frame_tuple(batch_frames[idx])
                 
                 if not raw_out:
                     logger.warning(f"Empty response from Native HF for {frame_id}")
@@ -299,9 +392,10 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
                         frame_id=frame_id,
                         video_id=video_id,
                         timestamp_seconds=ts,
-                        frame_path=path,
+                        frame_path=original_path,
                         ocr_result=ocr_results[idx],
                         project_root=PROJECT_ROOT,
+                        detection_context=_frame_detection_context(batch_frames[idx]),
                     )
 
                     logger.info(

@@ -1,7 +1,7 @@
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from loguru import logger
 
 from app.core.utils import calculate_time_snippet, format_timestamp_human
@@ -320,6 +320,12 @@ def generate_search_text(meta: Dict[str, Any]) -> str:
         parts.append(f"{color} {subtype}".strip())
         parts.extend(obj.get("attributes", []))
 
+    for det in meta.get("detected_objects", []):
+        parts.append(str(det.get("class_name", "")).strip())
+
+    for reason in meta.get("candidate_reasons", []):
+        parts.append(str(reason))
+
     full_text = " ".join(parts).lower()
     cleaned_text = re.sub(r"\s+", " ", full_text).strip()
     return cleaned_text
@@ -333,6 +339,7 @@ def finalize_frame_metadata(
     frame_path: Path,
     ocr_result: Any,
     project_root: Path,
+    detection_context: Optional[Dict[str, Any]] = None,
 ) -> FrameRichMetadata:
     """Convert one parsed VLM JSON object into the canonical frame metadata model.
 
@@ -344,6 +351,12 @@ def finalize_frame_metadata(
     parsed.update(calculate_time_snippet(timestamp_seconds, interval_seconds=1.0))
 
     parsed["ocr"] = ocr_result
+    detection_context = detection_context or {}
+    parsed["detected_objects"] = detection_context.get("detected_objects", [])
+    parsed["tracked_entities"] = detection_context.get("tracked_entities", [])
+    parsed["track_ids"] = detection_context.get("track_ids", [])
+    parsed["candidate_reasons"] = detection_context.get("candidate_reasons", [])
+    parsed["object_counts"] = detection_context.get("object_counts", {})
     parsed["frame_id"] = frame_id
     parsed["video_id"] = video_id
     parsed["timestamp_seconds"] = timestamp_seconds

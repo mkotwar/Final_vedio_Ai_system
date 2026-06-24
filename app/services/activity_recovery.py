@@ -64,12 +64,20 @@ class ActivityRecoveryService:
         ("walking towards",         "walking"),
         ("walking",                 "walking"),
         ("running",                 "running"),
-        ("crossing",                "crossing road"),
+        ("crossing road",           "crossing road"),
+        ("crossing street",         "crossing road"),
+        ("crosswalk",               "crossing road"),
         ("standing",                "standing"),
         ("sitting",                 "sitting"),
         ("loitering",               "loitering"),
+        ("placing",                 "placing object"),
+        ("dropping",                "dropping object"),
+        ("putting down",            "dropping object"),
+        ("picking up",              "picking up object"),
+        ("picked up",               "picking up object"),
         ("carrying",                "carrying object"),
         ("holding",                 "carrying object"),
+        ("holding object",          "carrying object"),
     ]
 
     # Caption regex pattern → activity label
@@ -89,14 +97,19 @@ class ActivityRecoveryService:
         (r"\brevers(?:ing|ed|es)\b",        "reversing"),
         (r"\bmoving?\b",                    "moving"),
         # Person motion
-        (r"\b(?:walk(?:ing|s|ed)?|cross(?:ing|es|ed)?)\b.*\b(?:across|crosswalk|intersection|road|street)\b", "crossing road"),
+        (r"\bcross(?:ing|es|ed)?\b.*\b(?:across|crosswalk|intersection|road|street)\b", "crossing road"),
+        (r"\bwalk(?:ing|s|ed)?\b.*\bacross\b.*\b(?:crosswalk|intersection|road|street)\b", "crossing road"),
         (r"\bwalk(?:ing|s|ed|er)\b",        "walking"),
         (r"\brun(?:ning|s|ner)\b",          "running"),
-        (r"\bcross(?:ing|es|ed)\b",         "crossing road"),
         (r"\bstand(?:ing|s)\b",             "standing"),
         (r"\bsit(?:ting|s|sat|ted)\b",      "sitting"),
         (r"\bapproach(?:ing|es|ed)\b",      "approaching"),
         (r"\bloiter(?:ing)?\b",             "loitering"),
+        (r"\bplac(?:ing|es|ed)\b.*\b(?:object|bag|box|package|item)\b", "placing object"),
+        (r"\b(?:drop(?:ping|s|ped)?|put(?:ting)? down|left)\b.*\b(?:object|bag|box|package|item)\b", "dropping object"),
+        (r"\bpick(?:ing)? (?:something|it|an? object|a bag|a box|a package|an item)?\s*up\b", "picking up object"),
+        (r"\bpicked (?:something|it|an? object|a bag|a box|a package|an item)?\s*up\b", "picking up object"),
+        (r"\bholding (?:an? )?(?:object|bag|box|package|item)\b", "carrying object"),
         (r"\bcarrying?\b",                  "carrying object"),
         (r"\bholds?\b",                     "carrying object"),
         (r"\bseated\b",                     "seated"),
@@ -115,16 +128,19 @@ class ActivityRecoveryService:
         ("person walking",          "walking"),
         ("person standing",         "standing"),
         ("person running",          "running"),
+        ("placing object",          "placing object"),
+        ("dropping object",         "dropping object"),
+        ("picking up object",       "picking up object"),
         ("traveling",               "moving"),
     ]
 
     ACTIVITY_ALIASES: Dict[str, str] = {
-        "crossing": "crossing road",
         "crossing street": "crossing road",
         "crossing road": "crossing road",
         "pedestrian crossing": "crossing road",
         "walking across road": "crossing road",
         "walking across street": "crossing road",
+        "crossing": "crossing road",
         "walking_with": "walking",
         "walking with": "walking",
         "walk": "walking",
@@ -163,6 +179,14 @@ class ActivityRecoveryService:
         "carrying": "carrying object",
         "holding": "carrying object",
         "carrying object": "carrying object",
+        "placing": "placing object",
+        "placing object": "placing object",
+        "dropping": "dropping object",
+        "dropping object": "dropping object",
+        "object drop": "dropping object",
+        "picking up": "picking up object",
+        "picking up object": "picking up object",
+        "picked up object": "picking up object",
     }
 
     # Captions with these exact values carry no useful information
@@ -176,6 +200,15 @@ class ActivityRecoveryService:
     # ------------------------------------------------------------------ #
     # Recovery methods                                                     #
     # ------------------------------------------------------------------ #
+
+    ROAD_CONTEXT_TERMS = (
+        "road", "street", "crosswalk", "intersection", "sidewalk",
+        "lane", "traffic", "parking", "parking_area", "curb",
+    )
+    NON_ROAD_CONTEXT_TERMS = (
+        "office", "corridor", "hallway", "indoor", "desk", "workspace",
+        "meeting room", "shop", "warehouse",
+    )
 
     @classmethod
     def normalize_activity_label(cls, activity: Any) -> str:
@@ -193,6 +226,49 @@ class ActivityRecoveryService:
         normalized: List[str] = []
         for activity in activities or []:
             label = cls.normalize_activity_label(activity)
+            if label and label not in normalized:
+                normalized.append(label)
+        return normalized
+
+    @classmethod
+    def _has_road_context(cls, frame_data: Dict[str, Any]) -> bool:
+        """Return true when the frame context is consistent with road crossing."""
+        parts: List[str] = []
+        parts.append(str(frame_data.get("scene_type", "") or ""))
+        parts.append(str(frame_data.get("scene_description", "") or ""))
+        parts.append(str(frame_data.get("caption", "") or ""))
+        parts.extend(str(k) for k in (frame_data.get("keywords", []) or []))
+
+        for loc in frame_data.get("location_context", []) or []:
+            if isinstance(loc, dict):
+                parts.append(str(loc.get("location", "") or ""))
+
+        text = " ".join(parts).lower()
+        return any(term in text for term in cls.ROAD_CONTEXT_TERMS)
+
+    @classmethod
+    def _has_non_road_context(cls, frame_data: Dict[str, Any]) -> bool:
+        parts: List[str] = []
+        parts.append(str(frame_data.get("scene_type", "") or ""))
+        parts.append(str(frame_data.get("scene_description", "") or ""))
+        parts.append(str(frame_data.get("caption", "") or ""))
+        parts.extend(str(k) for k in (frame_data.get("keywords", []) or []))
+        text = " ".join(parts).lower()
+        return any(term in text for term in cls.NON_ROAD_CONTEXT_TERMS)
+
+    @classmethod
+    def _contextualize_activities(cls, activities: List[str], frame_data: Dict[str, Any]) -> List[str]:
+        """Map ambiguous crossing labels using scene context to avoid office hallucinations."""
+        if not activities:
+            return []
+
+        has_road_context = cls._has_road_context(frame_data)
+        has_non_road_context = cls._has_non_road_context(frame_data)
+        normalized: List[str] = []
+        for activity in activities:
+            label = cls.normalize_activity_label(activity)
+            if label == "crossing road" and not has_road_context and has_non_road_context:
+                label = "walking"
             if label and label not in normalized:
                 normalized.append(label)
         return normalized
@@ -283,14 +359,24 @@ class ActivityRecoveryService:
               - ``"keywords"``   — recovered from keywords list
               - ``"none"``       — no activities recoverable from any source
         """
-        existing = frame_data.get("activities", [])
-        if existing:
-            return cls.normalize_activities(existing), "original"
-
         frame_id = frame_data.get("frame_id", "unknown")
+        existing = cls.normalize_activities(frame_data.get("activities", []))
         objects  = frame_data.get("objects", [])
         caption  = str(frame_data.get("caption", ""))
         keywords = frame_data.get("keywords", []) or []
+
+        if existing:
+            enriched = list(existing)
+            for activity in (
+                cls.recover_from_attributes(objects)
+                + cls.recover_from_caption(caption)
+                + cls.recover_from_keywords(keywords)
+            ):
+                if activity == "walking" and "crossing road" in enriched:
+                    continue
+                if activity not in enriched:
+                    enriched.append(activity)
+            return cls._contextualize_activities(enriched, frame_data), "original"
 
         # Priority 1 — object attributes (highest confidence)
         attr_activities = cls.recover_from_attributes(objects)
@@ -298,7 +384,7 @@ class ActivityRecoveryService:
             logger.debug(
                 f"[ActivityRecovery] attributes → {attr_activities} | frame={frame_id}"
             )
-            return attr_activities, "attributes"
+            return cls._contextualize_activities(attr_activities, frame_data), "attributes"
 
         # Priority 2 — caption patterns (medium confidence)
         caption_activities = cls.recover_from_caption(caption)
@@ -306,7 +392,7 @@ class ActivityRecoveryService:
             logger.debug(
                 f"[ActivityRecovery] caption → {caption_activities} | frame={frame_id}"
             )
-            return caption_activities, "caption"
+            return cls._contextualize_activities(caption_activities, frame_data), "caption"
 
         # Priority 3 — keywords (lower confidence)
         keyword_activities = cls.recover_from_keywords(keywords)
@@ -314,7 +400,7 @@ class ActivityRecoveryService:
             logger.debug(
                 f"[ActivityRecovery] keywords → {keyword_activities} | frame={frame_id}"
             )
-            return keyword_activities, "keywords"
+            return cls._contextualize_activities(keyword_activities, frame_data), "keywords"
 
         logger.debug(f"[ActivityRecovery] no recovery possible | frame={frame_id}")
         return [], "none"

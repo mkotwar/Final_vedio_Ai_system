@@ -2,6 +2,7 @@
 """
 
 import pytest
+import numpy as np
 from unittest.mock import MagicMock, patch
 
 from app.core.utils import format_timestamp_human, calculate_time_snippet
@@ -50,16 +51,20 @@ def test_license_plate_matching_regex():
         mock_instance = MagicMock()
         mock_instance.readtext.return_value = mock_results
         mock_reader_class.return_value = mock_instance
-        
+        grayscale_frame = np.zeros((32, 64), dtype=np.uint8)
+
         # Reset cached reader singleton to use mock
         OCRService._reader = None
-        
-        result = OCRService.extract_text("dummy_path.jpg")
-        
+
+        with patch.object(OCRService, "_load_ocr_ready_image", return_value=grayscale_frame):
+            result = OCRService.extract_text("dummy_path.jpg")
+
         # Verify detected texts (whitespace normalized, unique, empty strings removed)
         assert "MH 12 AB 1234" in result["detected_text"]
         assert "DL-3C-AA-1111" in result["detected_text"]
         assert "hr26ct1234" in result["detected_text"]
+        mock_instance.readtext.assert_called_once()
+        assert mock_instance.readtext.call_args[0][0].shape == (32, 64)
         
         # Verify parsed license plates (cleaned to uppercase and matched)
         assert "MH12AB1234" in result["license_plates"]
@@ -78,14 +83,33 @@ def test_ocr_service_handles_errors_gracefully():
         mock_instance = MagicMock()
         mock_instance.readtext.side_effect = Exception("CUDA Out of Memory mock error")
         mock_reader_class.return_value = mock_instance
-        
+        grayscale_frame = np.zeros((16, 16), dtype=np.uint8)
+
         # Reset cached reader singleton to use mock
         OCRService._reader = None
-        
+
         # Act & Assert
         # The service should catch the exception internally, log it, and return empty lists
-        result = OCRService.extract_text("dummy_crash_path.jpg")
-        
+        with patch.object(OCRService, "_load_ocr_ready_image", return_value=grayscale_frame):
+            result = OCRService.extract_text("dummy_crash_path.jpg")
+
         assert isinstance(result, dict)
         assert result["detected_text"] == []
         assert result["license_plates"] == []
+
+
+def test_ocr_service_normalizes_color_frame_to_grayscale():
+    color_frame = np.zeros((20, 30, 3), dtype=np.uint8)
+
+    with patch("cv2.imread", return_value=color_frame):
+        grayscale = OCRService._load_ocr_ready_image("dummy_color_frame.jpg")
+
+    assert grayscale.shape == (20, 30)
+    assert len(grayscale.shape) == 2
+
+
+def test_ocr_service_returns_empty_when_image_cannot_be_loaded():
+    with patch("cv2.imread", return_value=None):
+        result = OCRService.extract_text("missing_frame.jpg")
+
+    assert result == {"detected_text": [], "license_plates": []}

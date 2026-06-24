@@ -97,6 +97,11 @@ class MockVLMService:
         }
         mock_data.update(time_snippet)
         mock_data["ocr"] = mock_ocr
+        mock_data["detected_objects"] = []
+        mock_data["tracked_entities"] = []
+        mock_data["track_ids"] = []
+        mock_data["candidate_reasons"] = []
+        mock_data["object_counts"] = {}
         mock_data["search_text"] = generate_search_text(mock_data)
 
         return FrameRichMetadata(**mock_data)
@@ -115,7 +120,8 @@ class MockVLMService:
         """
         logger.info(f"MockVLMService processing batch of {len(batch_frames)} frames...")
         res = []
-        for frame_id, video_id, ts, _ in batch_frames:
+        for frame_tuple in batch_frames:
+            frame_id, video_id, ts = frame_tuple[:3]
             mock_meta = cls._generate_mock_metadata(frame_id, video_id, ts)
             res.append((mock_meta, {
                 "ocr_ms": 0.0,
