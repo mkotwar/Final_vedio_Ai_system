@@ -150,6 +150,9 @@ class NativeQwenTransformersService:
                 max_pixels=512*28*28,
                 local_files_only=local_files_only,
             )
+            if hasattr(cls._processor, "tokenizer"):
+                cls._processor.tokenizer.padding_side = "left"
+                logger.info("Configured Qwen tokenizer padding_side='left' for batched decoder-only generation.")
         except Exception as exc:
             logger.exception(f"Failed to load HF VLM model '{configured_model_id}'")
             raise RuntimeError(

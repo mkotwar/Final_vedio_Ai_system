@@ -1,6 +1,7 @@
 import asyncio
 import json
 import math
+import os
 import shutil
 import sys
 import time
@@ -9,8 +10,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+from app.services.vlm_prompt import VLM_FRAME_METADATA_PROMPT
+
 import cv2
 import numpy as np
+import torch
+from qwen_vl_utils import process_vision_info
 
 SCRIPT_PATH = Path(__file__).resolve()
 PROJECT_ROOT_PATH = SCRIPT_PATH.parents[2]
@@ -26,8 +31,8 @@ from app.services.qwen_vlm_hf import NativeQwenTransformersService
 from app.services.vlm_utils import clean_json_response
 
 
-INPUT_VIDEO_PATH = Path(r"C:\Mukul K\test_video\V_ai_test_2min.mp4")
-BENCHMARK_VIDEO_ID = "11111111-2222-4333-8444-777777777777"
+INPUT_VIDEO_PATH = Path(os.getenv("BENCHMARK_INPUT_VIDEO", r"C:\Mukul K\test_video\V_ai_test_2min.mp4"))
+BENCHMARK_VIDEO_ID = os.getenv("BENCHMARK_VIDEO_ID", "11111111-2222-4333-8444-777777777777")
 CASE_ROOT = PROJECT_ROOT / "tests" / "manual_benchmark_case"
 DATA_ROOT = CASE_ROOT / "data"
 INPUT_ROOT = DATA_ROOT / "input"
@@ -42,6 +47,9 @@ PROMPT_EXAMPLES_PATH = OUTPUT_ROOT / "reasoning_prompt_examples.json"
 INPUT_COPY_PATH = INPUT_ROOT / INPUT_VIDEO_PATH.name
 
 FRAME_GAP_SECONDS = 4.0
+MAX_CLUSTER_DURATION_SECONDS = float(os.getenv("MAX_CLUSTER_DURATION_SECONDS", "15.0"))
+TARGET_KEYFRAME_BUDGET = int(os.getenv("TARGET_KEYFRAME_BUDGET", "24"))
+MAX_KEYFRAMES_PER_EVENT = int(os.getenv("MAX_KEYFRAMES_PER_EVENT", "8"))
 PERIODIC_SAFETY_SECONDS = 10.0
 BAG_CLASSES = {"backpack", "handbag", "suitcase"}
 DYNAMIC_CLASSES = {
@@ -113,6 +121,7 @@ class ReasoningJob:
     variant_name: str
     event_id: str
     image_path: Path
+    image_paths: List[Path]
     selected_frame_ids: List[str]
     image_layout: str
     max_new_tokens: int
@@ -275,7 +284,9 @@ def _cluster_active_frames(signals: List[FrameSignal]) -> List[List[FrameSignal]
     clusters: List[List[FrameSignal]] = []
     current_cluster = [active[0]]
     for signal in active[1:]:
-        if signal.timestamp_seconds - current_cluster[-1].timestamp_seconds <= FRAME_GAP_SECONDS:
+        gap_seconds = signal.timestamp_seconds - current_cluster[-1].timestamp_seconds
+        span_seconds = signal.timestamp_seconds - current_cluster[0].timestamp_seconds
+        if gap_seconds <= FRAME_GAP_SECONDS and span_seconds <= MAX_CLUSTER_DURATION_SECONDS:
             current_cluster.append(signal)
         else:
             clusters.append(current_cluster)
@@ -288,9 +299,20 @@ def _class_count(cluster: List[FrameSignal], class_name: str) -> int:
     return max((signal.class_counts.get(class_name, 0) for signal in cluster), default=0)
 
 
-def _select_keyframes(cluster: List[FrameSignal]) -> List[str]:
+def _allocate_keyframe_budgets(clusters: List[List[FrameSignal]]) -> List[int]:
+    durations = [max(1.0, cluster[-1].timestamp_seconds - cluster[0].timestamp_seconds) for cluster in clusters]
+    total_duration = sum(durations) or 1.0
+    budgets = []
+    for cluster, duration in zip(clusters, durations):
+        proportional = max(1, int(math.floor(TARGET_KEYFRAME_BUDGET * duration / total_duration)))
+        budgets.append(min(len(cluster), MAX_KEYFRAMES_PER_EVENT, proportional))
+    return budgets
+
+
+def _select_keyframes(cluster: List[FrameSignal], target_count: int | None = None) -> List[str]:
     if not cluster:
         return []
+    target_count = min(len(cluster), MAX_KEYFRAMES_PER_EVENT, max(1, target_count or MAX_KEYFRAMES_PER_EVENT))
 
     chosen_indices = {0, len(cluster) - 1}
     best_index = max(range(len(cluster)), key=lambda idx: cluster[idx].score)
@@ -316,6 +338,22 @@ def _select_keyframes(cluster: List[FrameSignal]) -> List[str]:
         chosen_indices.add(state_change_indices[-1])
     if interaction_indices:
         chosen_indices.add(interaction_indices[len(interaction_indices) // 2])
+
+    if target_count > len(chosen_indices):
+        step = (len(cluster) - 1) / max(1, target_count - 1)
+        for slot in range(target_count):
+            chosen_indices.add(round(slot * step))
+            if len(chosen_indices) >= target_count:
+                break
+
+    if len(chosen_indices) > MAX_KEYFRAMES_PER_EVENT:
+        required = {0, len(cluster) - 1, best_index}
+        optional = sorted(chosen_indices - required, key=lambda idx: cluster[idx].score, reverse=True)
+        chosen_indices = set(required)
+        for idx in optional:
+            if len(chosen_indices) >= MAX_KEYFRAMES_PER_EVENT:
+                break
+            chosen_indices.add(idx)
 
     ordered = sorted(chosen_indices)
     return [cluster[idx].frame_id for idx in ordered]
@@ -349,11 +387,12 @@ def _collect_event_ocr(frame_lookup: Dict[str, FrameSignal], selected_frame_ids:
 def _build_candidate_events(signals: List[FrameSignal]) -> List[CandidateEvent]:
     frame_lookup = {signal.frame_id: signal for signal in signals}
     clusters = _cluster_active_frames(signals)
+    keyframe_budgets = _allocate_keyframe_budgets(clusters)
     events: List[CandidateEvent] = []
 
-    for idx, cluster in enumerate(clusters, start=1):
+    for idx, (cluster, keyframe_budget) in enumerate(zip(clusters, keyframe_budgets), start=1):
         event_type, reason = _guess_event_type(cluster)
-        selected_frame_ids = _select_keyframes(cluster)
+        selected_frame_ids = _select_keyframes(cluster, keyframe_budget)
         ocr_text = _collect_event_ocr(frame_lookup, selected_frame_ids)
         events.append(
             CandidateEvent(
@@ -436,17 +475,14 @@ def _build_structured_context(event: CandidateEvent) -> Dict[str, Any]:
 
 
 def _build_reasoning_prompt(structured_context: Dict[str, Any]) -> str:
-    facts_json = json.dumps(structured_context, separators=(",", ":"))
+    facts_json = json.dumps(structured_context, indent=2)
+
     return (
-        "You are an investigation assistant.\n"
-        f"Known facts: {facts_json}\n"
-        "Analyze:\n"
-        "1. likely event\n"
-        "2. notable behavior\n"
-        "3. interaction\n"
-        "4. investigate?\n"
-        'Return compact JSON only with keys event_type, notable, interaction, investigate, why. '
-        'Use true/false booleans and very short strings.'
+        f"{VLM_FRAME_METADATA_PROMPT}\n\n"
+        "Additional structured context:\n"
+        f"{facts_json}\n\n"
+        "Use the structured context only as auxiliary metadata. "
+        "Visual evidence always takes priority."
     )
 
 
@@ -487,7 +523,10 @@ def _build_jobs_for_mode(
         selected_frame_ids = event.selected_frame_ids
         if variant.image_layout == "single_peak":
             selected_frame_ids = [event.selected_frame_ids[len(event.selected_frame_ids) // 2]]
-        image_path, image_layout = _image_path_for_variant(mode, variant, event, frame_lookup, selected_frame_ids)
+            image_path, image_layout = _image_path_for_variant(mode, variant, event, frame_lookup, selected_frame_ids)
+        else:
+            image_path = frame_lookup[selected_frame_ids[0]].frame_path
+            image_layout = "multi_image_event"
         context = _build_structured_context(event)
         jobs.append(
             ReasoningJob(
@@ -495,6 +534,7 @@ def _build_jobs_for_mode(
                 variant_name=variant.name,
                 event_id=event.event_id,
                 image_path=image_path,
+                image_paths=[frame_lookup[frame_id].frame_path for frame_id in selected_frame_ids],
                 selected_frame_ids=selected_frame_ids,
                 image_layout=image_layout,
                 max_new_tokens=variant.max_new_tokens,
@@ -552,6 +592,7 @@ def _build_jobs_for_mode(
                     variant_name=variant.name,
                     event_id=event_id,
                     image_path=image_path,
+                    image_paths=[path],
                     selected_frame_ids=[frame_id],
                     image_layout=image_layout,
                     max_new_tokens=variant.max_new_tokens,
@@ -570,6 +611,51 @@ def _count_tokens(text: str) -> int:
     tokenizer = processor.tokenizer
     encoded = tokenizer(text or "", add_special_tokens=False, return_attention_mask=False)
     return len(encoded["input_ids"])
+
+
+async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
+    def run_hf() -> List[str]:
+        service = NativeQwenTransformersService
+        service.load_model()
+
+        messages_batch = []
+        for job in jobs:
+            content = [
+                {"type": "image", "image": f"file://{path.absolute()}"}
+                for path in job.image_paths
+            ]
+            content.append({"type": "text", "text": job.prompt})
+            messages_batch.append([{"role": "user", "content": content}])
+
+        texts = [
+            service._processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+            for msg in messages_batch
+        ]
+        image_inputs, video_inputs = process_vision_info(messages_batch)
+        inputs = service._processor(
+            text=texts,
+            images=image_inputs,
+            videos=video_inputs,
+            padding=True,
+            return_tensors="pt",
+        ).to(service._device)
+
+        with torch.autocast("cuda", dtype=torch.bfloat16):
+            generated_ids = service._model.generate(
+                **inputs,
+                max_new_tokens=service._effective_max_new_tokens(),
+            )
+
+        generated_ids_trimmed = [
+            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+        ]
+        return service._processor.batch_decode(
+            generated_ids_trimmed,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=False,
+        )
+
+    return await asyncio.to_thread(run_hf)
 
 
 async def _run_vlm_jobs(jobs: List[ReasoningJob]) -> Dict[str, Any]:
@@ -595,9 +681,12 @@ async def _run_vlm_jobs(jobs: List[ReasoningJob]) -> Dict[str, Any]:
 
         for index in range(0, len(jobs), settings.BATCH_SIZE):
             batch = jobs[index:index + settings.BATCH_SIZE]
-            image_paths = [job.image_path for job in batch]
-            prompts = [job.prompt for job in batch]
-            raw_outputs = await NativeQwenTransformersService._async_hf_generate(image_paths, prompts)
+            if any(len(job.image_paths) > 1 for job in batch):
+                raw_outputs = await _async_hf_generate_multi_image(batch)
+            else:
+                image_paths = [job.image_path for job in batch]
+                prompts = [job.prompt for job in batch]
+                raw_outputs = await NativeQwenTransformersService._async_hf_generate(image_paths, prompts)
 
             for job, raw_output in zip(batch, raw_outputs):
                 parsed = None
@@ -620,6 +709,7 @@ async def _run_vlm_jobs(jobs: List[ReasoningJob]) -> Dict[str, Any]:
                         "variant_name": job.variant_name,
                         "periodic": job.periodic,
                         "selected_frame_ids": job.selected_frame_ids,
+                        "image_count": len(job.image_paths),
                         "image_layout": job.image_layout,
                         "batch_size": job.batch_size,
                         "structured_context": job.structured_context,

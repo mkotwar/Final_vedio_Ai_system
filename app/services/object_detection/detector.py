@@ -30,7 +30,19 @@ class ObjectDetector:
             
         logger.info("Initializing ObjectDetector model YOLO('yolo11m.pt')...")
         start_time = time.time()
-        self._model = YOLO("yolo11m.pt")
+        
+        MODEL_PATH = (
+            Path(__file__)
+            .resolve()
+            .parents[3]
+            / "yolo11m.pt"
+        )
+        
+        logger.info(f"YOLO exists: {MODEL_PATH.exists()}")
+
+        logger.info(f"Loading YOLO model from: {MODEL_PATH}")
+        self._model = YOLO(str(MODEL_PATH))
+
         load_time = time.time() - start_time
         logger.info(f"Model loaded successfully. Model load time: {load_time:.4f} seconds.")
 
