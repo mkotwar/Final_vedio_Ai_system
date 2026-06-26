@@ -8,11 +8,20 @@ from loguru import logger
 from app.core.config import settings, PROJECT_ROOT
 from app.schemas.frame import FrameRichMetadata
 from app.services.ocr import OCRService
-from app.services.vlm_prompt import VLM_FRAME_METADATA_PROMPT
+from app.services import vlm_prompt as vlm_prompt_module
 from app.services.vlm_utils import (
     clean_json_response,
     finalize_frame_metadata,
 )
+
+VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "SHARED_VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    raise ImportError(
+        "No supported VLM prompt symbol found in app.services.vlm_prompt. "
+        "Expected SHARED_VLM_FRAME_METADATA_PROMPT or VLM_FRAME_METADATA_PROMPT."
+    )
 
 
 def _unpack_frame_tuple(frame_tuple: Tuple[Any, ...]) -> Tuple[str, str, float, Path, Path]:

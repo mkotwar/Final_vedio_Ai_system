@@ -3,6 +3,7 @@ import torch
 import time
 import asyncio
 import json
+import threading
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 from loguru import logger
@@ -14,12 +15,20 @@ from qwen_vl_utils import process_vision_info
 from app.core.config import settings, PROJECT_ROOT
 from app.schemas.frame import FrameRichMetadata
 from app.services.ocr import OCRService
-from app.services.vlm_prompt import VLM_FRAME_METADATA_PROMPT
+from app.services import vlm_prompt as vlm_prompt_module
 from app.services.vlm_utils import (
     clean_json_response,
     finalize_frame_metadata,
 )
-from qwen_vl_utils import process_vision_info
+
+VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "SHARED_VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    raise ImportError(
+        "No supported VLM prompt symbol found in app.services.vlm_prompt. "
+        "Expected SHARED_VLM_FRAME_METADATA_PROMPT or VLM_FRAME_METADATA_PROMPT."
+    )
 
 MODEL_ID_ALIASES = {
     "qwen2.5vl:7b": "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -93,6 +102,7 @@ class NativeQwenTransformersService:
     _processor = None
     _device = "cuda" if torch.cuda.is_available() else "cpu"
     _batch_counter = 0
+    _load_lock = threading.Lock()
     @classmethod
     def health_check(cls) -> Dict[str, Any]:
         """Returns the health status and engine configuration."""
@@ -117,69 +127,94 @@ class NativeQwenTransformersService:
 
     @classmethod
     def load_model(cls):
-        if cls._model is not None:
-            return
-            
-        configured_model_id = settings.QWEN_MODEL_ID
-        model_source, local_files_only = _resolve_model_source(configured_model_id)
-        logger.info(
-            f"Loading {configured_model_id} via Transformers on {cls._device} "
-            f"(resolved_source={model_source}, local_only={local_files_only})..."
-        )
-        
-        # CRITICAL: 4-bit quantization reduces 14.5GB VRAM footprint to ~5GB, 
-        # eliminating the PCIe thrashing OOM slowdown on RTX 5070 Ti.
-        # Use device_map={"": "cuda:0"} to strictly bind to GPU and avoid CPU offload float32 bugs.
-        quantization_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4"
-        )
-        try:
-            cls._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                model_source,
-                quantization_config=quantization_config,
-                device_map={"": "cuda:0"},
-                attn_implementation="sdpa",
-                local_files_only=local_files_only,
+        if cls._model is not None and cls._processor is not None:
+            logger.info("Reusing already loaded Qwen model.")
+            return cls._model, cls._processor
+
+        with cls._load_lock:
+            if cls._model is not None and cls._processor is not None:
+                logger.info("Reusing already loaded Qwen model.")
+                return cls._model, cls._processor
+
+            configured_model_id = settings.QWEN_MODEL_ID
+            model_source, local_files_only = _resolve_model_source(configured_model_id)
+            logger.info("Loading Qwen model for the first time...")
+            logger.info(
+                f"Loading {configured_model_id} via Transformers on {cls._device} "
+                f"(resolved_source={model_source}, local_only={local_files_only})..."
             )
-            cls._processor = AutoProcessor.from_pretrained(
-                model_source,
-                min_pixels=256*28*28, 
-                max_pixels=512*28*28,
-                local_files_only=local_files_only,
+
+            # CRITICAL: 4-bit quantization reduces 14.5GB VRAM footprint to ~5GB,
+            # eliminating the PCIe thrashing OOM slowdown on RTX 5070 Ti.
+            # Use device_map={"": "cuda:0"} to strictly bind to GPU and avoid CPU offload float32 bugs.
+            quantization_config = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_quant_type="nf4"
             )
-            if hasattr(cls._processor, "tokenizer"):
-                cls._processor.tokenizer.padding_side = "left"
-                logger.info("Configured Qwen tokenizer padding_side='left' for batched decoder-only generation.")
-        except Exception as exc:
-            logger.exception(f"Failed to load HF VLM model '{configured_model_id}'")
-            raise RuntimeError(
-                f"Unable to load VLM model '{configured_model_id}'. "
-                "Use MOCK_MODEL=true or configure an accessible local/remote model."
-            ) from exc
-        
-        # Add startup logging
-        logger.info(f"Active VLM Backend: native_hf")
-        is_cuda = torch.cuda.is_available()
-        logger.info(f"CUDA Available: {is_cuda}")
-        if is_cuda:
-            logger.info(f"GPU Name: {torch.cuda.get_device_name(0)}")
-            logger.info(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
-            logger.info(f"VRAM used after load: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
-        logger.info(f"Model Loaded: {configured_model_id}")
-        logger.info(f"Model dtype: {cls._model.dtype}")
-        logger.info(f"First param dtype: {next(cls._model.parameters()).dtype}")
-        logger.info(f"First param device: {next(cls._model.parameters()).device}")
-        if hasattr(cls._model, 'hf_device_map'):
-            logger.info(f"Device map: {cls._model.hf_device_map}")
-        else:
-            logger.info("No accelerate device map (all on single device). GOOD.")
+            try:
+                cls._model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+                    model_source,
+                    quantization_config=quantization_config,
+                    device_map={"": "cuda:0"},
+                    attn_implementation="sdpa",
+                    local_files_only=local_files_only,
+                )
+                cls._processor = AutoProcessor.from_pretrained(
+                    model_source,
+                    min_pixels=256*28*28,
+                    max_pixels=512*28*28,
+                    local_files_only=local_files_only,
+                )
+                if hasattr(cls._processor, "tokenizer"):
+                    cls._processor.tokenizer.padding_side = "left"
+                    logger.info("Configured Qwen tokenizer padding_side='left' for batched decoder-only generation.")
+            except Exception as exc:
+                cls._model = None
+                cls._processor = None
+                logger.exception(f"Failed to load HF VLM model '{configured_model_id}'")
+                raise RuntimeError(
+                    f"Unable to load VLM model '{configured_model_id}'. "
+                    "Use MOCK_MODEL=true or configure an accessible local/remote model."
+                ) from exc
+
+            logger.info(f"Active VLM Backend: native_hf")
+            is_cuda = torch.cuda.is_available()
+            logger.info(f"CUDA Available: {is_cuda}")
+            if is_cuda:
+                logger.info(f"GPU Name: {torch.cuda.get_device_name(0)}")
+                logger.info(f"VRAM: {torch.cuda.get_device_properties(0).total_memory / (1024**3):.2f} GB")
+                logger.info(f"VRAM used after load: {torch.cuda.memory_allocated() / (1024**3):.2f} GB")
+            logger.info(f"Model Loaded: {configured_model_id}")
+            logger.info(f"Model dtype: {cls._model.dtype}")
+            logger.info(f"First param dtype: {next(cls._model.parameters()).dtype}")
+            logger.info(f"First param device: {next(cls._model.parameters()).device}")
+            if hasattr(cls._model, "hf_device_map"):
+                logger.info(f"Device map: {cls._model.hf_device_map}")
+            else:
+                logger.info("No accelerate device map (all on single device). GOOD.")
+
+        return cls._model, cls._processor
+
+    @classmethod
+    def get_runtime(cls) -> Tuple[Any, Any, str]:
+        model, processor = cls.load_model()
+        return model, processor, cls._device
+
+    @classmethod
+    def get_processor(cls) -> Any:
+        _, processor, _ = cls.get_runtime()
+        return processor
+
+    @classmethod
+    def get_tokenizer(cls) -> Any:
+        processor = cls.get_processor()
+        return getattr(processor, "tokenizer", None)
         
     @classmethod
     def generate_batch(cls, image_paths: List[Path], prompts: Any) -> List[str]:
-        cls.load_model()
+        model, processor, device = cls.get_runtime()
         
         batch_start_time = time.perf_counter()
         batch_size = len(image_paths)
@@ -208,7 +243,7 @@ class NativeQwenTransformersService:
             
         # Stage 1
         t0 = time.perf_counter()
-        texts = [cls._processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages_batch]
+        texts = [processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in messages_batch]
         t1 = time.perf_counter()
         template_build_ms = (t1 - t0) * 1000.0
         logger.info(f"Template Build Time: {template_build_ms:.2f} ms")
@@ -222,13 +257,13 @@ class NativeQwenTransformersService:
         
         # Stage 3
         t0 = time.perf_counter()
-        inputs = cls._processor(
+        inputs = processor(
             text=texts,
             images=image_inputs,
             videos=video_inputs,
             padding=True,
             return_tensors="pt",
-        ).to(cls._device)
+        ).to(device)
         t1 = time.perf_counter()
         tensor_preparation_ms = (t1 - t0) * 1000.0
         logger.info(f"Tensor Preparation Time: {tensor_preparation_ms:.2f} ms")
@@ -244,7 +279,7 @@ class NativeQwenTransformersService:
         t0 = time.perf_counter()
         effective_max_new_tokens = cls._effective_max_new_tokens()
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            generated_ids = cls._model.generate(**inputs, max_new_tokens=effective_max_new_tokens)
+            generated_ids = model.generate(**inputs, max_new_tokens=effective_max_new_tokens)
         t1 = time.perf_counter()
         generate_ms = (t1 - t0) * 1000.0
         
@@ -265,7 +300,7 @@ class NativeQwenTransformersService:
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
         
-        output_texts = cls._processor.batch_decode(
+        output_texts = processor.batch_decode(
             generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )
         t1 = time.perf_counter()
@@ -341,7 +376,7 @@ Decode = {(decode_ms / total_ms) * 100:.1f}%
             from app.services.mock_vlm import MockVLMService
             return await MockVLMService.generate_metadata_batch(batch_frames)
 
-        cls.load_model()
+        cls.get_runtime()
 
         results: List[Tuple[FrameRichMetadata, Dict[str, float]]] = []
 

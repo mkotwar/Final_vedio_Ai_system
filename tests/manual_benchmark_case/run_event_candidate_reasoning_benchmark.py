@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from app.services.vlm_prompt import VLM_FRAME_METADATA_PROMPT
-
 import cv2
 import numpy as np
 import torch
@@ -29,16 +27,47 @@ from app.services.object_tracker import ObjectTrackerService
 from app.services.ocr import OCRService
 from app.services.qwen_vlm_hf import NativeQwenTransformersService
 from app.services.vlm_utils import clean_json_response
+from app.services import vlm_prompt as vlm_prompt_module
 
 
-INPUT_VIDEO_PATH = Path(os.getenv("BENCHMARK_INPUT_VIDEO", r"C:\Mukul K\test_video\V_ai_test_2min.mp4"))
+VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "SHARED_VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "VLM_FRAME_METADATA_PROMPT", None)
+if VLM_FRAME_METADATA_PROMPT is None:
+    raise ImportError(
+        "No supported VLM prompt symbol found in app.services.vlm_prompt. "
+        "Expected SHARED_VLM_FRAME_METADATA_PROMPT or VLM_FRAME_METADATA_PROMPT."
+    )
+
+
 BENCHMARK_VIDEO_ID = os.getenv("BENCHMARK_VIDEO_ID", "11111111-2222-4333-8444-777777777777")
-CASE_ROOT = PROJECT_ROOT / "tests" / "manual_benchmark_case"
+CASE_ROOT = Path(os.getenv("BENCHMARK_CASE_ROOT", str(PROJECT_ROOT / "tests" / "manual_benchmark_case")))
 DATA_ROOT = CASE_ROOT / "data"
 INPUT_ROOT = DATA_ROOT / "input"
 OUTPUT_ROOT = DATA_ROOT / "output"
 FRAME_ROOT = PROJECT_ROOT / "data" / "frames" / BENCHMARK_VIDEO_ID
 REASONING_INPUT_ROOT = OUTPUT_ROOT / "reasoning_inputs"
+
+
+def _resolve_input_video_path(video_path: Path) -> Path:
+    if video_path.exists():
+        return video_path
+
+    if not video_path.is_absolute():
+        input_candidate = INPUT_ROOT / video_path
+        if input_candidate.exists():
+            return input_candidate
+
+        input_name_candidate = INPUT_ROOT / video_path.name
+        if input_name_candidate.exists():
+            return input_name_candidate
+
+    return video_path
+
+
+INPUT_VIDEO_PATH = _resolve_input_video_path(
+    Path(os.getenv("BENCHMARK_INPUT_VIDEO", r"C:\Mukul K\test_video\V_ai_test_2min.mp4"))
+)
 
 SUMMARY_JSON_PATH = OUTPUT_ROOT / "event_candidate_benchmark_summary.json"
 SUMMARY_MD_PATH = OUTPUT_ROOT / "event_candidate_benchmark_summary.md"
@@ -79,11 +108,42 @@ class BenchmarkVariant:
 
 
 BENCHMARK_VARIANTS = [
-    BenchmarkVariant(name="strip_tokens150_batch1", image_layout="strip", max_new_tokens=150, batch_size=1),
-    BenchmarkVariant(name="strip_tokens150_batch4", image_layout="strip", max_new_tokens=150, batch_size=4),
-    BenchmarkVariant(name="single_peak_tokens150_batch1", image_layout="single_peak", max_new_tokens=150, batch_size=1),
-    BenchmarkVariant(name="single_peak_tokens150_batch4", image_layout="single_peak", max_new_tokens=150, batch_size=4),
+    BenchmarkVariant(name="strip_tokens150_batch1", image_layout="strip", max_new_tokens=350, batch_size=1),
+    BenchmarkVariant(name="strip_tokens150_batch4", image_layout="strip", max_new_tokens=350, batch_size=4),
+    BenchmarkVariant(name="single_peak_tokens150_batch1", image_layout="single_peak", max_new_tokens=350, batch_size=1),
+    BenchmarkVariant(name="single_peak_tokens150_batch4", image_layout="single_peak", max_new_tokens=350, batch_size=4),
 ]
+
+BENCHMARK_VARIANT_BY_NAME = {variant.name: variant for variant in BENCHMARK_VARIANTS}
+DEFAULT_BENCHMARK_MODE_NAMES = ("candidate_only",)
+DEFAULT_BENCHMARK_VARIANT_NAMES = ("strip_tokens150_batch4",)
+
+
+def _parse_csv_env(value: str | None, default_values: Tuple[str, ...]) -> List[str]:
+    if not value:
+        return list(default_values)
+    parsed = [item.strip() for item in value.split(",") if item.strip()]
+    return parsed or list(default_values)
+
+
+def _resolve_selected_modes() -> List[str]:
+    selected = _parse_csv_env(os.getenv("BENCHMARK_MODES"), DEFAULT_BENCHMARK_MODE_NAMES)
+    valid_modes = {"candidate_only", "candidate_plus_periodic10s"}
+    unknown = [mode for mode in selected if mode not in valid_modes]
+    if unknown:
+        raise ValueError(f"Unknown benchmark mode(s): {unknown}. Valid modes: {sorted(valid_modes)}")
+    return selected
+
+
+def _resolve_selected_variants() -> List[BenchmarkVariant]:
+    selected_names = _parse_csv_env(os.getenv("BENCHMARK_VARIANTS"), DEFAULT_BENCHMARK_VARIANT_NAMES)
+    unknown = [name for name in selected_names if name not in BENCHMARK_VARIANT_BY_NAME]
+    if unknown:
+        raise ValueError(
+            f"Unknown benchmark variant(s): {unknown}. "
+            f"Valid variants: {sorted(BENCHMARK_VARIANT_BY_NAME.keys())}"
+        )
+    return [BENCHMARK_VARIANT_BY_NAME[name] for name in selected_names]
 
 
 @dataclass
@@ -140,6 +200,8 @@ def _ensure_dirs() -> None:
 def _copy_input_video() -> None:
     if not INPUT_VIDEO_PATH.exists():
         raise FileNotFoundError(f"Input video not found: {INPUT_VIDEO_PATH}")
+    if INPUT_VIDEO_PATH.resolve() == INPUT_COPY_PATH.resolve():
+        return
     shutil.copy2(INPUT_VIDEO_PATH, INPUT_COPY_PATH)
 
 
@@ -607,8 +669,9 @@ def _build_jobs_for_mode(
 
 
 def _count_tokens(text: str) -> int:
-    processor = NativeQwenTransformersService._processor
-    tokenizer = processor.tokenizer
+    tokenizer = NativeQwenTransformersService.get_tokenizer()
+    if tokenizer is None:
+        raise RuntimeError("Qwen tokenizer is unavailable after runtime initialization.")
     encoded = tokenizer(text or "", add_special_tokens=False, return_attention_mask=False)
     return len(encoded["input_ids"])
 
@@ -616,7 +679,7 @@ def _count_tokens(text: str) -> int:
 async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
     def run_hf() -> List[str]:
         service = NativeQwenTransformersService
-        service.load_model()
+        model, processor, device = service.get_runtime()
 
         messages_batch = []
         for job in jobs:
@@ -628,20 +691,20 @@ async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
             messages_batch.append([{"role": "user", "content": content}])
 
         texts = [
-            service._processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+            processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
             for msg in messages_batch
         ]
         image_inputs, video_inputs = process_vision_info(messages_batch)
-        inputs = service._processor(
+        inputs = processor(
             text=texts,
             images=image_inputs,
             videos=video_inputs,
             padding=True,
             return_tensors="pt",
-        ).to(service._device)
+        ).to(device)
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            generated_ids = service._model.generate(
+            generated_ids = model.generate(
                 **inputs,
                 max_new_tokens=service._effective_max_new_tokens(),
             )
@@ -649,7 +712,7 @@ async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
-        return service._processor.batch_decode(
+        return processor.batch_decode(
             generated_ids_trimmed,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
@@ -675,7 +738,7 @@ async def _run_vlm_jobs(jobs: List[ReasoningJob]) -> Dict[str, Any]:
     settings.QWEN_MAX_NEW_TOKENS = jobs[0].max_new_tokens
 
     try:
-        NativeQwenTransformersService.load_model()
+        NativeQwenTransformersService.get_runtime()
         start = time.perf_counter()
         results: List[Dict[str, Any]] = []
 
@@ -866,6 +929,7 @@ async def main() -> None:
     _ensure_dirs()
     _clean_previous_outputs()
     _copy_input_video()
+    NativeQwenTransformersService.get_runtime()
 
     overall_start = time.perf_counter()
     video_duration_seconds = _get_video_duration_seconds(INPUT_COPY_PATH)
@@ -874,6 +938,8 @@ async def main() -> None:
     signals = _build_frame_signals(extracted_tuples, tracking_map)
     frame_lookup = {signal.frame_id: signal for signal in signals}
     candidate_events = _build_candidate_events(signals)
+    selected_modes = _resolve_selected_modes()
+    selected_variants = _resolve_selected_variants()
 
     modes: Dict[str, Dict[str, Any]] = {}
     prompt_examples: List[Dict[str, Any]] = []
@@ -883,10 +949,10 @@ async def main() -> None:
         "modes": {},
     }
 
-    for mode_name in ("candidate_only", "candidate_plus_periodic10s"):
+    for mode_name in selected_modes:
         modes[mode_name] = {}
         timeline["modes"][mode_name] = {}
-        for variant in BENCHMARK_VARIANTS:
+        for variant in selected_variants:
             mode_start = time.perf_counter()
             jobs = _build_jobs_for_mode(mode_name, variant, candidate_events, frame_lookup, extracted_tuples)
             vlm_summary = await _run_vlm_jobs(jobs)
@@ -957,8 +1023,8 @@ async def main() -> None:
     ]
 
     total_runtime_seconds = time.perf_counter() - overall_start
-    NativeQwenTransformersService.load_model()
-    tokenizer_padding_side = getattr(NativeQwenTransformersService._processor.tokenizer, "padding_side", None)
+    tokenizer = NativeQwenTransformersService.get_tokenizer()
+    tokenizer_padding_side = getattr(tokenizer, "padding_side", None)
     summary = {
         "input_video_path": str(INPUT_VIDEO_PATH),
         "input_copy_path": str(INPUT_COPY_PATH),
@@ -967,6 +1033,8 @@ async def main() -> None:
         "total_frames_extracted": len(extracted_tuples),
         "total_candidate_events": len(candidate_events),
         "tokenizer_padding_side": tokenizer_padding_side,
+        "selected_modes": selected_modes,
+        "selected_variants": [variant.name for variant in selected_variants],
         "modes": modes,
         "comparison_table": _build_comparison(modes),
         "overall_runtime_seconds": total_runtime_seconds,
