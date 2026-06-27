@@ -23,11 +23,11 @@ if str(PROJECT_ROOT_PATH) not in sys.path:
 from app.core.config import PROJECT_ROOT, settings
 from app.core.utils import format_timestamp_human
 from app.services.object_detection.detector import ObjectDetector
-from app.services.object_tracker import ObjectTrackerService
 from app.services.ocr import OCRService
 from app.services.qwen_vlm_hf import NativeQwenTransformersService
 from app.services.vlm_utils import clean_json_response
 from app.services import vlm_prompt as vlm_prompt_module
+from tests.manual_benchmark_case.benchmark_bot_sort_tracker import BenchmarkBoTSORTTracker
 
 
 VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "SHARED_VLM_FRAME_METADATA_PROMPT", None)
@@ -277,7 +277,10 @@ def _run_detection_and_tracking(
         detector.detect_frame(path, frame_id, video_id, ts)
         for frame_id, video_id, ts, path in extracted_tuples
     ]
-    tracking_map = ObjectTrackerService.track_frames(frame_detections)
+    tracking_map = BenchmarkBoTSORTTracker.track_frames(
+        frame_detections,
+        extracted_tuples=extracted_tuples,
+    )
     return frame_detections, tracking_map
 
 
