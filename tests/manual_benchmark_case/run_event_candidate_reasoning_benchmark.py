@@ -23,11 +23,11 @@ if str(PROJECT_ROOT_PATH) not in sys.path:
 from app.core.config import PROJECT_ROOT, settings
 from app.core.utils import format_timestamp_human
 from app.services.object_detection.detector import ObjectDetector
+from app.services.object_tracker import ObjectTrackerService
 from app.services.ocr import OCRService
 from app.services.qwen_vlm_hf import NativeQwenTransformersService
 from app.services.vlm_utils import clean_json_response
 from app.services import vlm_prompt as vlm_prompt_module
-from tests.manual_benchmark_case.benchmark_bot_sort_tracker import BenchmarkBoTSORTTracker
 
 
 VLM_FRAME_METADATA_PROMPT = getattr(vlm_prompt_module, "SHARED_VLM_FRAME_METADATA_PROMPT", None)
@@ -96,7 +96,7 @@ DYNAMIC_CLASSES = {
     "bottle",
     "cup",
 }
-PROMPT_MAX_NEW_TOKENS = 64
+PROMPT_MAX_NEW_TOKENS = 350
 
 
 @dataclass(frozen=True)
@@ -108,9 +108,9 @@ class BenchmarkVariant:
 
 
 BENCHMARK_VARIANTS = [
-    BenchmarkVariant(name="strip_tokens150_batch1", image_layout="strip", max_new_tokens=350, batch_size=1),
+    BenchmarkVariant(name="strip_tokens150_batch1", image_layout="strip", max_new_tokens=350, batch_size=4),
     BenchmarkVariant(name="strip_tokens150_batch4", image_layout="strip", max_new_tokens=350, batch_size=4),
-    BenchmarkVariant(name="single_peak_tokens150_batch1", image_layout="single_peak", max_new_tokens=350, batch_size=1),
+    BenchmarkVariant(name="single_peak_tokens150_batch1", image_layout="single_peak", max_new_tokens=350, batch_size=4),
     BenchmarkVariant(name="single_peak_tokens150_batch4", image_layout="single_peak", max_new_tokens=350, batch_size=4),
 ]
 
@@ -277,10 +277,7 @@ def _run_detection_and_tracking(
         detector.detect_frame(path, frame_id, video_id, ts)
         for frame_id, video_id, ts, path in extracted_tuples
     ]
-    tracking_map = BenchmarkBoTSORTTracker.track_frames(
-        frame_detections,
-        extracted_tuples=extracted_tuples,
-    )
+    tracking_map = ObjectTrackerService.track_frames(frame_detections)
     return frame_detections, tracking_map
 
 
@@ -672,9 +669,8 @@ def _build_jobs_for_mode(
 
 
 def _count_tokens(text: str) -> int:
-    tokenizer = NativeQwenTransformersService.get_tokenizer()
-    if tokenizer is None:
-        raise RuntimeError("Qwen tokenizer is unavailable after runtime initialization.")
+    processor = NativeQwenTransformersService._processor
+    tokenizer = processor.tokenizer
     encoded = tokenizer(text or "", add_special_tokens=False, return_attention_mask=False)
     return len(encoded["input_ids"])
 
@@ -682,7 +678,7 @@ def _count_tokens(text: str) -> int:
 async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
     def run_hf() -> List[str]:
         service = NativeQwenTransformersService
-        model, processor, device = service.get_runtime()
+        service.load_model()
 
         messages_batch = []
         for job in jobs:
@@ -694,20 +690,20 @@ async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
             messages_batch.append([{"role": "user", "content": content}])
 
         texts = [
-            processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
+            service._processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True)
             for msg in messages_batch
         ]
         image_inputs, video_inputs = process_vision_info(messages_batch)
-        inputs = processor(
+        inputs = service._processor(
             text=texts,
             images=image_inputs,
             videos=video_inputs,
             padding=True,
             return_tensors="pt",
-        ).to(device)
+        ).to(service._device)
 
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            generated_ids = model.generate(
+            generated_ids = service._model.generate(
                 **inputs,
                 max_new_tokens=service._effective_max_new_tokens(),
             )
@@ -715,7 +711,7 @@ async def _async_hf_generate_multi_image(jobs: List[ReasoningJob]) -> List[str]:
         generated_ids_trimmed = [
             out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
         ]
-        return processor.batch_decode(
+        return service._processor.batch_decode(
             generated_ids_trimmed,
             skip_special_tokens=True,
             clean_up_tokenization_spaces=False,
@@ -741,7 +737,7 @@ async def _run_vlm_jobs(jobs: List[ReasoningJob]) -> Dict[str, Any]:
     settings.QWEN_MAX_NEW_TOKENS = jobs[0].max_new_tokens
 
     try:
-        NativeQwenTransformersService.get_runtime()
+        NativeQwenTransformersService.load_model()
         start = time.perf_counter()
         results: List[Dict[str, Any]] = []
 
@@ -932,7 +928,6 @@ async def main() -> None:
     _ensure_dirs()
     _clean_previous_outputs()
     _copy_input_video()
-    NativeQwenTransformersService.get_runtime()
 
     overall_start = time.perf_counter()
     video_duration_seconds = _get_video_duration_seconds(INPUT_COPY_PATH)
@@ -1026,8 +1021,8 @@ async def main() -> None:
     ]
 
     total_runtime_seconds = time.perf_counter() - overall_start
-    tokenizer = NativeQwenTransformersService.get_tokenizer()
-    tokenizer_padding_side = getattr(tokenizer, "padding_side", None)
+    NativeQwenTransformersService.load_model()
+    tokenizer_padding_side = getattr(NativeQwenTransformersService._processor.tokenizer, "padding_side", None)
     summary = {
         "input_video_path": str(INPUT_VIDEO_PATH),
         "input_copy_path": str(INPUT_COPY_PATH),
