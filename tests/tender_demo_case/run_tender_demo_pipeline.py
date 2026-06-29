@@ -1005,6 +1005,132 @@ def _load_step_10_run_yolo_detection():
         return step_10_module.run_yolo_detection_on_selected_frames
 
 
+def _load_step_11_run_yolo_object_scoring():
+    try:
+        from tests.tender_demo_case.step_11_yolo_object_scoring import run_yolo_object_scoring
+        return run_yolo_object_scoring
+    except ModuleNotFoundError:
+        step_11_path = Path(__file__).resolve().parent / "step_11_yolo_object_scoring.py"
+        spec = importlib.util.spec_from_file_location("step_11_yolo_object_scoring", step_11_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 11 YOLO scoring module from: {step_11_path}")
+        step_11_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_11_module)
+        return step_11_module.run_yolo_object_scoring
+
+
+def _load_step_12_run_fused_clip_evidence():
+    try:
+        from tests.tender_demo_case.step_12_fused_clip_evidence import run_fused_clip_evidence
+        return run_fused_clip_evidence
+    except ModuleNotFoundError:
+        step_12_path = Path(__file__).resolve().parent / "step_12_fused_clip_evidence.py"
+        spec = importlib.util.spec_from_file_location("step_12_fused_clip_evidence", step_12_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 12 fusion module from: {step_12_path}")
+        step_12_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_12_module)
+        return step_12_module.run_fused_clip_evidence
+
+
+def _load_step_13_rank_candidate_clips():
+    try:
+        from tests.tender_demo_case.step_13_rank_candidate_clips import rank_candidate_clips
+        return rank_candidate_clips
+    except ModuleNotFoundError:
+        step_13_path = Path(__file__).resolve().parent / "step_13_rank_candidate_clips.py"
+        spec = importlib.util.spec_from_file_location("step_13_rank_candidate_clips", step_13_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 13 ranking module from: {step_13_path}")
+        step_13_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_13_module)
+        return step_13_module.rank_candidate_clips
+
+
+def _load_step_14_select_topk_clips():
+    try:
+        from tests.tender_demo_case.step_14_select_topk_clips import select_topk_clips_for_qwen
+        return select_topk_clips_for_qwen
+    except ModuleNotFoundError:
+        step_14_path = Path(__file__).resolve().parent / "step_14_select_topk_clips.py"
+        spec = importlib.util.spec_from_file_location("step_14_select_topk_clips", step_14_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 14 selection module from: {step_14_path}")
+        step_14_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_14_module)
+        return step_14_module.select_topk_clips_for_qwen
+
+
+def _load_step_15_create_topk_vlm_inputs():
+    try:
+        from tests.tender_demo_case.step_15_create_topk_vlm_inputs import create_topk_vlm_inputs
+        return create_topk_vlm_inputs
+    except ModuleNotFoundError:
+        step_15_path = Path(__file__).resolve().parent / "step_15_create_topk_vlm_inputs.py"
+        spec = importlib.util.spec_from_file_location("step_15_create_topk_vlm_inputs", step_15_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 15 Top-K VLM input module from: {step_15_path}")
+        step_15_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_15_module)
+        return step_15_module.create_topk_vlm_inputs
+
+
+def _load_step_16_run_topk_qwen():
+    try:
+        from tests.tender_demo_case.step_16_run_topk_qwen import run_qwen_on_topk_vlm_inputs
+        return run_qwen_on_topk_vlm_inputs
+    except ModuleNotFoundError:
+        step_16_path = Path(__file__).resolve().parent / "step_16_run_topk_qwen.py"
+        spec = importlib.util.spec_from_file_location("step_16_run_topk_qwen", step_16_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 16 Top-K Qwen module from: {step_16_path}")
+        step_16_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_16_module)
+        return step_16_module.run_qwen_on_topk_vlm_inputs
+
+
+def _load_step_17_create_topk_final_summary():
+    try:
+        from tests.tender_demo_case.step_17_topk_final_summary import create_topk_final_summary
+        return create_topk_final_summary
+    except ModuleNotFoundError:
+        step_17_path = Path(__file__).resolve().parent / "step_17_topk_final_summary.py"
+        spec = importlib.util.spec_from_file_location("step_17_topk_final_summary", step_17_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 17 Top-K final summary module from: {step_17_path}")
+        step_17_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_17_module)
+        return step_17_module.create_topk_final_summary
+
+
+def _load_step_18_export_event_clips():
+    try:
+        from tests.tender_demo_case.step_18_export_event_clips import export_event_clips
+        return export_event_clips
+    except ModuleNotFoundError:
+        step_18_path = Path(__file__).resolve().parent / "step_18_export_event_clips.py"
+        spec = importlib.util.spec_from_file_location("step_18_export_event_clips", step_18_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 18 event clip export module from: {step_18_path}")
+        step_18_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_18_module)
+        return step_18_module.export_event_clips
+
+
+def _load_step_19_create_demo_report():
+    try:
+        from tests.tender_demo_case.step_19_create_demo_report import create_demo_report_html
+        return create_demo_report_html
+    except ModuleNotFoundError:
+        step_19_path = Path(__file__).resolve().parent / "step_19_create_demo_report.py"
+        spec = importlib.util.spec_from_file_location("step_19_create_demo_report", step_19_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 19 demo report module from: {step_19_path}")
+        step_19_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_19_module)
+        return step_19_module.create_demo_report_html
+
+
 def main() -> None:
     print("[tender-demo] Starting tender demo pipeline")
     video_path = _read_video_path()
@@ -1105,6 +1231,49 @@ def main() -> None:
     run_yolo_detection_on_selected_frames = _load_step_10_run_yolo_detection()
     yolo_detections = run_yolo_detection_on_selected_frames(run_dir)
     print(f"[tender-demo] Step 10 complete: YOLO detections captured ({len(yolo_detections)} items)")
+
+    run_yolo_object_scoring = _load_step_11_run_yolo_object_scoring()
+    yolo_object_report = run_yolo_object_scoring(run_dir)
+    scored_count = len(yolo_object_report.get("scored_items", []))
+    print(f"[tender-demo] Step 11 complete: YOLO object scoring captured ({scored_count} items)")
+
+    rank_candidate_clips = _load_step_13_rank_candidate_clips()
+    ranked_clip_report = rank_candidate_clips(run_dir)
+    ranked_count = len(ranked_clip_report.get("ranked_clips", []))
+    print(f"[tender-demo] Step 13 complete: ranked candidate clips captured ({ranked_count} items)")
+
+    select_topk_clips_for_qwen = _load_step_14_select_topk_clips()
+    topk_selection_report = select_topk_clips_for_qwen(run_dir)
+    selected_count = len(topk_selection_report.get("selected_clips", []))
+    print(f"[tender-demo] Step 14 complete: selected Top-K clips captured ({selected_count} items)")
+
+    create_topk_vlm_inputs = _load_step_15_create_topk_vlm_inputs()
+    topk_vlm_inputs_manifest = create_topk_vlm_inputs(run_dir)
+    strip_count = len(topk_vlm_inputs_manifest.get("items", []))
+    print(f"[tender-demo] Step 15 complete: Top-K VLM inputs captured ({strip_count} items)")
+
+    run_qwen_on_topk_vlm_inputs = _load_step_16_run_topk_qwen()
+    topk_vlm_outputs = run_qwen_on_topk_vlm_inputs(run_dir)
+    print(f"[tender-demo] Step 16 complete: Top-K VLM outputs captured ({len(topk_vlm_outputs)} items)")
+
+    create_topk_final_summary = _load_step_17_create_topk_final_summary()
+    topk_final_summary = create_topk_final_summary(run_dir)
+    priority_count = len(topk_final_summary.get("priority_suspicious_events", []))
+    print(f"[tender-demo] Step 17 complete: Top-K final summary created ({priority_count} priority events)")
+
+    export_event_clips = _load_step_18_export_event_clips()
+    exported_clips_manifest = export_event_clips(run_dir)
+    exported_count = int(exported_clips_manifest.get("total_clips_exported", 0))
+    print(f"[tender-demo] Step 18 complete: exported review clips created ({exported_count} files)")
+
+    create_demo_report_html = _load_step_19_create_demo_report()
+    demo_report = create_demo_report_html(run_dir)
+    print(f"[tender-demo] Step 19 complete: local demo report created ({demo_report.get('html_report_path')})")
+
+    run_fused_clip_evidence = _load_step_12_run_fused_clip_evidence()
+    fused_evidence_report = run_fused_clip_evidence(run_dir)
+    fused_count = len(fused_evidence_report.get("fused_items", []))
+    print(f"[tender-demo] Step 12 complete: fused clip evidence captured ({fused_count} items)")
     print(f"[tender-demo] Debug run directory: {run_dir}")
 
 
