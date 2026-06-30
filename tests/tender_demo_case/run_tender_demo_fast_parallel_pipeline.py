@@ -51,7 +51,7 @@ from step_19_create_demo_report import create_demo_report_html
 
 
 FAST_DEFAULTS = {
-    "TENDER_DEMO_SAMPLE_EVERY_SECONDS": "2.0",
+    "TENDER_DEMO_SAMPLE_EVERY_SECONDS": "3.0",
     "TENDER_DEMO_TOP_K_CLIPS": "5",
     "TENDER_DEMO_QWEN_BATCH_SIZE": "1",
     "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": "256",
@@ -75,6 +75,14 @@ def _read_env_bool(name: str, default: bool) -> bool:
     if raw_value is None:
         return default
     return raw_value.strip().lower() == "true"
+
+
+def _read_env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name, str(default)).strip()
+    try:
+        return float(raw_value)
+    except ValueError:
+        return default
 
 
 def _runtime_settings_snapshot() -> dict[str, Any]:
@@ -209,6 +217,10 @@ def main() -> None:
     step_metrics: list[dict[str, Any]] = []
     parallel_sections: list[dict[str, Any]] = []
     parallel_enabled = _read_env_bool("TENDER_DEMO_FAST_PARALLEL_BRANCHES", True)
+    max_video_seconds = _read_env_float("TENDER_DEMO_MAX_VIDEO_SECONDS", 0.0)
+
+    print("[tender-demo-fast] Fast mode enabled: skipping old all-clip VLM path.")
+    print("[tender-demo-fast] Qwen will run only on Top-K selected clips.")
 
     video_path = _read_video_path()
     run_dir = _create_debug_run_dir(video_path)
@@ -216,6 +228,19 @@ def main() -> None:
     try:
         def _step_1_video_info() -> dict[str, object]:
             video_info = _extract_video_info(video_path)
+            if max_video_seconds > 0:
+                original_total_frames = int(video_info.get("total_frames", 0) or 0)
+                fps = float(video_info.get("fps", 0.0) or 0.0)
+                original_duration_seconds = float(video_info.get("duration_seconds", 0.0) or 0.0)
+                capped_duration = min(original_duration_seconds, max_video_seconds)
+                if fps > 0 and original_total_frames > 0:
+                    capped_total_frames = min(original_total_frames, int(round(capped_duration * fps)))
+                    video_info["total_frames"] = capped_total_frames
+                    video_info["duration_seconds"] = round(capped_duration, 3)
+                    video_info["processing_duration_seconds"] = round(capped_duration, 3)
+                    video_info["original_total_frames"] = original_total_frames
+                    video_info["original_duration_seconds"] = round(original_duration_seconds, 3)
+                    print(f"[tender-demo-fast] Processing first {capped_duration:.1f}s only due to TENDER_DEMO_MAX_VIDEO_SECONDS.")
             _write_video_info(run_dir, video_info)
             return video_info
 

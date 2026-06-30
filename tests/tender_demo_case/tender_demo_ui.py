@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
@@ -122,7 +123,7 @@ PIPELINE_ENGINE_MAP = {
 }
 PROCESSING_PRESETS = {
     "Fast demo": {
-        "sample_every_seconds": 2.0,
+        "sample_every_seconds": 3.0,
         "top_k": 5,
         "qwen_max_new_tokens": 256,
         "qwen_batch_size": 1,
@@ -131,7 +132,7 @@ PROCESSING_PRESETS = {
         "parallel_branches": True,
     },
     "Balanced": {
-        "sample_every_seconds": 1.5,
+        "sample_every_seconds": 2.0,
         "top_k": 8,
         "qwen_max_new_tokens": 384,
         "qwen_batch_size": 1,
@@ -148,6 +149,18 @@ PROCESSING_PRESETS = {
         "yolo_conf": 0.25,
         "parallel_branches": True,
     },
+}
+INPUT_MODE_OPTIONS = [
+    "Use existing local/server video path",
+    "Upload video file",
+    "Select from import folder",
+]
+QUICK_RESULT_SETTINGS = {
+    "sample_every_seconds": 4.0,
+    "top_k": 3,
+    "qwen_max_new_tokens": 192,
+    "yolo_imgsz": 416,
+    "yolo_conf": 0.40,
 }
 
 
@@ -233,6 +246,19 @@ def format_duration(seconds: float | int | None) -> str:
     return f"{secs}s"
 
 
+def format_file_size(num_bytes: int | float | None) -> str:
+    try:
+        size = float(num_bytes or 0)
+    except (TypeError, ValueError):
+        return "unknown"
+    units = ["B", "KB", "MB", "GB", "TB"]
+    unit_index = 0
+    while size >= 1024.0 and unit_index < len(units) - 1:
+        size /= 1024.0
+        unit_index += 1
+    return f"{size:.1f}{units[unit_index]}"
+
+
 def find_latest_debug_run() -> Path | None:
     debug_runs_dir = project_root() / "tests" / "tender_demo_case" / "debug_runs"
     if not debug_runs_dir.exists():
@@ -265,111 +291,109 @@ def save_uploaded_video(uploaded_file) -> Path:
     return target_path
 
 
+def import_folder_path() -> Path:
+    folder = project_root() / "tests" / "tender_demo_case" / "video_imports"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def list_import_folder_videos() -> list[Path]:
+    folder = import_folder_path()
+    return sorted(
+        [
+            path
+            for path in folder.iterdir()
+            if path.is_file() and path.suffix.lower().lstrip(".") in SUPPORTED_EXTENSIONS
+        ],
+        key=lambda path: path.name.lower(),
+    )
+
+
 def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, str]:
     env = os.environ.copy()
-    env.update(
-        {
-            "TENDER_DEMO_INPUT_VIDEO": str(selected_video_path),
-            "TENDER_DEMO_PIPELINE_ENGINE": str(settings["pipeline_engine_id"]),
-            "TENDER_DEMO_SAMPLE_EVERY_SECONDS": str(settings["sample_every_seconds"]),
-            "TENDER_DEMO_TOP_K_CLIPS": str(settings["top_k"]),
-            "TENDER_DEMO_QWEN_MODEL_ID": str(settings["qwen_model_id"]),
-            "TENDER_DEMO_QWEN_BATCH_SIZE": str(settings["qwen_batch_size"]),
-            "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": str(settings["qwen_max_new_tokens"]),
-            "TENDER_DEMO_RUN_YOLO": "true" if settings["run_yolo"] else "false",
-            "TENDER_DEMO_YOLO_MODEL": str(settings["yolo_model"]),
-            "TENDER_DEMO_YOLO_CONF": str(settings["yolo_conf"]),
-            "TENDER_DEMO_YOLO_IMGSZ": str(settings["yolo_imgsz"]),
-            "TENDER_DEMO_FAST_PARALLEL_BRANCHES": "true" if settings["parallel_branches"] else "false",
-            "TENDER_DEMO_CREATE_COMPILED_REVIEW_VIDEO": "true" if settings["create_compiled_review_video"] else "false",
-            "TENDER_DEMO_COMPILED_VIDEO_FPS": str(settings["compiled_video_fps"]),
-            "TENDER_DEMO_SECONDS_PER_FRAME": str(settings["seconds_per_frame"]),
-            "TENDER_DEMO_SECONDS_PER_TITLE_CARD": str(settings["seconds_per_title_card"]),
-        }
-    )
+    env_updates = {
+        "TENDER_DEMO_INPUT_VIDEO": str(selected_video_path),
+        "TENDER_DEMO_PIPELINE_ENGINE": str(settings["pipeline_engine_id"]),
+        "TENDER_DEMO_SAMPLE_EVERY_SECONDS": str(settings["sample_every_seconds"]),
+        "TENDER_DEMO_TOP_K_CLIPS": str(settings["top_k"]),
+        "TENDER_DEMO_QWEN_MODEL_ID": str(settings["qwen_model_id"]),
+        "TENDER_DEMO_QWEN_BATCH_SIZE": str(settings["qwen_batch_size"]),
+        "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": str(settings["qwen_max_new_tokens"]),
+        "TENDER_DEMO_RUN_YOLO": "true" if settings["run_yolo"] else "false",
+        "TENDER_DEMO_YOLO_MODEL": str(settings["yolo_model"]),
+        "TENDER_DEMO_YOLO_CONF": str(settings["yolo_conf"]),
+        "TENDER_DEMO_YOLO_IMGSZ": str(settings["yolo_imgsz"]),
+        "TENDER_DEMO_FAST_PARALLEL_BRANCHES": "true" if settings["parallel_branches"] else "false",
+        "TENDER_DEMO_QUICK_RESULT_MODE": "true" if settings.get("quick_result_mode") else "false",
+        "TENDER_DEMO_CREATE_COMPILED_REVIEW_VIDEO": "true" if settings["create_compiled_review_video"] else "false",
+        "TENDER_DEMO_COMPILED_VIDEO_FPS": str(settings["compiled_video_fps"]),
+        "TENDER_DEMO_SECONDS_PER_FRAME": str(settings["seconds_per_frame"]),
+        "TENDER_DEMO_SECONDS_PER_TITLE_CARD": str(settings["seconds_per_title_card"]),
+    }
+    max_video_seconds = str(settings.get("max_video_seconds", "")).strip()
+    if max_video_seconds:
+        env_updates["TENDER_DEMO_MAX_VIDEO_SECONDS"] = max_video_seconds
+    env.update(env_updates)
     return env
 
 
-def detect_stage_from_line(line: str) -> tuple[int | None, str | None]:
-    active_engine = st.session_state.get("pipeline_engine", PIPELINE_ENGINES[0])
-    stage_labels = STANDARD_STAGE_LABELS if active_engine == "Standard demo pipeline" else {
-        1: "Reading video information",
-        2: "Sampling frames",
-        3: "Scoring motion",
-        4: "Selecting motion candidates",
-        56: "Building clips and running YOLO evidence",
-        13: "Ranking candidate clips",
-        14: "Selecting Top-K clips",
-        15: "Creating Top-K VLM inputs",
-        16: "Running Qwen on selected clips",
-        17: "Creating final summary",
-        18: "Creating compiled review video",
-        19: "Creating HTML demo report",
-    }
-    for stage_number, label in stage_labels.items():
-        if f"Starting Step {stage_number}" in line:
-            return stage_number, label
-    if active_engine != "Standard demo pipeline":
-        for token in ["Starting parallel section", "Starting clip branch", "Starting YOLO branch"]:
-            if token in line:
-                return 56, "Building clips and running YOLO evidence"
-    return None, None
-
-
-def update_stage_from_log_line(line: str) -> None:
-    active_engine = st.session_state.get("pipeline_engine", PIPELINE_ENGINES[0])
-    if active_engine == "Standard demo pipeline":
-        stage_map = [
-            ("Starting Step 1", "Reading video information", 3),
-            ("Starting Step 2", "Sampling frames", 8),
-            ("Starting Step 3", "Scoring motion", 13),
-            ("Starting Step 4", "Selecting motion candidates", 18),
-            ("Starting Step 5", "Grouping motion into clips", 22),
-            ("Starting Step 6", "Expanding clips with context", 26),
-            ("Starting Step 7", "Creating VLM temporal strips", 31),
-            ("Starting Step 10", "Running YOLO object detection", 45),
-            ("Starting Step 11", "Scoring YOLO object evidence", 55),
-            ("Starting Step 12", "Fusing evidence", 60),
-            ("Starting Step 13", "Ranking candidate clips", 66),
-            ("Starting Step 14", "Selecting Top-K + guardrail clips", 70),
-            ("Starting Step 15", "Creating Top-K VLM inputs", 75),
-            ("Starting Step 16", "Running Qwen on Top-K clips", 85),
-            ("Starting Step 17", "Creating final summary", 92),
-            ("Starting Step 18", "Creating compiled review video", 97),
-            ("Starting Step 19", "Creating HTML demo report", 99),
-            ("17_topk_final_summary", "Creating final summary", 92),
-            ("18_compiled_review_video", "Creating compiled review video", 97),
-            ("19_demo_report.html", "Creating HTML demo report", 99),
-        ]
-    else:
-        stage_map = [
-            ("Starting Step 1", "Reading video information", 5),
-            ("Starting Step 2", "Sampling frames", 10),
-            ("Starting Step 3", "Scoring motion", 15),
-            ("Starting Step 4", "Selecting motion candidates", 20),
-            ("Starting parallel section", "Building clips and running YOLO evidence", 55),
-            ("Starting clip branch", "Building clips and running YOLO evidence", 55),
-            ("Starting YOLO branch", "Building clips and running YOLO evidence", 55),
-            ("Starting Step 13", "Ranking candidate clips", 62),
-            ("Starting Step 14", "Selecting Top-K clips", 68),
-            ("Starting Step 15", "Creating Top-K VLM inputs", 73),
-            ("Starting Step 16", "Running Qwen on selected clips", 88),
-            ("Starting Step 17", "Creating final summary", 93),
-            ("Starting Step 18", "Creating compiled review video", 97),
-            ("Starting Step 19", "Creating HTML demo report", 99),
-            ("17_topk_final_summary", "Creating final summary", 93),
-            ("18_compiled_review_video", "Creating compiled review video", 97),
-            ("19_demo_report.html", "Creating HTML demo report", 99),
-            ("Runtime metrics path", "Creating HTML demo report", 99),
-        ]
-    for token, label, progress in stage_map:
-        if token in line:
-            st.session_state["current_stage"] = label
-            st.session_state["progress_percent"] = max(
-                int(st.session_state.get("progress_percent", 0)),
-                progress,
+def stop_pipeline_process(pid: int) -> bool:
+    try:
+        if os.name == "nt":
+            completed = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                check=False,
             )
-            return
+            return completed.returncode == 0
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+        return True
+    except Exception:
+        return False
+
+
+def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None, int | None]:
+    standard_stage_map = [
+        (["Starting Step 1", "01_video_info.json"], "Reading video information", 5),
+        (["Starting Step 2", "02_sampled_frames.json"], "Sampling frames", 10),
+        (["Starting Step 3", "03_motion_scores.json"], "Scoring motion", 15),
+        (["Starting Step 4", "04_motion_candidates.json"], "Selecting motion candidates", 20),
+        (["Starting Step 5", "05_candidate_clips.json"], "Grouping candidate clips", 25),
+        (["Starting Step 6", "06_expanded_clips.json"], "Expanding clips", 30),
+        (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
+        (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
+        (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
+        (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
+        (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
+        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
+        (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
+        (["Starting Step 19", "19_demo_report.html"], "Creating HTML report", 99),
+    ]
+    fast_stage_map = [
+        (["Starting Step 1", "01_video_info.json"], "Reading video information", 5),
+        (["Starting Step 2", "02_sampled_frames.json"], "Sampling frames", 10),
+        (["Starting Step 3", "03_motion_scores.json"], "Scoring motion", 15),
+        (["Starting Step 4", "04_motion_candidates.json"], "Selecting motion candidates", 20),
+        (["Starting Step 5", "05_candidate_clips.json"], "Grouping candidate clips", 25),
+        (["Starting Step 6", "06_expanded_clips.json"], "Expanding clips", 30),
+        (["Starting parallel section", "Starting clip branch", "Starting YOLO branch"], "Building clips and running YOLO evidence", 55),
+        (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
+        (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
+        (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
+        (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
+        (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
+        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
+        (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
+        (["Starting Step 19", "19_demo_report.html", "Runtime metrics path"], "Creating HTML report", 99),
+    ]
+    stage_map = standard_stage_map if pipeline_engine == "Standard demo pipeline" else fast_stage_map
+    for tokens, label, progress in stage_map:
+        if any(token in line for token in tokens):
+            return label, progress
+    return None, None
 
 
 def filter_user_friendly_log_line(line: str) -> str | None:
@@ -435,7 +459,6 @@ def run_pipeline_with_live_logs(command, env, cwd, placeholders, stage_weights) 
     stage_order = list(stage_weights.keys())
     log_lines: list[str] = []
     detected_run_dir: Path | None = None
-    current_stage_number: int | None = None
     current_stage_label = "Waiting to start"
     latest_clean_message = "Preparing pipeline..."
     latest_output_hint = ""
@@ -453,28 +476,26 @@ def run_pipeline_with_live_logs(command, env, cwd, placeholders, stage_weights) 
         stderr=subprocess.STDOUT,
         text=True,
         bufsize=1,
+        creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0,
     )
+    st.session_state["pipeline_process_pid"] = process.pid
+    st.session_state["pipeline_running"] = True
 
     try:
         for raw_line in iter(process.stdout.readline, ""):
             line = raw_line.rstrip()
             log_lines.append(line)
-            update_stage_from_log_line(line)
-
-            stage_number, stage_label = detect_stage_from_line(line)
-            if stage_number is not None:
-                current_stage_number = stage_number
+            stage_label, detected_progress = detect_stage_from_line(
+                line,
+                st.session_state.get("pipeline_engine", PIPELINE_ENGINES[0]),
+            )
+            if stage_label is not None:
                 current_stage_label = stage_label or current_stage_label
                 stage_start_time = time.time()
                 st.session_state["current_stage"] = current_stage_label
-                progress_map = (
-                    STANDARD_STAGE_PROGRESS_PERCENT
-                    if st.session_state.get("pipeline_engine") == "Standard demo pipeline"
-                    else FAST_STAGE_PROGRESS_PERCENT
-                )
                 st.session_state["progress_percent"] = max(
                     int(st.session_state.get("progress_percent", 0)),
-                    progress_map.get(stage_number, 0),
+                    int(detected_progress or 0),
                 )
 
             if "debug_runs" in line:
@@ -497,32 +518,31 @@ def run_pipeline_with_live_logs(command, env, cwd, placeholders, stage_weights) 
                     latest_output_hint = clean_message
 
             elapsed = time.time() - start_time
-            completed_weight = 0
-            if current_stage_number is not None:
-                current_stage_index = stage_order.index(current_stage_number) if current_stage_number in stage_order else -1
-                for stage in stage_order[:max(current_stage_index, 0)]:
-                    completed_weight += stage_weights[stage]
-                current_weight = stage_weights.get(current_stage_number, 0)
-                stage_elapsed = time.time() - stage_start_time
-                stage_progress = min(0.9, stage_elapsed / max(estimated_seconds * 0.08, 10.0))
-                progress_value = (completed_weight + (current_weight * stage_progress)) / total_weight
-            else:
-                progress_value = min(0.02, elapsed / max(estimated_seconds, 1.0))
+            current_progress_percent = max(int(st.session_state.get("progress_percent", 0)), 0)
+            progress_value = min(max(current_progress_percent / 100.0, 0.0), 0.99)
 
-            remaining = max(0.0, estimated_seconds - elapsed)
+            if current_progress_percent >= 99:
+                remaining_caption = "finishing..."
+            else:
+                estimated_remaining_seconds = elapsed * (100 - current_progress_percent) / max(current_progress_percent, 1)
+                estimated_remaining_seconds = max(10.0, estimated_remaining_seconds)
+                remaining_caption = f"{format_duration(estimated_remaining_seconds)} approximate"
+
             placeholders["status_placeholder"].info(f"Current stage: {current_stage_label}")
             placeholders["message_placeholder"].success(latest_clean_message)
-            display_progress = max(progress_value, float(st.session_state.get("progress_percent", 0)) / 100.0)
+            display_progress = max(progress_value, current_progress_percent / 100.0)
             placeholders["progress_bar"].progress(min(max(display_progress, 0.0), 1.0))
             placeholders["eta_placeholder"].caption(
-                f"Elapsed: {format_duration(elapsed)} | Estimated remaining: {format_duration(remaining)} | "
-                f"Progress: {max(int(display_progress * 100), int(st.session_state.get('progress_percent', 0)))}%\n"
+                f"Elapsed: {format_duration(elapsed)} | Estimated remaining: {remaining_caption} | "
+                f"Progress: {max(int(display_progress * 100), current_progress_percent)}%\n"
                 "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and Qwen."
             )
             if latest_output_hint:
                 placeholders["output_placeholder"].caption(f"Latest output: {latest_output_hint}")
     finally:
         process.wait()
+        st.session_state["pipeline_running"] = False
+        st.session_state["pipeline_process_pid"] = None
 
     elapsed_seconds = time.time() - start_time
     if detected_run_dir is None:
@@ -911,12 +931,12 @@ def _render_search_result(record: dict) -> None:
     yolo_path = resolve_media_path(run_dir, record.get("top_annotated_frame_path"))
     with media_cols[0]:
         if media_exists(strip_path):
-            st.image(str(strip_path), caption="Incident image / temporal strip", use_container_width=True)
+            st.image(str(strip_path), caption="Incident image / temporal strip", width="stretch")
         else:
             st.warning("Incident image not found.")
     with media_cols[1]:
         if media_exists(yolo_path):
-            st.image(str(yolo_path), caption="YOLO annotated frame", use_container_width=True)
+            st.image(str(yolo_path), caption="YOLO annotated frame", width="stretch")
         else:
             st.warning("YOLO annotated frame not found.")
 
@@ -972,12 +992,12 @@ def render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False):
     media_cols = st.columns(2)
     with media_cols[0]:
         if media_exists(strip_path):
-            st.image(str(strip_path), caption=f"{clip_id} temporal strip", use_container_width=True)
+            st.image(str(strip_path), caption=f"{clip_id} temporal strip", width="stretch")
         else:
             st.warning("Temporal strip media not found.")
     with media_cols[1]:
         if media_exists(yolo_path):
-            st.image(str(yolo_path), caption=f"{clip_id} annotated YOLO frame", use_container_width=True)
+            st.image(str(yolo_path), caption=f"{clip_id} annotated YOLO frame", width="stretch")
         else:
             st.warning("Annotated YOLO frame not found.")
 
@@ -1059,6 +1079,17 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
     else:
         perf_cols_2[2].write("Slowest step: `unavailable`")
         perf_cols_2[3].write("Top 5 slowest steps: `unavailable`")
+    st.write(f"Top-K clips sent to Qwen: `{processing_summary.get('topk_inputs', 'unavailable')}`")
+    runtime_ratio = runtime_metrics.get("runtime_ratio_to_video")
+    try:
+        runtime_ratio_value = float(runtime_ratio)
+    except (TypeError, ValueError):
+        runtime_ratio_value = None
+    if runtime_ratio_value is not None:
+        if runtime_ratio_value > 1.0:
+            st.warning("Processing took longer than video length. To improve speed, use Quick Result Mode, increase sample interval, reduce Top-K, reduce Qwen max tokens, or use a smaller/faster VLM.")
+        else:
+            st.success("Processing completed faster than real time.")
 
     if scene_overview:
         st.subheader("Scene Overview")
@@ -1196,7 +1227,7 @@ def _render_timeline_tab(results: dict[str, Any]) -> None:
         }
         for item in sorted(event_timeline, key=lambda entry: float(entry.get("start_time", 0.0) or 0.0))
     ]
-    st.dataframe(rows, use_container_width=True)
+    st.dataframe(rows, width="stretch")
 
     counts = {}
     for item in rows:
@@ -1229,7 +1260,7 @@ def _render_files_tab(run_dir: Path, logs: str) -> None:
             }
             for path in evidence_files
         ],
-        use_container_width=True,
+        width="stretch",
     )
     st.subheader("Latest Pipeline Logs")
     st.code(logs or "No logs captured in this session.", language="text")
@@ -1361,6 +1392,8 @@ def _initialize_state() -> None:
     st.session_state.setdefault("pipeline_completed", False)
     st.session_state.setdefault("current_stage", "Waiting to start")
     st.session_state.setdefault("progress_percent", 0)
+    st.session_state.setdefault("pipeline_running", False)
+    st.session_state.setdefault("pipeline_process_pid", None)
 
 
 def main() -> None:
@@ -1374,26 +1407,47 @@ def main() -> None:
         st.header("Upload / Input")
         pipeline_engine = st.selectbox("Pipeline engine", PIPELINE_ENGINES, index=0)
         st.caption(PIPELINE_ENGINE_MAP[pipeline_engine]["description"])
+        if pipeline_engine == "Standard demo pipeline":
+            st.warning("Standard demo pipeline can take longer than the video length because it may run extra compatibility steps. Use Fast parallel Top-K for faster processing.")
+        else:
+            st.caption("Standard pipeline is slower and mainly kept for compatibility/debugging. For tender demo processing, use Fast parallel Top-K pipeline.")
         processing_preset = st.selectbox("Processing preset", ["Fast demo", "Balanced", "Higher accuracy"], index=0)
-        input_mode = st.radio(
-            "Choose input source",
-            ["Upload new video", "Use existing video path", "Open existing debug run"],
-        )
+        st.info("For large CCTV videos, use Existing video path or Import folder. Browser upload has Streamlit limits and can be slow. The analysis pipeline itself can process large files from disk.")
+        input_mode = st.radio("Video input mode", INPUT_MODE_OPTIONS, index=0)
         uploaded_file = st.file_uploader(
             "Upload video",
             type=sorted(SUPPORTED_EXTENSIONS),
         )
-        existing_video_path_input = st.text_input("Existing video path")
+        existing_video_path_input = st.text_input(
+            "Existing video path",
+            placeholder=r"C:\Videos\camera_01.mp4",
+        )
+        import_folder = import_folder_path()
+        st.caption(f"Import folder path: `{import_folder}`")
+        st.caption("Copy large videos into this folder, then click Refresh.")
+        refresh_import_folder = st.button("Refresh import folder")
+        imported_videos = list_import_folder_videos()
+        imported_video_labels = [
+            f"{path.name} | {format_file_size(path.stat().st_size)} | {datetime.fromtimestamp(path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')}"
+            for path in imported_videos
+        ]
+        selected_import_label = st.selectbox(
+            "Select imported video",
+            ["None"] + imported_video_labels,
+            index=0,
+        )
         show_debug_logs = st.checkbox("Show debug logs", value=False)
 
         st.header("Pipeline Settings")
         preset_values = PROCESSING_PRESETS[processing_preset]
+        quick_result_mode = st.checkbox("Quick result mode", value=True)
+        st.caption("Quick result mode scans the video, selects the most important few clips, and sends only those clips to Qwen. This is faster but less exhaustive.")
         sample_every_seconds = st.number_input("Sample every seconds", min_value=0.1, value=float(preset_values["sample_every_seconds"]), step=0.1)
         top_k = st.number_input("Top-K clips", min_value=1, value=int(preset_values["top_k"]), step=1)
         qwen_model_id = st.text_input("Qwen model id", value="qwen2.5vl:7b")
         qwen_max_new_tokens = st.number_input("Qwen max new tokens", min_value=1, value=int(preset_values["qwen_max_new_tokens"]), step=1)
         qwen_batch_size = st.number_input("Qwen batch size", min_value=1, value=int(preset_values["qwen_batch_size"]), step=1)
-        st.caption("Qwen batch size 4 is not always faster. It can increase GPU memory pressure. Start with 1 or 2 and compare runtime.")
+        st.caption("Batch size 4 may be slower or unstable depending on GPU memory. Start with 1 or 2.")
         run_yolo = st.checkbox("Run YOLO", value=True)
         yolo_model = st.text_input("YOLO model", value="yolov8n.pt")
         yolo_conf = st.number_input("YOLO confidence", min_value=0.01, max_value=1.0, value=float(preset_values["yolo_conf"]), step=0.01)
@@ -1403,6 +1457,13 @@ def main() -> None:
         compiled_video_fps = st.number_input("Compiled video FPS", min_value=1, value=5, step=1)
         seconds_per_frame = st.number_input("Seconds per frame", min_value=0.1, value=1.0, step=0.1)
         seconds_per_title_card = st.number_input("Seconds per title card", min_value=0.1, value=1.5, step=0.1)
+        max_video_seconds = st.text_input("Process first N seconds only", value="", placeholder="Leave empty for full video")
+        st.caption("For testing speed, process only the first N seconds. Leave empty to process full video.")
+        st.caption("Large videos are processed by sampling and Top-K selection. The full video is not sent to Qwen.")
+        st.caption("Speed recommendations:")
+        st.caption("For 1-5 minute videos: Balanced or Fast demo")
+        st.caption("For 30-60 minute videos: Fast demo, sample every 4-5 seconds, Top-K 5, Qwen tokens 192-256")
+        st.caption("For multi-hour CCTV: Use existing file path/import folder, sample every 5-10 seconds, run quick result first")
 
         st.header("Existing Run Viewer")
         active_run_value = st.session_state.get("active_run_dir", "").strip()
@@ -1456,6 +1517,7 @@ def main() -> None:
         "pipeline_engine": pipeline_engine,
         "pipeline_engine_id": PIPELINE_ENGINE_MAP[pipeline_engine]["engine_id"],
         "processing_preset": processing_preset,
+        "quick_result_mode": quick_result_mode,
         "sample_every_seconds": sample_every_seconds,
         "top_k": int(top_k),
         "qwen_model_id": qwen_model_id,
@@ -1470,25 +1532,51 @@ def main() -> None:
         "compiled_video_fps": int(compiled_video_fps),
         "seconds_per_frame": seconds_per_frame,
         "seconds_per_title_card": seconds_per_title_card,
+        "max_video_seconds": max_video_seconds,
     }
-    st.session_state["pipeline_engine"] = pipeline_engine
+    if quick_result_mode:
+        settings["sample_every_seconds"] = QUICK_RESULT_SETTINGS["sample_every_seconds"]
+        settings["top_k"] = QUICK_RESULT_SETTINGS["top_k"]
+        settings["qwen_max_new_tokens"] = QUICK_RESULT_SETTINGS["qwen_max_new_tokens"]
+        settings["yolo_imgsz"] = QUICK_RESULT_SETTINGS["yolo_imgsz"]
+        settings["yolo_conf"] = QUICK_RESULT_SETTINGS["yolo_conf"]
+        settings["pipeline_engine"] = "Fast parallel Top-K pipeline"
+        settings["pipeline_engine_id"] = PIPELINE_ENGINE_MAP["Fast parallel Top-K pipeline"]["engine_id"]
+        settings["parallel_branches"] = True
+    effective_pipeline_engine = settings["pipeline_engine"]
+    st.session_state["pipeline_engine"] = effective_pipeline_engine
 
     selected_video_path: Path | None = None
-    if input_mode == "Upload new video" and uploaded_file is not None:
-        if Path(uploaded_file.name).suffix.lower().lstrip(".") not in SUPPORTED_EXTENSIONS:
-            st.error("Unsupported file extension.")
-            st.stop()
-        if st.session_state.get("uploaded_video_path") and Path(st.session_state["uploaded_video_path"]).exists():
-            selected_video_path = Path(st.session_state["uploaded_video_path"])
-        else:
-            selected_video_path = save_uploaded_video(uploaded_file)
-            st.session_state["uploaded_video_path"] = str(selected_video_path)
-    elif input_mode == "Use existing video path" and existing_video_path_input.strip():
-        candidate = Path(existing_video_path_input.strip())
-        if candidate.exists():
-            selected_video_path = candidate
-    elif input_mode == "Open existing debug run" and st.session_state.get("run_dir"):
-        selected_video_path = None
+    input_mode_display = input_mode
+    input_access_mode = "read_directly_from_disk"
+    if input_mode == "Upload video file":
+        st.caption("Browser upload is best for small/medium videos. For large CCTV files, use Existing video path or Import folder.")
+        input_access_mode = "copied_from_browser_upload"
+        if uploaded_file is not None:
+            if Path(uploaded_file.name).suffix.lower().lstrip(".") not in SUPPORTED_EXTENSIONS:
+                st.error("Unsupported file extension.")
+                st.stop()
+            if st.session_state.get("uploaded_video_path") and Path(st.session_state["uploaded_video_path"]).exists():
+                selected_video_path = Path(st.session_state["uploaded_video_path"])
+            else:
+                selected_video_path = save_uploaded_video(uploaded_file)
+                st.session_state["uploaded_video_path"] = str(selected_video_path)
+    elif input_mode == "Use existing local/server video path":
+        if existing_video_path_input.strip():
+            candidate = Path(existing_video_path_input.strip()).expanduser()
+            if candidate.exists() and candidate.is_file() and candidate.suffix.lower().lstrip(".") in SUPPORTED_EXTENSIONS:
+                selected_video_path = candidate
+                st.success("Using video directly from disk. No browser upload/copy required.")
+            elif candidate.exists() and not candidate.is_file():
+                st.error("Existing video path must point to a file.")
+            elif candidate.suffix and candidate.suffix.lower().lstrip(".") not in SUPPORTED_EXTENSIONS:
+                st.error("Unsupported video extension for Existing video path.")
+    elif input_mode == "Select from import folder":
+        if refresh_import_folder:
+            st.success("Import folder refreshed.")
+        if selected_import_label != "None":
+            selected_index = imported_video_labels.index(selected_import_label)
+            selected_video_path = imported_videos[selected_index]
 
     sidebar_run_dir = get_active_run_dir()
     _render_sidebar_run_summary(sidebar_run_dir if sidebar_run_dir and sidebar_run_dir.exists() else None)
@@ -1497,14 +1585,41 @@ def main() -> None:
 
     with tabs[0]:
         st.info("Processing runs in this local Streamlit session. Keep this page open until the pipeline finishes.")
+        if st.session_state.get("pipeline_running"):
+            running_pid = st.session_state.get("pipeline_process_pid")
+            st.warning(f"Pipeline is currently running. PID: {running_pid}")
+            if st.button("Stop Processing"):
+                if running_pid and stop_pipeline_process(int(running_pid)):
+                    st.session_state["pipeline_running"] = False
+                    st.session_state["pipeline_process_pid"] = None
+                    st.warning("Processing stop signal sent.")
+                else:
+                    st.error("Failed to stop the running pipeline process.")
+        st.write("Why this is faster than manual review")
+        st.caption("The fast pipeline does not try to watch every frame with Qwen. It scans the video using motion and YOLO, selects Top-K important clips, and sends only those clips to Qwen. This creates a searchable evidence report so reviewers do not need to watch the full video.")
+        st.caption("Large videos are handled by sampling and Top-K selection. Processing time depends mainly on video length, GPU speed, YOLO settings, and number of selected Qwen clips.")
         if selected_video_path is not None:
             st.write(f"Selected video path: `{selected_video_path}`")
             duration_seconds = get_video_duration_seconds(selected_video_path)
+            file_size_bytes = selected_video_path.stat().st_size if selected_video_path.exists() else 0
+            st.write(f"File size: `{format_file_size(file_size_bytes)}`")
             st.write(f"Rough video duration: `{format_duration(duration_seconds)}`")
+            st.write(f"Input mode: `{input_mode_display}`")
+            st.write(
+                "File handling: `"
+                + ("copied into ui_uploads" if input_access_mode == "copied_from_browser_upload" else "read directly from disk")
+                + "`"
+            )
+            if input_mode == "Upload video file" and file_size_bytes > 200 * 1024 * 1024:
+                st.warning("This file is large for browser upload. Existing path/import folder is recommended.")
+            if file_size_bytes > 2 * 1024 * 1024 * 1024:
+                st.warning("For multi-GB CCTV files, use Existing video path or Import folder. Browser upload may be unstable.")
         else:
             st.write("Selected video path: `None`")
             duration_seconds = None
-        st.write("Expected pipeline mode: `Optimized Top-K + Safety Guardrails`")
+        st.write(f"Expected pipeline mode: `{effective_pipeline_engine}`")
+        if quick_result_mode:
+            st.info("Quick Result Mode is enabled. The UI will prioritize a fast first result using sparse sampling, small Top-K selection, and lower Qwen token limits.")
 
         run_clicked = st.button("Run Tender Demo Pipeline")
         if run_clicked:
@@ -1525,8 +1640,8 @@ def main() -> None:
             }
 
             env = build_pipeline_env(settings, selected_video_path)
-            command = [sys.executable, PIPELINE_ENGINE_MAP[pipeline_engine]["script_path"]]
-            stage_weights = STANDARD_STAGE_WEIGHTS if pipeline_engine == "Standard demo pipeline" else FAST_STAGE_WEIGHTS
+            command = [sys.executable, PIPELINE_ENGINE_MAP[effective_pipeline_engine]["script_path"]]
+            stage_weights = STANDARD_STAGE_WEIGHTS if effective_pipeline_engine == "Standard demo pipeline" else FAST_STAGE_WEIGHTS
             result = run_pipeline_with_live_logs(
                 command=command,
                 env=env,
@@ -1552,7 +1667,7 @@ def main() -> None:
                 placeholders["message_placeholder"].success("Pipeline completed successfully.")
                 placeholders["progress_bar"].progress(1.0)
                 placeholders["eta_placeholder"].caption(
-                    f"Elapsed: {format_duration(result.get('elapsed_seconds'))} | Estimated remaining: 0s | Progress: 100%\n"
+                    f"Elapsed: {format_duration(result.get('elapsed_seconds'))} | Estimated remaining: complete | Progress: 100%\n"
                     "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and Qwen."
                 )
                 detected_run_path = result.get("detected_run_dir", "not detected")
