@@ -32,6 +32,10 @@ DEFAULT_BYTETRACK_TRACK_THRESH = 0.15
 DEFAULT_BYTETRACK_MATCH_THRESH = 0.75
 DEFAULT_BYTETRACK_TRACK_BUFFER = 60
 DEFAULT_TRACK_MIN_DETECTIONS = 2
+VEHICLE_BYTETRACK_TRACK_THRESH = 0.08
+VEHICLE_BYTETRACK_MATCH_THRESH = 0.65
+VEHICLE_BYTETRACK_TRACK_BUFFER = 90
+VEHICLE_TRACK_MIN_DETECTIONS = 1
 DEFAULT_TRACK_BOUNDARY_SECONDS = 10.0
 DEFAULT_MERGE_TRACK_FRAGMENTS = True
 DEFAULT_FRAGMENT_MAX_GAP_SECONDS = 3.0
@@ -56,6 +60,7 @@ DEFAULT_TRACK_CLASSES = [
 
 TRACKER_NAME = "supervision_bytetrack"
 TRACKER_TYPE = "bytetrack"
+VEHICLE_LENIENT_FOCUS_PROFILES = {"vehicle_only", "traffic_road", "parking"}
 
 
 def get_repo_root() -> Path:
@@ -130,6 +135,11 @@ def read_bool_env(env_name: str, default_value: bool) -> bool:
     )
 
 
+def has_env_override(env_name: str) -> bool:
+    raw_value = os.environ.get(env_name)
+    return raw_value is not None and raw_value.strip() != ""
+
+
 def read_track_classes() -> list[str]:
     raw_value = os.environ.get(ENV_FINAL_DEMO_TRACK_CLASSES, "")
     if not raw_value.strip():
@@ -143,29 +153,68 @@ def read_track_classes() -> list[str]:
     return classes
 
 
-def read_tracker_settings() -> dict[str, Any]:
+def build_tracker_defaults(tracking_focus: dict[str, Any] | None) -> dict[str, Any]:
+    selected_focus_profile = (
+        str(tracking_focus.get("selected_focus_profile"))
+        if isinstance(tracking_focus, dict) and tracking_focus.get("selected_focus_profile")
+        else ""
+    )
+    explicit_env_override_used = any(
+        has_env_override(env_name)
+        for env_name in (
+            ENV_FINAL_DEMO_BYTETRACK_TRACK_THRESH,
+            ENV_FINAL_DEMO_BYTETRACK_MATCH_THRESH,
+            ENV_FINAL_DEMO_BYTETRACK_TRACK_BUFFER,
+            ENV_FINAL_DEMO_TRACK_MIN_DETECTIONS,
+        )
+    )
+    if explicit_env_override_used:
+        profile = "custom_env_override"
+    elif selected_focus_profile in VEHICLE_LENIENT_FOCUS_PROFILES:
+        profile = "vehicle_lenient"
+    else:
+        profile = "person_security_default"
+
+    if profile == "vehicle_lenient":
+        return {
+            "track_thresh": VEHICLE_BYTETRACK_TRACK_THRESH,
+            "match_thresh": VEHICLE_BYTETRACK_MATCH_THRESH,
+            "track_buffer": VEHICLE_BYTETRACK_TRACK_BUFFER,
+            "min_detections": VEHICLE_TRACK_MIN_DETECTIONS,
+            "profile": profile,
+        }
+    return {
+        "track_thresh": DEFAULT_BYTETRACK_TRACK_THRESH,
+        "match_thresh": DEFAULT_BYTETRACK_MATCH_THRESH,
+        "track_buffer": DEFAULT_BYTETRACK_TRACK_BUFFER,
+        "min_detections": DEFAULT_TRACK_MIN_DETECTIONS,
+        "profile": profile,
+    }
+
+
+def read_tracker_settings(defaults: dict[str, Any]) -> dict[str, Any]:
     return {
         "track_thresh": round(
             read_positive_float_env(
                 ENV_FINAL_DEMO_BYTETRACK_TRACK_THRESH,
-                DEFAULT_BYTETRACK_TRACK_THRESH,
+                float(defaults["track_thresh"]),
             ),
             3,
         ),
         "match_thresh": round(
             read_positive_float_env(
                 ENV_FINAL_DEMO_BYTETRACK_MATCH_THRESH,
-                DEFAULT_BYTETRACK_MATCH_THRESH,
+                float(defaults["match_thresh"]),
             ),
             3,
         ),
         "track_buffer": read_positive_int_env(
             ENV_FINAL_DEMO_BYTETRACK_TRACK_BUFFER,
-            DEFAULT_BYTETRACK_TRACK_BUFFER,
+            int(defaults["track_buffer"]),
         ),
         "min_detections": read_positive_int_env(
             ENV_FINAL_DEMO_TRACK_MIN_DETECTIONS,
-            DEFAULT_TRACK_MIN_DETECTIONS,
+            int(defaults["min_detections"]),
         ),
         "boundary_seconds": round(
             read_non_negative_float_env(
@@ -200,6 +249,7 @@ def read_tracker_settings() -> dict[str, Any]:
             3,
         ),
         "track_classes": read_track_classes(),
+        "tracking_parameter_profile": str(defaults["profile"]),
     }
 
 
@@ -510,6 +560,67 @@ def normalize_tracker_id(raw_tracker_id: Any) -> str | None:
     return str(raw_tracker_id)
 
 
+def build_detection_class_evidence(detections: list[dict[str, Any]]) -> dict[str, Any]:
+    class_votes: dict[str, int] = defaultdict(int)
+    class_confidence_sum: dict[str, float] = defaultdict(float)
+    class_history: list[dict[str, Any]] = []
+    dominant_class_name = "unknown"
+    dominant_vote_count = 0
+    dominant_confidence_sum = 0.0
+
+    for detection in detections:
+        class_name = str(detection.get("class_name") or "unknown").lower()
+        confidence = float(detection.get("confidence") or 0.0)
+        class_votes[class_name] += 1
+        class_confidence_sum[class_name] += confidence
+        class_history.append(
+            {
+                "frame_id": str(detection.get("frame_id") or ""),
+                "timestamp": round(float(detection.get("global_timestamp_seconds") or 0.0), 3),
+                "detection_id": str(detection.get("detection_id") or ""),
+                "class_name": class_name,
+                "class_id": int(detection.get("class_id") or -1),
+                "confidence": round(confidence, 4),
+            }
+        )
+
+    for class_name in sorted(class_votes.keys()):
+        vote_count = int(class_votes[class_name])
+        confidence_sum = float(class_confidence_sum[class_name])
+        if (
+            vote_count > dominant_vote_count
+            or (
+                vote_count == dominant_vote_count
+                and confidence_sum > dominant_confidence_sum
+            )
+        ):
+            dominant_class_name = class_name
+            dominant_vote_count = vote_count
+            dominant_confidence_sum = confidence_sum
+
+    total_votes = sum(class_votes.values())
+    dominant_class_confidence = round(
+        (dominant_confidence_sum / max(1, dominant_vote_count)),
+        4,
+    ) if dominant_vote_count > 0 else 0.0
+    class_consistency_score = round(
+        dominant_vote_count / max(1, total_votes),
+        4,
+    )
+    class_conflict = len(class_votes) > 1
+    return {
+        "class_votes": dict(sorted(class_votes.items())),
+        "class_confidence_sum": {
+            key: round(value, 4) for key, value in sorted(class_confidence_sum.items())
+        },
+        "dominant_class_name": dominant_class_name,
+        "dominant_class_confidence": dominant_class_confidence,
+        "class_history": class_history,
+        "class_consistency_score": class_consistency_score,
+        "class_conflict": class_conflict,
+    }
+
+
 def build_track_output(
     track: dict[str, Any],
     *,
@@ -522,6 +633,8 @@ def build_track_output(
     warnings: list[str],
 ) -> dict[str, Any]:
     detections = list(track["detections"])
+    class_evidence = build_detection_class_evidence(detections)
+    dominant_class_name = str(class_evidence["dominant_class_name"] or class_name)
     best_detection = max(
         detections,
         key=lambda item: (
@@ -571,7 +684,14 @@ def build_track_output(
         "source_fragment_track_ids": source_fragment_track_ids,
         "chunk_id": track["chunk_id"],
         "chunk_index": track["chunk_index"],
-        "class_name": class_name,
+        "class_name": dominant_class_name,
+        "dominant_class_name": dominant_class_name,
+        "dominant_class_confidence": class_evidence["dominant_class_confidence"],
+        "class_votes": class_evidence["class_votes"],
+        "class_confidence_sum": class_evidence["class_confidence_sum"],
+        "class_history": class_evidence["class_history"],
+        "class_consistency_score": class_evidence["class_consistency_score"],
+        "class_conflict": class_evidence["class_conflict"],
         "start_time": round(start_time, 3),
         "end_time": round(end_time, 3),
         "duration_seconds": round(end_time - start_time, 3),
@@ -603,8 +723,21 @@ def build_track_output(
             for item in detections
         ],
         "detection_ids": [str(item["detection_id"]) for item in detections],
+        "detections": [
+            {
+                "detection_id": str(item["detection_id"]),
+                "frame_id": str(item["frame_id"]),
+                "timestamp": round(float(item["global_timestamp_seconds"]), 3),
+                "class_id": int(item["class_id"]),
+                "class_name": str(item["class_name"]).lower(),
+                "confidence": round(float(item["confidence"]), 4),
+                "bbox_xyxy": [round(float(value), 3) for value in item["bbox_xyxy"]],
+            }
+            for item in detections
+        ],
         "status": "closed",
         "is_cross_chunk_candidate": is_cross_chunk_candidate,
+        "needs_review": bool(class_evidence["class_conflict"]),
     }
 
 
@@ -620,6 +753,7 @@ def build_raw_track_fragments(
     raw_tracks: list[dict[str, Any]] = []
     frame_diagnostics: list[dict[str, Any]] = []
     total_untracked_detections = 0
+    synthetic_track_counter = 0
 
     detections_by_class: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for detection in chunk_detections:
@@ -681,11 +815,26 @@ def build_raw_track_fragments(
                 detection_with_tracker = {**detection, "raw_tracker_id": tracker_id}
                 track_entry["detections"].append(detection_with_tracker)
 
-            untracked_detection_ids = [
-                str(item["detection_id"])
+            tracked_detection_id_set = set(tracked_detection_ids)
+            untracked_detections = [
+                item
                 for item in frame_detections
-                if str(item["detection_id"]) not in set(tracked_detection_ids)
+                if str(item["detection_id"]) not in tracked_detection_id_set
             ]
+            untracked_detection_ids = [str(item["detection_id"]) for item in untracked_detections]
+            for detection in untracked_detections:
+                synthetic_track_counter += 1
+                synthetic_tracker_id = f"synthetic_{chunk_id}_{class_name}_{synthetic_track_counter:06d}"
+                raw_tracks.append(
+                    {
+                        "raw_tracker_id": synthetic_tracker_id,
+                        "chunk_id": chunk_id,
+                        "chunk_index": int(detection["chunk_index"]),
+                        "class_name": class_name,
+                        "detections": [{**detection, "raw_tracker_id": synthetic_tracker_id}],
+                        "synthetic_fallback_track": True,
+                    }
+                )
             total_untracked_detections += len(untracked_detection_ids)
             frame_diagnostics.append(
                 {
@@ -701,6 +850,7 @@ def build_raw_track_fragments(
                     "untracked_detection_count": len(untracked_detection_ids),
                     "assigned_tracker_ids": assigned_tracker_ids,
                     "untracked_detection_ids": untracked_detection_ids,
+                    "synthetic_fallback_tracks_created": len(untracked_detections),
                 }
             )
 
@@ -709,7 +859,7 @@ def build_raw_track_fragments(
     if total_untracked_detections > 0:
         warnings.append(
             f"ByteTrack did not return tracker_id for {total_untracked_detections} detections in {chunk_id}; "
-            "those detections were skipped instead of creating synthetic tracks."
+            "deterministic synthetic fallback tracks were created to preserve YOLO class evidence."
         )
 
     return raw_tracks, frame_diagnostics, total_untracked_detections
@@ -955,9 +1105,19 @@ def build_tracking_outputs(
     run_dir: Path,
     detections_payload: dict[str, Any],
     chunk_manifest: dict[str, Any],
+    tracking_focus: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sv = load_supervision_module()
-    settings = read_tracker_settings()
+    tracker_defaults = build_tracker_defaults(tracking_focus)
+    settings = read_tracker_settings(tracker_defaults)
+    if isinstance(tracking_focus, dict):
+        selected_track_classes = [
+            str(item).lower()
+            for item in list(tracking_focus.get("selected_track_classes") or [])
+            if str(item).strip()
+        ]
+        if selected_track_classes:
+            settings["track_classes"] = selected_track_classes
     frames_index_path = run_dir / "03_sampled_frames_index.json"
     frames_index_payload = read_json(frames_index_path) if frames_index_path.exists() else {}
     timing_info = extract_sample_timing_info(frames_index_payload)
@@ -1029,9 +1189,21 @@ def build_tracking_outputs(
 
     tracks_by_class: dict[str, int] = defaultdict(int)
     tracks_by_chunk: dict[str, int] = defaultdict(int)
+    detections_tracked_by_class: dict[str, int] = defaultdict(int)
+    detections_untracked_by_class: dict[str, int] = defaultdict(int)
+    class_conflict_tracks: list[dict[str, Any]] = []
     cross_chunk_candidates_count = 0
     total_track_duration_seconds = 0.0
     total_track_detection_count = 0
+
+    for diagnostic in diagnostics_frames:
+        class_name = str(diagnostic.get("class_name") or "unknown")
+        detections_untracked_by_class[class_name] += int(diagnostic.get("untracked_detection_count") or 0)
+
+    for track in final_tracks:
+        class_name = str(track["class_name"])
+        for vote_class, vote_count in dict(track.get("class_votes") or {}).items():
+            detections_tracked_by_class[str(vote_class)] += int(vote_count)
 
     for track in final_tracks:
         class_name = str(track["class_name"])
@@ -1041,6 +1213,16 @@ def build_tracking_outputs(
         total_track_detection_count += int(track["detection_count"])
         if bool(track["is_cross_chunk_candidate"]):
             cross_chunk_candidates_count += 1
+        if bool(track.get("class_conflict")):
+            class_conflict_tracks.append(
+                {
+                    "local_track_id": str(track["local_track_id"]),
+                    "class_name": class_name,
+                    "dominant_class_name": str(track.get("dominant_class_name") or class_name),
+                    "class_votes": dict(track.get("class_votes") or {}),
+                    "class_consistency_score": float(track.get("class_consistency_score") or 0.0),
+                }
+            )
 
     average_track_duration_seconds = round(
         total_track_duration_seconds / len(final_tracks),
@@ -1050,10 +1232,18 @@ def build_tracking_outputs(
         total_track_detection_count / len(final_tracks),
         3,
     ) if final_tracks else 0.0
+    untracked_detection_ratio = round(
+        total_untracked_detections / len(detections),
+        3,
+    ) if detections else 0.0
 
     if tracks_by_class.get("person", 0) >= 8:
         warnings.append(
             "Person track count may still include fragments. Unique person count requires fragment merging and later cross-chunk/global ReID."
+        )
+    if untracked_detection_ratio > 0.35:
+        warnings.append(
+            "High untracked detection ratio. Vehicle tracking may need lower ByteTrack thresholds, higher sample FPS, or stronger tracker."
         )
 
     updated_chunk_manifest = update_chunk_manifest_for_tracking(
@@ -1087,13 +1277,42 @@ def build_tracking_outputs(
         "tracker_name": TRACKER_NAME,
         "tracker_type": TRACKER_TYPE,
         "association_mapping": "detection_id_data_mapping_not_order_based",
+        "selected_tracking_focus_profile": (
+            tracking_focus.get("selected_focus_profile")
+            if isinstance(tracking_focus, dict)
+            else None
+        ),
+        "selected_track_classes": list(settings["track_classes"]),
+        "tracking_focus_confidence": (
+            tracking_focus.get("focus_confidence")
+            if isinstance(tracking_focus, dict)
+            else None
+        ),
+        "tracking_focus_reason": (
+            tracking_focus.get("reason")
+            if isinstance(tracking_focus, dict)
+            else None
+        ),
+        "tracking_parameter_profile": settings["tracking_parameter_profile"],
+        "effective_bytetrack_settings": {
+            "track_thresh": settings["track_thresh"],
+            "match_thresh": settings["match_thresh"],
+            "track_buffer": settings["track_buffer"],
+        },
+        "effective_min_detections": settings["min_detections"],
         "total_input_detections": len(detections),
         "total_tracked_detections": len(detections) - total_untracked_detections,
         "total_untracked_detections": total_untracked_detections,
+        "untracked_detection_ratio": untracked_detection_ratio,
         "raw_tracks_created_before_merge": len(raw_tracks_before_merge),
         "total_tracks_kept": len(final_tracks),
         "fragments_merged_count": fragments_merged_count,
         "tracks_by_class": dict(sorted(tracks_by_class.items())),
+        "detections_tracked_by_class": dict(sorted(detections_tracked_by_class.items())),
+        "detections_untracked_by_class": dict(sorted(detections_untracked_by_class.items())),
+        "class_conflict_track_count": len(class_conflict_tracks),
+        "class_conflict_tracks": class_conflict_tracks,
+        "class_propagation_status": "preserved" if tracks_by_class else "missing_tracks",
         "tracks_by_chunk": dict(sorted(tracks_by_chunk.items())),
         "cross_chunk_candidates_count": cross_chunk_candidates_count,
         "average_track_duration_seconds": average_track_duration_seconds,
@@ -1107,6 +1326,11 @@ def build_tracking_outputs(
     diagnostics_payload = {
         "tracker_name": TRACKER_NAME,
         "tracker_type": TRACKER_TYPE,
+        "selected_tracking_focus_profile": (
+            tracking_focus.get("selected_focus_profile")
+            if isinstance(tracking_focus, dict)
+            else None
+        ),
         "class_filter_used": settings["track_classes"],
         "bytetrack_settings": {
             "track_thresh": settings["track_thresh"],
@@ -1114,6 +1338,7 @@ def build_tracking_outputs(
             "track_buffer": settings["track_buffer"],
             "min_detections": settings["min_detections"],
             "effective_track_buffer_multiplier": timing_info["frame_skip_ratio"],
+            "tracking_parameter_profile": settings["tracking_parameter_profile"],
         },
         "sample_fps": timing_info["sample_fps"],
         "source_fps": timing_info["source_fps"],
