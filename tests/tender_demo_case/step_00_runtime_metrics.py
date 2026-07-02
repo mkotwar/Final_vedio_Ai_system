@@ -10,7 +10,7 @@ def now_seconds() -> float:
     return time.perf_counter()
 
 
-def build_step_result(step_id: int, step_name: str, started_at: float, status: str = "success") -> dict[str, Any]:
+def build_step_result(step_id: int | str, step_name: str, started_at: float, status: str = "success") -> dict[str, Any]:
     duration_seconds = round(max(0.0, now_seconds() - started_at), 3)
     return {
         "step_id": step_id,
@@ -22,7 +22,7 @@ def build_step_result(step_id: int, step_name: str, started_at: float, status: s
 
 def build_parallel_branch_result(
     name: str,
-    steps: list[int],
+    steps: list[int | str],
     started_at: float,
     status: str = "success",
 ) -> dict[str, Any]:

@@ -236,7 +236,21 @@ def write_frame_for_duration(writer, frame, fps: int, seconds: float) -> int:
 
 
 def find_ffmpeg() -> str | None:
-    return shutil.which("ffmpeg")
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    fallback_candidates = [
+        Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe",
+    ]
+    for candidate in fallback_candidates:
+        try:
+            if candidate.exists():
+                return str(candidate)
+        except PermissionError:
+            return str(candidate)
+    return None
 
 
 def ensure_even_dimensions(width: int, height: int) -> tuple[int, int]:
@@ -279,6 +293,36 @@ def run_ffmpeg_h264_export(frames_dir: Path, fps: int, output_path: Path) -> tup
         str(fps),
         "-i",
         str(frames_dir / "frame_%06d.jpg"),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        error_output = (completed.stderr or completed.stdout or "").strip()
+        return False, error_output or f"ffmpeg exited with code {completed.returncode}"
+    return True, None
+
+
+def run_ffmpeg_h264_convert(input_path: Path, output_path: Path) -> tuple[bool, str | None]:
+    ffmpeg_path = find_ffmpeg()
+    if ffmpeg_path is None:
+        return False, "ffmpeg not found in PATH"
+
+    command = [
+        ffmpeg_path,
+        "-y",
+        "-i",
+        str(input_path),
         "-c:v",
         "libx264",
         "-pix_fmt",
@@ -372,6 +416,7 @@ def _build_compiled_video(
 
     compiled_video_path = output_dir / "18_compiled_review_video.mp4"
     fallback_video_path = output_dir / "18_compiled_review_video_fallback.avi"
+    browser_playable_video_path = output_dir / "18_compiled_review_video_web.mp4"
     compiled_manifest_path = run_dir / "18_compiled_review_video.json"
     compatibility_manifest_path = output_dir / "18_compiled_review_video.json"
     frames_dir = output_dir / "_compiled_frames"
@@ -383,6 +428,10 @@ def _build_compiled_video(
         "compiled_video_path": _relative_to_repo(compiled_video_path),
         "compiled_video_backend": None,
         "playback_recommended_file": None,
+        "browser_playable_video_path": None,
+        "mp4_created": False,
+        "browser_playable": False,
+        "fallback_video_path": _relative_to_repo(fallback_video_path),
         "ffmpeg_available": ffmpeg_available,
         "ffmpeg_error": None,
         "compiled_from": compiled_from,
@@ -404,7 +453,7 @@ def _build_compiled_video(
         compatibility_manifest_path.write_text(compiled_manifest_text, encoding="utf-8")
         return manifest
 
-    for stale_path in [compiled_video_path, fallback_video_path]:
+    for stale_path in [compiled_video_path, fallback_video_path, browser_playable_video_path]:
         if stale_path.exists():
             try:
                 stale_path.unlink()
@@ -516,19 +565,24 @@ def _build_compiled_video(
     ffmpeg_error: str | None = None
     backend_used = None
     playback_recommended_file: str | None = None
+    browser_playable_path_value: str | None = None
     primary_video_verification = verify_video_readable(compiled_video_path)
     recommended_video_verification: dict[str, Any] = {}
     playable = False
+    browser_playable = False
 
     if ffmpeg_available and frames_saved > 0:
         success, ffmpeg_error = run_ffmpeg_h264_export(frames_dir, compiled_fps, compiled_video_path)
         manifest["ffmpeg_error"] = ffmpeg_error
         if success:
             backend_used = "ffmpeg_h264"
+            manifest["mp4_created"] = True
             playback_recommended_file = _relative_to_repo(compiled_video_path)
+            browser_playable_path_value = _relative_to_repo(compiled_video_path)
             primary_video_verification = verify_video_readable(compiled_video_path)
             recommended_video_verification = dict(primary_video_verification)
             playable = bool(primary_video_verification.get("readable_by_opencv")) and int(primary_video_verification.get("frame_count", 0)) > 1
+            browser_playable = playable
 
     if backend_used is None:
         avi_writer = _open_mjpg_writer(
@@ -546,11 +600,34 @@ def _build_compiled_video(
         playback_recommended_file = _relative_to_repo(fallback_video_path)
         primary_video_verification = verify_video_readable(compiled_video_path)
         recommended_video_verification = verify_video_readable(fallback_video_path)
-        playable = False
+        playable = bool(recommended_video_verification.get("readable_by_opencv")) and int(recommended_video_verification.get("frame_count", 0)) > 1
+        if playable:
+            convert_success, convert_error = run_ffmpeg_h264_convert(fallback_video_path, browser_playable_video_path)
+            if convert_success:
+                web_verification = verify_video_readable(browser_playable_video_path)
+                if web_verification.get("exists") and web_verification.get("readable_by_opencv") and int(web_verification.get("frame_count", 0)) > 1:
+                    backend_used = "ffmpeg_h264_from_fallback"
+                    manifest["mp4_created"] = True
+                    playback_recommended_file = _relative_to_repo(browser_playable_video_path)
+                    browser_playable_path_value = _relative_to_repo(browser_playable_video_path)
+                    recommended_video_verification = web_verification
+                    browser_playable = True
+                else:
+                    manifest["ffmpeg_error"] = "FFmpeg created browser MP4, but verification failed."
+            else:
+                manifest["ffmpeg_error"] = convert_error
 
+    if backend_used == "opencv_mjpg_fallback":
+        manifest["compiled_video_path"] = _relative_to_repo(fallback_video_path)
+    elif backend_used == "ffmpeg_h264_from_fallback":
+        manifest["compiled_video_path"] = _relative_to_repo(browser_playable_video_path)
+    else:
+        manifest["compiled_video_path"] = _relative_to_repo(compiled_video_path)
     manifest["compiled_video_backend"] = backend_used
     manifest["playback_recommended_file"] = playback_recommended_file
-    manifest["video_verification"] = primary_video_verification
+    manifest["browser_playable_video_path"] = browser_playable_path_value
+    manifest["browser_playable"] = browser_playable
+    manifest["video_verification"] = recommended_video_verification
     manifest["playback_recommended_verification"] = recommended_video_verification
     manifest["playable"] = playable
 
@@ -565,12 +642,13 @@ def _build_compiled_video(
     if ffmpeg_error:
         print(f"[tender-demo] FFmpeg error: {ffmpeg_error}")
     print(f"[tender-demo] Backend used: {backend_used}")
-    print(f"[tender-demo] Output video path: {playback_recommended_file}")
+    print(f"[tender-demo] Recommended playback video: {playback_recommended_file}")
+    print(f"[tender-demo] Fallback video: {_relative_to_repo(fallback_video_path)}")
+    print(f"[tender-demo] Browser playable: {'true' if browser_playable else 'false'}")
     verification_for_print = recommended_video_verification if recommended_video_verification else primary_video_verification
     print(f"[tender-demo] File size: {verification_for_print.get('file_size_bytes', 0)}")
     print(f"[tender-demo] Frame count: {verification_for_print.get('frame_count', 0)}")
     print(f"[tender-demo] Readable: {'yes' if verification_for_print.get('readable_by_opencv') else 'no'}")
-    print(f"[tender-demo] Compiled video path: {compiled_video_path}")
     print(f"[tender-demo] Compiled manifest path: {compiled_manifest_path}")
     return manifest
 
@@ -789,7 +867,11 @@ def export_event_clips(run_dir: Path) -> dict[str, Any]:
         "playable": compiled_review_video.get("playable", False),
         "compiled_from": compiled_review_video.get("compiled_from"),
         "normal_fallback_used": compiled_review_video.get("normal_fallback_used", False),
+        "browser_playable_video_path": compiled_review_video.get("browser_playable_video_path"),
         "playback_recommended_file": compiled_review_video.get("playback_recommended_file"),
+        "fallback_video_path": compiled_review_video.get("fallback_video_path"),
+        "mp4_created": compiled_review_video.get("mp4_created", False),
+        "browser_playable": compiled_review_video.get("browser_playable", False),
         "fallback_available": compiled_review_video.get("compiled_video_backend") == "opencv_mjpg_fallback",
         "total_events_used": compiled_review_video.get("total_events_used", 0),
         "total_frames_written": compiled_review_video.get("total_frames_written", 0),

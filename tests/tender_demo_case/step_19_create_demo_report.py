@@ -131,6 +131,42 @@ def _media_video(run_dir: Path, path_value: str | None) -> str:
     )
 
 
+def _resolve_compiled_video_path(run_dir: Path, compiled_manifest: dict[str, Any] | None, export_manifest: dict[str, Any] | None) -> str | None:
+    candidates: list[str | None] = []
+    if isinstance(compiled_manifest, dict):
+        candidates.extend(
+            [
+                compiled_manifest.get("browser_playable_video_path"),
+                compiled_manifest.get("playback_recommended_file"),
+                compiled_manifest.get("compiled_video_path"),
+                compiled_manifest.get("fallback_video_path"),
+            ]
+        )
+    if isinstance(export_manifest, dict):
+        compiled_info = export_manifest.get("compiled_review_video", {})
+        if isinstance(compiled_info, dict):
+            candidates.extend(
+                [
+                    compiled_info.get("browser_playable_video_path"),
+                    compiled_info.get("playback_recommended_file"),
+                    compiled_info.get("output_path"),
+                    compiled_info.get("fallback_video_path"),
+                ]
+            )
+    candidates.extend(
+        [
+            "18_exported_clips/18_compiled_review_video_web.mp4",
+            "18_exported_clips/18_compiled_review_video.mp4",
+            "18_exported_clips/18_compiled_review_video_fallback.avi",
+        ]
+    )
+    for candidate in candidates:
+        relative = make_relative_media_path(run_dir, candidate)
+        if relative and (run_dir / relative).exists():
+            return candidate
+    return next((candidate for candidate in candidates if candidate), None)
+
+
 def _warnings(optional_payloads: dict[str, Any | None]) -> list[str]:
     warnings: list[str] = []
     for label, payload in optional_payloads.items():
@@ -376,10 +412,14 @@ def create_demo_report_html(run_dir: Path) -> dict[str, Any]:
     compiled_video_path = None
     compiled_video_warning = ""
     compiled_video_metadata_html = ""
+    compiled_video_path = _resolve_compiled_video_path(
+        run_dir,
+        compiled_manifest if isinstance(compiled_manifest, dict) else None,
+        export_manifest if isinstance(export_manifest, dict) else None,
+    )
     if isinstance(export_manifest, dict):
         compiled_video_info = export_manifest.get("compiled_review_video", {})
         if isinstance(compiled_video_info, dict):
-            compiled_video_path = compiled_video_info.get("playback_recommended_file") or compiled_video_info.get("output_path")
             verification = compiled_video_info.get("playback_recommended_verification") or compiled_video_info.get("video_verification", {})
             compiled_video_metadata_html = (
                 f"<div class='kv-grid'>"
@@ -394,8 +434,7 @@ def create_demo_report_html(run_dir: Path) -> dict[str, Any]:
             )
             if not compiled_video_info.get("playable"):
                 compiled_video_warning = "Compiled review video exists but is marked not playable."
-    if compiled_video_path is None and isinstance(compiled_manifest, dict):
-        compiled_video_path = compiled_manifest.get("playback_recommended_file") or compiled_manifest.get("compiled_video_path")
+    if isinstance(compiled_manifest, dict) and compiled_video_metadata_html == "":
         verification = compiled_manifest.get("playback_recommended_verification") or compiled_manifest.get("video_verification", {})
         compiled_video_metadata_html = (
             f"<div class='kv-grid'>"
@@ -408,7 +447,7 @@ def create_demo_report_html(run_dir: Path) -> dict[str, Any]:
             f"</div>"
             f"<div class='path-text'><strong>File Path:</strong> {_escape(compiled_video_path)}</div>"
         )
-        if not verification.get("readable_by_opencv"):
+        if not verification.get("readable_by_opencv") and not (compiled_video_path and make_relative_media_path(run_dir, compiled_video_path)):
             compiled_video_warning = "Compiled review video is missing or unreadable."
 
     compiled_video_html = (
@@ -416,6 +455,11 @@ def create_demo_report_html(run_dir: Path) -> dict[str, Any]:
         if compiled_video_path
         else '<div class="warning">Compiled review video is missing.</div>'
     )
+    if compiled_video_path and str(compiled_video_path).lower().endswith(".avi"):
+        compiled_video_html = (
+            "<div class='warning'>Only fallback AVI is available. Browser playback may not work; use the file path below if needed.</div>"
+            + compiled_video_html
+        )
     if compiled_video_warning:
         compiled_video_html = f'<div class="warning">{_escape(compiled_video_warning)}</div>' + compiled_video_html
     if compiled_video_metadata_html:

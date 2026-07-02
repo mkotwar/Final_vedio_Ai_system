@@ -41,6 +41,7 @@ from step_00_runtime_metrics import (
 )
 from step_10_yolo_detection import run_yolo_detection_on_selected_frames
 from step_11_yolo_object_scoring import run_yolo_object_scoring
+from step_11b_object_motion_state import estimate_object_motion_states
 from step_13_rank_candidate_clips import rank_candidate_clips
 from step_14_select_topk_clips import select_topk_clips_for_qwen
 from step_15_create_topk_vlm_inputs import create_topk_vlm_inputs
@@ -121,7 +122,9 @@ def _run_clip_branch(
     video_info: dict[str, object],
 ) -> dict[str, Any]:
     branch_started = now_seconds()
+    branch_steps: list[dict[str, Any]] = []
     print("[tender-demo-fast] Starting clip branch: Steps 5-6")
+    step_5_started = now_seconds()
     _create_candidate_clips(
         motion_candidates=motion_candidates,
         run_dir=run_dir,
@@ -129,12 +132,14 @@ def _run_clip_branch(
         max_clip_seconds=_read_positive_float_env(ENV_MAX_CLIP_SECONDS, DEFAULT_MAX_CLIP_SECONDS, "max clip seconds"),
         overlap_seconds=_read_positive_float_env(ENV_CLIP_OVERLAP_SECONDS, DEFAULT_CLIP_OVERLAP_SECONDS, "clip overlap seconds"),
     )
+    branch_steps.append(build_step_result(5, "candidate clips", step_5_started, status="success"))
     candidate_clips = []
     candidate_path = run_dir / "05_candidate_clips.json"
     if candidate_path.exists():
         import json
         candidate_clips = json.loads(candidate_path.read_text(encoding="utf-8"))
 
+    step_6_started = now_seconds()
     _expand_candidate_clips(
         candidate_clips=candidate_clips,
         video_info=video_info,
@@ -147,18 +152,29 @@ def _run_clip_branch(
             "minimum expanded clip seconds",
         ),
     )
+    branch_steps.append(build_step_result(6, "expanded clips", step_6_started, status="success"))
     return {
         "branch_metrics": build_parallel_branch_result("clip_branch", [5, 6], branch_started, status="success"),
+        "step_metrics": branch_steps,
     }
 
 
 def _run_yolo_branch(run_dir: Path) -> dict[str, Any]:
     branch_started = now_seconds()
-    print("[tender-demo-fast] Starting YOLO branch: Steps 10-11")
+    branch_steps: list[dict[str, Any]] = []
+    print("[tender-demo-fast] Starting YOLO branch: Steps 10-11-11B")
+    step_10_started = now_seconds()
     run_yolo_detection_on_selected_frames(run_dir)
+    branch_steps.append(build_step_result(10, "YOLO detection", step_10_started, status="success"))
+    step_11_started = now_seconds()
     run_yolo_object_scoring(run_dir)
+    branch_steps.append(build_step_result(11, "YOLO object scoring", step_11_started, status="success"))
+    step_11b_started = now_seconds()
+    estimate_object_motion_states(run_dir)
+    branch_steps.append(build_step_result("11B", "object motion state estimation", step_11b_started, status="success"))
     return {
-        "branch_metrics": build_parallel_branch_result("yolo_branch", [10, 11], branch_started, status="success"),
+        "branch_metrics": build_parallel_branch_result("yolo_branch", [10, 11, "11B"], branch_started, status="success"),
+        "step_metrics": branch_steps,
     }
 
 
@@ -176,6 +192,8 @@ def _run_parallel_or_sequential(
     if not parallel_enabled:
         clip_result = _run_clip_branch(run_dir, motion_candidates, video_info)
         yolo_result = _run_yolo_branch(run_dir)
+        step_metrics.extend(clip_result.get("step_metrics", []))
+        step_metrics.extend(yolo_result.get("step_metrics", []))
         parallel_sections.append(
             build_parallel_section_result(
                 "clip_branch_and_yolo_branch",
@@ -192,13 +210,17 @@ def _run_parallel_or_sequential(
             executor.submit(_run_yolo_branch, run_dir): "yolo_branch",
         }
         branch_results: list[dict[str, Any]] = []
+        branch_step_metrics: list[dict[str, Any]] = []
         for future, branch_name in futures.items():
             try:
-                branch_results.append(future.result()["branch_metrics"])
+                branch_result = future.result()
+                branch_results.append(branch_result["branch_metrics"])
+                branch_step_metrics.extend(branch_result.get("step_metrics", []))
             except Exception as exc:
                 print(f"[tender-demo-fast] Parallel branch failed: {branch_name}")
                 raise RuntimeError(f"Parallel branch failed: {branch_name}: {exc}") from exc
 
+    step_metrics.extend(branch_step_metrics)
     parallel_sections.append(
         build_parallel_section_result(
             "clip_branch_and_yolo_branch",

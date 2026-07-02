@@ -41,6 +41,20 @@ def _load_required_json(path: Path) -> list[dict[str, Any]] | dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _load_motion_state_hints(run_dir: Path) -> dict[str, dict[str, Any]]:
+    path = run_dir / "11b_object_motion_states.json"
+    if not path.exists():
+        return {}
+    payload = _load_required_json(path)
+    if not isinstance(payload, dict):
+        return {}
+    return {
+        str(item.get("clip_id", "")).strip(): item
+        for item in payload.get("clip_motion_states", [])
+        if isinstance(item, dict) and str(item.get("clip_id", "")).strip()
+    }
+
+
 def _load_or_create_selected_clips(run_dir: Path) -> list[dict[str, Any]]:
     selected_clips_path = run_dir / "14_selected_top_clips.json"
     if selected_clips_path.exists():
@@ -160,6 +174,7 @@ def create_topk_vlm_inputs(run_dir: Path) -> dict[str, Any]:
     output_dir = run_dir / "15_topk_vlm_inputs"
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = run_dir / "15_topk_vlm_inputs.json"
+    motion_state_hints_by_clip_id = _load_motion_state_hints(run_dir)
 
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
@@ -222,6 +237,7 @@ def create_topk_vlm_inputs(run_dir: Path) -> dict[str, Any]:
                 "ranking_reasons": clip.get("ranking_reasons", []),
                 "motion": clip.get("motion", {}),
                 "yolo": clip.get("yolo", {}),
+                "motion_state_hints": motion_state_hints_by_clip_id.get(str(clip_id).strip(), {}),
                 "top_annotated_frame_path": clip.get("top_annotated_frame_path"),
                 "creation_success": False,
                 "error": None,

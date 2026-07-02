@@ -411,6 +411,7 @@ def resolve_vehicle_class_name(
     ocr_item: dict[str, Any] | None,
 ) -> str:
     for candidate in (
+        resolve_preferred_ocr_class_name(ocr_item),
         ocr_item.get("class_name") if isinstance(ocr_item, dict) else None,
         attribute.get("class_name") if isinstance(attribute, dict) else None,
         track.get("class_name") if isinstance(track, dict) else None,
@@ -419,6 +420,46 @@ def resolve_vehicle_class_name(
         if text:
             return text
     return "vehicle"
+
+
+def resolve_preferred_ocr_class_name(ocr_item: dict[str, Any] | None) -> str | None:
+    if not isinstance(ocr_item, dict):
+        return None
+    if bool(ocr_item.get("vehicle_subtype_needs_review")):
+        safe_display = str(ocr_item.get("safe_display_class_name") or "").strip().lower()
+        if safe_display:
+            return safe_display
+    for candidate in (
+        ocr_item.get("final_class_name"),
+        ocr_item.get("corrected_class_name"),
+        ocr_item.get("matched_track_class_name"),
+        ocr_item.get("class_name"),
+        ocr_item.get("source_detection_class_name"),
+    ):
+        text = str(candidate or "").strip().lower()
+        if text:
+            return text
+    return None
+
+
+def resolve_preferred_ocr_vehicle_type(ocr_item: dict[str, Any] | None) -> str | None:
+    if not isinstance(ocr_item, dict):
+        return None
+    if bool(ocr_item.get("vehicle_subtype_needs_review")):
+        safe_display = str(ocr_item.get("safe_display_vehicle_type") or "").strip().lower()
+        if safe_display:
+            return safe_display
+    for candidate in (
+        ocr_item.get("final_vehicle_type"),
+        ocr_item.get("corrected_vehicle_type"),
+        ocr_item.get("matched_track_vehicle_type"),
+        ocr_item.get("vehicle_type"),
+        ocr_item.get("class_name"),
+    ):
+        text = str(candidate or "").strip().lower()
+        if text:
+            return text
+    return None
 
 
 def build_event(
@@ -637,6 +678,10 @@ def build_vehicle_events(track: dict[str, Any], attribute: dict[str, Any] | None
     confidence = track_confidence(track)
     review_flag = bool(track.get("needs_review")) or str(track.get("count_for_summary")) == "review"
     vehicle_attrs = dict(attribute.get("vehicle_attributes") or {}) if isinstance(attribute, dict) else {}
+    resolved_vehicle_type = (
+        resolve_preferred_ocr_vehicle_type(ocr_item)
+        or str(vehicle_attrs.get("vehicle_type") or resolved_class_name)
+    )
     evidence = {
         "best_frame_id": track.get("best_frame_id"),
         "best_image_path": track.get("best_image_path"),
@@ -666,7 +711,7 @@ def build_vehicle_events(track: dict[str, Any], attribute: dict[str, Any] | None
             risk_score=0.20,
             needs_review=review_flag,
             search_keywords=build_base_keywords("vehicle", resolved_class_name, vehicle_attrs.get("vehicle_color")),
-            attributes={"cleanup_status": track.get("cleanup_status"), "vehicle_type": vehicle_attrs.get("vehicle_type")},
+            attributes={"cleanup_status": track.get("cleanup_status"), "vehicle_type": resolved_vehicle_type},
             evidence=evidence,
             source_steps=["05B_track_cleanup", "06_attribute_extraction"] if attribute else ["05B_track_cleanup"],
         )
@@ -783,6 +828,14 @@ def build_vehicle_events(track: dict[str, Any], attribute: dict[str, Any] | None
                     search_keywords=build_base_keywords("vehicle", vehicle_attrs.get("vehicle_type"), "plate", candidate_text, "needs_review" if needs_review else "candidate"),
                     attributes={
                         "vehicle_type": vehicle_attrs.get("vehicle_type"),
+                        "resolved_vehicle_type": resolved_vehicle_type,
+                        "vehicle_subtype_needs_review": ocr_item.get("vehicle_subtype_needs_review"),
+                        "vehicle_subtype_review_reason": ocr_item.get("vehicle_subtype_review_reason"),
+                        "possible_vehicle_classes": ocr_item.get("possible_vehicle_classes"),
+                        "raw_vehicle_class_name": ocr_item.get("raw_vehicle_class_name"),
+                        "final_vehicle_class_confidence": ocr_item.get("final_vehicle_class_confidence"),
+                        "safe_display_class_name": ocr_item.get("safe_display_class_name"),
+                        "safe_display_vehicle_type": ocr_item.get("safe_display_vehicle_type"),
                         "vehicle_color": vehicle_attrs.get("vehicle_color"),
                         "candidate_plate_text": candidate_text,
                         "plate_ocr_status": plate_status,
@@ -797,6 +850,16 @@ def build_vehicle_events(track: dict[str, Any], attribute: dict[str, Any] | None
                         "matched_track_vehicle_type": ocr_item.get("matched_track_vehicle_type"),
                         "matched_track_iou": ocr_item.get("matched_track_iou"),
                         "matched_track_time_delta": ocr_item.get("matched_track_time_delta"),
+                        "class_source_before_correction": ocr_item.get("class_source_before_correction"),
+                        "corrected_class_name": ocr_item.get("corrected_class_name"),
+                        "corrected_vehicle_type": ocr_item.get("corrected_vehicle_type"),
+                        "corrected_matched_source_track_id": ocr_item.get("corrected_matched_source_track_id"),
+                        "corrected_matched_attribute_track_id": ocr_item.get("corrected_matched_attribute_track_id"),
+                        "class_correction_applied": ocr_item.get("class_correction_applied"),
+                        "class_correction_reason": ocr_item.get("class_correction_reason"),
+                        "class_correction_votes": ocr_item.get("class_correction_votes"),
+                        "final_class_name": ocr_item.get("final_class_name"),
+                        "final_vehicle_type": ocr_item.get("final_vehicle_type"),
                         "class_source": ocr_item.get("class_source"),
                     },
                     evidence=evidence,
@@ -902,30 +965,26 @@ def build_untracked_plate_events(ocr_item: dict[str, Any]) -> list[dict[str, Any
     candidate_text = str(ocr_item.get("candidate_plate_text") or "")
     matched_source_track_id = ocr_item.get("matched_source_track_id")
     matched_attribute_track_id = ocr_item.get("matched_attribute_track_id")
-    source_track_id = matched_source_track_id or ocr_item.get("source_track_id")
-    attribute_track_id = matched_attribute_track_id or ocr_item.get("attribute_track_id")
+    source_track_id = (
+        ocr_item.get("corrected_matched_source_track_id")
+        or matched_source_track_id
+        or ocr_item.get("source_track_id")
+    )
+    attribute_track_id = (
+        ocr_item.get("corrected_matched_attribute_track_id")
+        or matched_attribute_track_id
+        or ocr_item.get("attribute_track_id")
+    )
+    preferred_class_name = resolve_preferred_ocr_class_name(ocr_item)
+    preferred_vehicle_type = resolve_preferred_ocr_vehicle_type(ocr_item)
     if matched_source_track_id:
-        class_name = str(
-            ocr_item.get("matched_track_class_name")
-            or ocr_item.get("class_name")
-            or ocr_item.get("vehicle_type")
-            or "vehicle"
-        )
-        vehicle_type = str(
-            ocr_item.get("matched_track_vehicle_type")
-            or ocr_item.get("vehicle_type")
-            or class_name
-        )
-        class_source = "matched_clean_track"
+        class_name = str(preferred_class_name or "vehicle")
+        vehicle_type = str(preferred_vehicle_type or class_name)
+        class_source = str(ocr_item.get("class_source") or "matched_clean_track")
     else:
-        class_name = str(
-            ocr_item.get("source_detection_class_name")
-            or ocr_item.get("class_name")
-            or ocr_item.get("vehicle_type")
-            or "vehicle"
-        )
-        vehicle_type = class_name
-        class_source = "source_yolo_detection"
+        class_name = str(preferred_class_name or "vehicle")
+        vehicle_type = str(preferred_vehicle_type or class_name)
+        class_source = str(ocr_item.get("class_source") or "source_yolo_detection")
     timestamp = round_time(ocr_item.get("best_ocr_timestamp") or ocr_item.get("start_time"))
     evidence = {
         "best_frame_id": ocr_item.get("best_ocr_frame_id"),
@@ -990,6 +1049,23 @@ def build_untracked_plate_events(ocr_item: dict[str, Any]) -> list[dict[str, Any
                 "matched_track_vehicle_type": ocr_item.get("matched_track_vehicle_type"),
                 "matched_track_iou": ocr_item.get("matched_track_iou"),
                 "matched_track_time_delta": ocr_item.get("matched_track_time_delta"),
+                "class_source_before_correction": ocr_item.get("class_source_before_correction"),
+                "corrected_class_name": ocr_item.get("corrected_class_name"),
+                "corrected_vehicle_type": ocr_item.get("corrected_vehicle_type"),
+                "corrected_matched_source_track_id": ocr_item.get("corrected_matched_source_track_id"),
+                "corrected_matched_attribute_track_id": ocr_item.get("corrected_matched_attribute_track_id"),
+                "class_correction_applied": ocr_item.get("class_correction_applied"),
+                "class_correction_reason": ocr_item.get("class_correction_reason"),
+                "class_correction_votes": ocr_item.get("class_correction_votes"),
+                "final_class_name": ocr_item.get("final_class_name"),
+                "final_vehicle_type": ocr_item.get("final_vehicle_type"),
+                "vehicle_subtype_needs_review": ocr_item.get("vehicle_subtype_needs_review"),
+                "vehicle_subtype_review_reason": ocr_item.get("vehicle_subtype_review_reason"),
+                "possible_vehicle_classes": ocr_item.get("possible_vehicle_classes"),
+                "raw_vehicle_class_name": ocr_item.get("raw_vehicle_class_name"),
+                "final_vehicle_class_confidence": ocr_item.get("final_vehicle_class_confidence"),
+                "safe_display_class_name": ocr_item.get("safe_display_class_name"),
+                "safe_display_vehicle_type": ocr_item.get("safe_display_vehicle_type"),
                 "class_source": class_source,
             },
             evidence=evidence,

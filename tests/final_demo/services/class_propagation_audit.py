@@ -143,7 +143,7 @@ def write_class_propagation_audit(
         audit_name = "07C_class_propagation_audit.json"
         report_name = "07C_class_propagation_audit_report.json"
         manifest_step = "07C_class_propagation_audit"
-        next_step = "08_event_grouping_or_ranking"
+        next_step = "08_attribute_search_index"
 
     audit_result = build_class_propagation_audit(run_dir, mode="final" if mode == "final" else "pre_attribute")
     audit_path = run_dir / audit_name

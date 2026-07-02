@@ -38,6 +38,31 @@ def main() -> None:
     from tests.final_demo.step_07C_class_propagation_audit import (
         run_step_07C_class_propagation_audit,
     )
+    from tests.final_demo.step_08_build_attribute_search_index import (
+        run_step_08_build_attribute_search_index,
+    )
+    from tests.final_demo.step_09_search_query_engine import (
+        run_step_09_search_query_engine,
+    )
+    from tests.final_demo.step_10_extract_person_attributes import (
+        run_step_10_extract_person_attributes,
+    )
+    from tests.final_demo.step_11_extract_object_attributes import (
+        run_step_11_extract_object_attributes,
+    )
+    from tests.final_demo.step_12_associate_entities import (
+        run_step_12_associate_entities,
+    )
+    from tests.final_demo.step_13_build_enriched_search_index import (
+        run_step_13_build_enriched_search_index,
+    )
+    from tests.final_demo.step_14_enriched_search_query_engine import (
+        run_step_14_enriched_search_query_engine,
+    )
+    from tests.final_demo.step_15_rank_evidence import run_step_15_rank_evidence
+    from tests.final_demo.step_16_vlm_evidence_verification import (
+        run_step_16_vlm_evidence_verification,
+    )
 
     ensure_final_demo_directories()
     step_01_result = run_step_01_video_ingest()
@@ -52,7 +77,16 @@ def main() -> None:
     step_06a_result = run_step_06A_detect_plate_candidates(step_06_result["run_dir"])
     step_07a_result = run_step_07A_plate_ocr(step_06a_result["run_dir"])
     step_07b_result = run_step_07B_event_candidates(step_07a_result["run_dir"])
-    run_step_07C_class_propagation_audit(step_07b_result["run_dir"])
+    step_07c_result = run_step_07C_class_propagation_audit(step_07b_result["run_dir"])
+    step_08_result = run_step_08_build_attribute_search_index(step_07c_result["run_dir"])
+    step_09_result = run_step_09_search_query_engine(step_08_result["run_dir"])
+    step_10_result = run_step_10_extract_person_attributes(step_09_result["run_dir"])
+    step_11_result = run_step_11_extract_object_attributes(step_10_result["run_dir"])
+    step_12_result = run_step_12_associate_entities(step_11_result["run_dir"])
+    step_13_result = run_step_13_build_enriched_search_index(step_12_result["run_dir"])
+    step_14_result = run_step_14_enriched_search_query_engine(step_13_result["run_dir"])
+    step_15_result = run_step_15_rank_evidence(step_14_result["run_dir"])
+    run_step_16_vlm_evidence_verification(step_15_result["run_dir"])
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ STANDARD_STAGE_WEIGHTS = {
     7: 6,
     10: 15,
     11: 8,
+    "11B": 4,
     12: 4,
     13: 4,
     14: 3,
@@ -49,6 +50,7 @@ STANDARD_STAGE_LABELS = {
     7: "Creating VLM temporal strips",
     10: "Running YOLO detection",
     11: "Scoring YOLO object evidence",
+    "11B": "Estimating object motion state",
     12: "Fusing motion + YOLO + VLM evidence",
     13: "Ranking candidate clips",
     14: "Selecting Top-K + guardrail clips",
@@ -68,6 +70,7 @@ STANDARD_STAGE_PROGRESS_PERCENT = {
     7: 31,
     10: 45,
     11: 55,
+    "11B": 58,
     12: 60,
     13: 66,
     14: 70,
@@ -211,6 +214,52 @@ def resolve_media_path(run_dir: Path, path_value: str | None) -> Path | None:
             return run_marker_candidate
 
     return None
+
+
+def find_ffmpeg() -> str | None:
+    ffmpeg_path = shutil.which("ffmpeg")
+    if ffmpeg_path:
+        return ffmpeg_path
+
+    fallback_candidates = [
+        Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe",
+    ]
+    for candidate in fallback_candidates:
+        try:
+            if candidate.exists():
+                return str(candidate)
+        except PermissionError:
+            return str(candidate)
+    return None
+
+
+def convert_avi_to_browser_mp4(avi_path: Path, web_mp4_path: Path) -> tuple[bool, str]:
+    ffmpeg_path = find_ffmpeg()
+    if ffmpeg_path is None:
+        return False, "FFmpeg not found. Install FFmpeg and restart Streamlit."
+    completed = subprocess.run(
+        [
+            ffmpeg_path,
+            "-y",
+            "-i",
+            str(avi_path),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(web_mp4_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        error_text = (completed.stderr or completed.stdout or "").strip() or f"ffmpeg exited with code {completed.returncode}"
+        return False, error_text
+    return True, "Browser MP4 created."
 
 
 def media_exists(path: Path | None) -> bool:
@@ -363,6 +412,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 6", "06_expanded_clips.json"], "Expanding clips", 30),
         (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
         (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
+        (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
@@ -381,6 +431,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting parallel section", "Starting clip branch", "Starting YOLO branch"], "Building clips and running YOLO evidence", 55),
         (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
         (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
+        (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
@@ -407,6 +458,7 @@ def filter_user_friendly_log_line(line: str) -> str | None:
         "Starting Step 7": "Creating VLM temporal strips...",
         "Starting Step 10": "Running YOLO object detection...",
         "Starting Step 11": "Scoring YOLO object evidence...",
+        "Starting Step 11B": "Estimating object motion state...",
         "Starting Step 12": "Fusing motion + YOLO + VLM evidence...",
         "Starting Step 13": "Ranking candidate clips...",
         "Starting Step 14": "Selecting Top-K + guardrail clips...",
@@ -566,25 +618,37 @@ def run_pipeline_with_live_logs(command, env, cwd, placeholders, stage_weights) 
 def _extract_compiled_video_path(run_dir: Path, results: dict[str, Any]) -> Path | None:
     compiled_info = results.get("compiled_video", {}) if isinstance(results.get("compiled_video"), dict) else {}
     export_info = results.get("exported_clips", {}).get("compiled_review_video", {}) if isinstance(results.get("exported_clips"), dict) else {}
-    compiled_path_value = (
-        compiled_info.get("playback_recommended_file")
-        or compiled_info.get("compiled_video_path")
-        or export_info.get("playback_recommended_file")
-        or export_info.get("output_path")
-        or str(run_dir / "18_exported_clips" / "18_compiled_review_video.mp4")
-    )
-    return resolve_media_path(run_dir, compiled_path_value)
+    candidate_values = [
+        compiled_info.get("browser_playable_video_path"),
+        compiled_info.get("playback_recommended_file"),
+        compiled_info.get("compiled_video_path"),
+        compiled_info.get("fallback_video_path"),
+        export_info.get("browser_playable_video_path"),
+        export_info.get("playback_recommended_file"),
+        export_info.get("output_path"),
+        str(run_dir / "18_exported_clips" / "18_compiled_review_video_web.mp4"),
+        str(run_dir / "18_exported_clips" / "18_compiled_review_video.mp4"),
+        str(run_dir / "18_exported_clips" / "18_compiled_review_video_fallback.avi"),
+    ]
+    for compiled_path_value in candidate_values:
+        compiled_path = resolve_media_path(run_dir, compiled_path_value)
+        if media_exists(compiled_path):
+            return compiled_path
+    return resolve_media_path(run_dir, next((value for value in candidate_values if value), None))
 
 
 def _timeline_description(item: dict[str, Any]) -> str:
-    for key in ["best_event_description", "caption"]:
+    for key in ["best_event_description", "caption", "description"]:
         value = str(item.get(key, "")).strip()
         if value:
             return value
     activities = item.get("activity_descriptions", [])
     if isinstance(activities, list) and activities:
         return str(activities[0])
-    return "Selected clip contains visually important activity."
+    raw_text = str(item.get("raw_vlm_output", "")).strip()
+    if raw_text:
+        return raw_text[:220]
+    return "No useful description was produced for this clip."
 
 
 @st.cache_data(show_spinner=False)
@@ -714,6 +778,26 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
 
         description = str(event.get("best_event_description", "")).strip()
         caption = str(event.get("caption", "")).strip()
+        motion_summary = str(event.get("motion_summary", "")).strip()
+        moving_objects = [str(item).strip() for item in event.get("moving_objects", []) if str(item).strip()] if isinstance(event.get("moving_objects"), list) else []
+        stationary_objects = [str(item).strip() for item in event.get("stationary_objects", []) if str(item).strip()] if isinstance(event.get("stationary_objects"), list) else []
+        traffic_state = str(event.get("traffic_state", "")).strip()
+        motion_aliases: list[str] = []
+        for name in moving_objects:
+            lowered = name.lower()
+            motion_aliases.append(f"moving {lowered}")
+            if lowered in {"car", "truck", "bus", "vehicle", "motorcycle", "bicycle", "scooter", "auto rickshaw"}:
+                motion_aliases.append("moving vehicle")
+                motion_aliases.append("traffic activity")
+            if lowered == "person":
+                motion_aliases.append("walking person")
+                motion_aliases.append("moving person")
+        for name in stationary_objects:
+            lowered = name.lower()
+            motion_aliases.append(f"stationary {lowered}")
+            if lowered in {"car", "truck", "bus", "vehicle", "motorcycle", "bicycle", "scooter", "auto rickshaw"}:
+                motion_aliases.append("parked car")
+                motion_aliases.append("stationary vehicle")
         raw_text_parts = [
             str(video_info.get("video_name", "")),
             clip_id,
@@ -724,6 +808,11 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
             str(event.get("confidence", "")),
             caption,
             description,
+            motion_summary,
+            traffic_state,
+            " ".join(moving_objects),
+            " ".join(stationary_objects),
+            " ".join(motion_aliases),
             " ".join(person_descriptions),
             " ".join(person_clothing_text),
             " ".join(object_names),
@@ -738,12 +827,14 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
         raw_search_text = " ".join(part for part in raw_text_parts if part).lower()
 
         export_item = export_by_clip_id.get(clip_id, {})
-        compiled_video_path = (
-            compiled_manifest.get("playback_recommended_file")
-            or compiled_manifest.get("compiled_video_path")
-            or export_manifest.get("compiled_review_video", {}).get("playback_recommended_file")
-            or export_manifest.get("compiled_review_video", {}).get("output_path")
-        ) if isinstance(compiled_manifest, dict) and isinstance(export_manifest, dict) else None
+        compiled_video_path = None
+        if isinstance(compiled_manifest, dict) or isinstance(export_manifest, dict):
+            compiled_results = {
+                "compiled_video": compiled_manifest if isinstance(compiled_manifest, dict) else {},
+                "exported_clips": export_manifest if isinstance(export_manifest, dict) else {},
+            }
+            resolved_compiled = _extract_compiled_video_path(run_dir, compiled_results)
+            compiled_video_path = str(resolved_compiled) if resolved_compiled else None
 
         records.append(
             {
@@ -760,6 +851,10 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
                 "confidence": str(event.get("confidence", "")),
                 "caption": caption,
                 "description": description,
+                "motion_summary": motion_summary,
+                "moving_objects": moving_objects,
+                "stationary_objects": stationary_objects,
+                "traffic_state": traffic_state,
                 "people_count": int(event.get("people_count", 0) or 0),
                 "person_descriptions": person_descriptions,
                 "person_clothing_text": person_clothing_text,
@@ -916,6 +1011,10 @@ def _render_search_result(record: dict) -> None:
             "confidence": record.get("confidence"),
             "event_label": record.get("event_label"),
             "description": record.get("description"),
+            "motion_summary": record.get("motion_summary"),
+            "moving_objects": record.get("moving_objects"),
+            "stationary_objects": record.get("stationary_objects"),
+            "traffic_state": record.get("traffic_state"),
             "people_count": record.get("people_count"),
             "yolo_object_classes": record.get("yolo_object_classes"),
             "person_descriptions": record.get("person_descriptions"),
@@ -985,6 +1084,17 @@ def render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False):
         st.write(f"Motion score: `{event.get('motion_score', 'n/a')}`")
         st.write(f"YOLO person max: `{event.get('yolo_person_max', 'n/a')}`")
         st.write(f"YOLO classes: {', '.join(event.get('yolo_top_classes', [])) or 'n/a'}")
+        st.write(f"Traffic state: `{event.get('traffic_state', 'unclear') or 'unclear'}`")
+
+    motion_summary = str(event.get("motion_summary", "")).strip()
+    moving_objects = [str(item).strip() for item in event.get("moving_objects", []) if str(item).strip()] if isinstance(event.get("moving_objects"), list) else []
+    stationary_objects = [str(item).strip() for item in event.get("stationary_objects", []) if str(item).strip()] if isinstance(event.get("stationary_objects"), list) else []
+    if motion_summary or moving_objects or stationary_objects:
+        st.write("Motion evidence")
+        if motion_summary:
+            st.write(f"Summary: {motion_summary}")
+        st.write(f"Moving objects: {', '.join(moving_objects) if moving_objects else 'n/a'}")
+        st.write(f"Stationary objects: {', '.join(stationary_objects) if stationary_objects else 'n/a'}")
 
     strip_path = resolve_media_path(run_dir, event.get("strip_path"))
     yolo_path = resolve_media_path(run_dir, event.get("top_annotated_frame_path"))
@@ -1129,20 +1239,56 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
 
     compiled_info = results["compiled_video"] if isinstance(results["compiled_video"], dict) else {}
     export_info = results["exported_clips"].get("compiled_review_video", {}) if isinstance(results["exported_clips"], dict) else {}
-    compiled_path_value = (
-        compiled_info.get("playback_recommended_file")
-        or compiled_info.get("compiled_video_path")
-        or export_info.get("playback_recommended_file")
-        or export_info.get("output_path")
-        or str(run_dir / "18_exported_clips" / "18_compiled_review_video.mp4")
-    )
-    compiled_path = resolve_media_path(run_dir, compiled_path_value)
+    compiled_path = _extract_compiled_video_path(run_dir, results)
     st.subheader("Compiled Review Video")
     if media_exists(compiled_path):
-        st.video(str(compiled_path))
+        if compiled_path.suffix.lower() == ".mp4":
+            try:
+                st.video(str(compiled_path))
+            except Exception:
+                with open(compiled_path, "rb") as video_file:
+                    st.video(video_file.read())
+        else:
+            st.warning("Fallback AVI was created and is readable by OpenCV, but browsers may not play AVI. Install FFmpeg or convert to MP4 for browser playback.")
+            st.caption(f"Fallback AVI video path: `{compiled_path}`")
+            with open(compiled_path, "rb") as avi_file:
+                st.download_button(
+                    "Download fallback AVI",
+                    data=avi_file.read(),
+                    file_name=compiled_path.name,
+                    mime="video/x-msvideo",
+                )
     else:
-        st.warning("Compiled review video not found. Re-run Step 18. For normal-only videos, enable TENDER_DEMO_COMPILE_NORMAL_IF_NO_EVENTS=true.")
-        st.caption("Run Step 18 again to generate compiled review video.")
+        fallback_candidate = resolve_media_path(run_dir, str(run_dir / "18_exported_clips" / "18_compiled_review_video_fallback.avi"))
+        if media_exists(fallback_candidate):
+            st.info(f"Fallback AVI video created and readable by OpenCV. Open it from this path: `{fallback_candidate}`")
+        else:
+            st.warning("Compiled review video not found. Re-run Step 18. For normal-only videos, enable TENDER_DEMO_COMPILE_NORMAL_IF_NO_EVENTS=true.")
+            st.caption("Run Step 18 again to generate compiled review video.")
+
+    fallback_candidate = resolve_media_path(
+        run_dir,
+        compiled_info.get("fallback_video_path")
+        or export_info.get("fallback_video_path")
+        or str(run_dir / "18_exported_clips" / "18_compiled_review_video_fallback.avi"),
+    )
+    browser_mp4_candidate = resolve_media_path(
+        run_dir,
+        compiled_info.get("browser_playable_video_path")
+        or export_info.get("browser_playable_video_path")
+        or str(run_dir / "18_exported_clips" / "18_compiled_review_video_web.mp4"),
+    )
+    if media_exists(fallback_candidate) and not media_exists(browser_mp4_candidate):
+        if st.button("Convert AVI to browser MP4"):
+            success, message = convert_avi_to_browser_mp4(
+                fallback_candidate,
+                run_dir / "18_exported_clips" / "18_compiled_review_video_web.mp4",
+            )
+            if success:
+                st.success(message)
+                st.rerun()
+            else:
+                st.warning(message)
 
     verification = compiled_info.get("playback_recommended_verification") or compiled_info.get("video_verification", {})
     backend_value = compiled_info.get("compiled_video_backend") or export_info.get("backend") or "unavailable"

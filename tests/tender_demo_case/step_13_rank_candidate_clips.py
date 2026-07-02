@@ -138,6 +138,7 @@ def _build_yolo_summary(matching_frames: list[dict[str, Any]]) -> dict[str, Any]
 def _build_ranking_reasons(
     motion_component: float,
     yolo_summary: dict[str, Any],
+    motion_state_hint: dict[str, Any] | None,
 ) -> list[str]:
     reasons: list[str] = []
     if motion_component >= 0.7:
@@ -154,6 +155,17 @@ def _build_ranking_reasons(
         reasons.append("weak_yolo_evidence")
     if _safe_int(yolo_summary.get("frames_with_detections"), 0) == 0 and motion_component > 0:
         reasons.append("motion_only_candidate")
+    if isinstance(motion_state_hint, dict):
+        if motion_state_hint.get("has_moving_vehicle"):
+            reasons.append("moving_vehicle")
+        if motion_state_hint.get("has_moving_person"):
+            reasons.append("moving_person")
+        if motion_state_hint.get("has_stationary_vehicle"):
+            reasons.append("stationary_vehicle")
+        if motion_state_hint.get("has_unclear_motion"):
+            reasons.append("motion_unclear")
+        if motion_state_hint.get("has_moving_vehicle") and motion_state_hint.get("has_moving_person"):
+            reasons.append("vehicle_person_motion_interaction")
     return reasons
 
 
@@ -164,6 +176,7 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
     expanded_clips = _load_required_json(run_dir / "06_expanded_clips.json")
     yolo_scores = _load_required_json(run_dir / "11_yolo_object_scores.json")
     yolo_report = _load_optional_json(run_dir / "11_yolo_usefulness_report.json")
+    motion_state_payload = _load_optional_json(run_dir / "11b_object_motion_states.json")
     video_info = _load_optional_json(run_dir / "01_video_info.json")
 
     if not isinstance(candidate_clips, list):
@@ -176,8 +189,15 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
         video_info = {}
     if not isinstance(yolo_report, dict):
         yolo_report = {}
+    if not isinstance(motion_state_payload, dict):
+        motion_state_payload = {}
 
     expanded_by_clip_id = {item.get("clip_id"): item for item in expanded_clips if isinstance(item, dict)}
+    motion_by_clip_id = {
+        str(item.get("clip_id", "")).strip(): item
+        for item in motion_state_payload.get("clip_motion_states", [])
+        if isinstance(item, dict) and str(item.get("clip_id", "")).strip()
+    }
     ranked_items: list[dict[str, Any]] = []
     clips_with_yolo_evidence = 0
     clips_with_people = 0
@@ -190,6 +210,7 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
         merged_clip = {**clip, **expanded_clip}
         matching_frames = _match_yolo_frames(merged_clip, yolo_scores)
         yolo_summary = _build_yolo_summary(matching_frames)
+        motion_state_hint = motion_by_clip_id.get(str(clip_id).strip(), {})
 
         motion_component = _clamp01(
             _safe_float(
@@ -202,17 +223,31 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
         important_object_component = 1.0 if _safe_int(yolo_summary.get("important_object_max"), 0) > 0 else 0.0
         object_density_component = _clamp01(_safe_float(yolo_summary.get("object_score_max"), 0.0))
         detection_presence_component = 1.0 if _safe_int(yolo_summary.get("frames_with_detections"), 0) > 0 else 0.0
+        motion_state_component = 0.0
+        if isinstance(motion_state_hint, dict):
+            if motion_state_hint.get("has_moving_vehicle"):
+                motion_state_component += 0.12
+            if motion_state_hint.get("has_moving_person"):
+                motion_state_component += 0.10
+            if motion_state_hint.get("has_moving_vehicle") and motion_state_hint.get("has_moving_person"):
+                motion_state_component += 0.13
+            if motion_state_hint.get("has_stationary_vehicle"):
+                motion_state_component += 0.03
+            if motion_state_hint.get("has_unclear_motion"):
+                motion_state_component += 0.01
+        motion_state_component = _clamp01(motion_state_component)
 
         ranked_clip_score = _round6(
-            (0.35 * motion_component)
-            + (0.20 * person_component)
-            + (0.15 * multi_person_component)
+            (0.30 * motion_component)
+            + (0.18 * person_component)
+            + (0.12 * multi_person_component)
             + (0.10 * important_object_component)
-            + (0.15 * object_density_component)
+            + (0.12 * object_density_component)
             + (0.05 * detection_presence_component)
+            + (0.13 * motion_state_component)
         )
 
-        ranking_reasons = _build_ranking_reasons(motion_component, yolo_summary)
+        ranking_reasons = _build_ranking_reasons(motion_component, yolo_summary, motion_state_hint)
 
         ranked_item = {
             "clip_id": clip_id,
@@ -230,6 +265,7 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
                 "reason": merged_clip.get("reason", "unknown"),
             },
             "yolo": yolo_summary,
+            "motion_state_hints": motion_state_hint if isinstance(motion_state_hint, dict) else {},
             "score_components": {
                 "motion_component": _round6(motion_component),
                 "person_component": _round6(person_component),
@@ -237,6 +273,7 @@ def rank_candidate_clips(run_dir: Path) -> dict[str, Any]:
                 "important_object_component": _round6(important_object_component),
                 "object_density_component": _round6(object_density_component),
                 "detection_presence_component": _round6(detection_presence_component),
+                "motion_state_component": _round6(motion_state_component),
             },
             "ranked_clip_score": ranked_clip_score,
             "ranking_reasons": ranking_reasons,

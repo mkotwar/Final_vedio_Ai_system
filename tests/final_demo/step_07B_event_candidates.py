@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import argparse
+import os
+import sys
 from pathlib import Path
 from typing import Any
 
-from tests.final_demo.services.event_candidate_generator import (
+
+def _add_project_root_to_sys_path() -> Path:
+    project_root = Path(__file__).resolve().parents[2]
+    project_root_str = str(project_root)
+    if project_root_str not in sys.path:
+        sys.path.insert(0, project_root_str)
+    return project_root
+
+
+_add_project_root_to_sys_path()
+
+from tests.final_demo.services.event_candidate_generator import (  # noqa: E402
     build_event_candidate_outputs,
     update_run_manifest_for_event_candidates,
 )
-from tests.final_demo.services.video_io import write_json
+from tests.final_demo.services.video_io import write_json  # noqa: E402
 
 
 def run_step_07B_event_candidates(run_dir: Path) -> dict[str, Any]:
@@ -60,9 +74,15 @@ def run_step_07B_event_candidates(run_dir: Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    raise RuntimeError(
-        "Run Step 7B from the final demo pipeline or call run_step_07B_event_candidates(run_dir)."
-    )
+    parser = argparse.ArgumentParser(description="Run final_demo Step 7B event candidate generation.")
+    parser.add_argument("--run-dir", type=str, default=os.environ.get("FINAL_DEMO_RUN_DIR", "").strip())
+    args = parser.parse_args()
+    run_dir_value = str(args.run_dir or "").strip()
+    if not run_dir_value:
+        raise ValueError(
+            "Provide --run-dir or set FINAL_DEMO_RUN_DIR before running Step 7B directly."
+        )
+    run_step_07B_event_candidates(Path(run_dir_value))
 
 
 if __name__ == "__main__":
