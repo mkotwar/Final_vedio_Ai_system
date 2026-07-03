@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tender Demo Video Analysis Report</title>
+  <style>
+    :root {
+      --bg: #0f1720;
+      --surface: #162231;
+      --surface-2: #1d2d40;
+      --text: #e8eef5;
+      --muted: #9bb0c5;
+      --accent: #5bc0eb;
+      --danger: #ff6b6b;
+      --warning: #f7b267;
+      --success: #7bd389;
+      --gray: #7f8c9a;
+      --border: #29415a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: linear-gradient(180deg, #0b1118, #122030 35%, #0f1720 100%);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .container {
+      width: min(1400px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 24px 0 48px;
+    }
+    header {
+      background: linear-gradient(135deg, #101926, #1b3147);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.25);
+    }
+    h1, h2, h3, h4 { margin-top: 0; }
+    .subtitle, .path-text { color: var(--muted); word-break: break-all; }
+    .section {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 20px;
+      color: #102030;
+    }
+    .stats-grid, .kv-grid, .media-grid, .card-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .stats-grid {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+    .stat-card, .compact-card, .event-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 16px;
+      color: #102030;
+    }
+    .stat-label {
+      color: #516679;
+      font-size: 0.9rem;
+    }
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-danger { background: rgba(255, 107, 107, 0.18); color: #ffd2d2; }
+    .badge-warning { background: rgba(247, 178, 103, 0.18); color: #ffe1bf; }
+    .badge-success { background: rgba(123, 211, 137, 0.18); color: #d9ffe0; }
+    .badge-muted { background: rgba(127, 140, 154, 0.2); color: #dde5ec; }
+    .kv-grid {
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      margin: 12px 0;
+    }
+    .media-grid {
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      margin-top: 12px;
+    }
+    .thumb-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .thumb, .strip-image, .video-player {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: #091119;
+    }
+    .strip-image { max-height: 220px; object-fit: cover; }
+    .video-player { max-height: 520px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--border);
+      padding: 12px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #f2f6fa;
+      border: 1px solid #d6e1ea;
+      border-radius: 12px;
+      padding: 12px;
+      overflow-x: auto;
+      color: #102030;
+    }
+    details {
+      margin-top: 12px;
+      background: #f8fbfd;
+      border: 1px solid #d6e1ea;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    .warning, .media-missing {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(247, 178, 103, 0.18);
+      color: #ffe1bf;
+      border: 1px solid rgba(247, 178, 103, 0.35);
+      margin-bottom: 10px;
+    }
+    .description {
+      font-size: 1rem;
+      color: #f1f6fb;
+    }
+    @media (max-width: 860px) {
+      .container { width: min(100% - 20px, 1400px); }
+      header, .section { padding: 16px; }
+      .event-header { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Tender Demo Video Analysis Report</h1>
+      <p class="subtitle">Optimized Top-K + Safety Guardrails</p>
+      <div class="kv-grid">
+        <div><strong>Video</strong><br>robbery_5mins.mp4</div>
+        <div><strong>Duration</strong><br>331.367 seconds</div>
+        <div><strong>Resolution</strong><br>1280x720</div>
+        <div><strong>Run Folder</strong><br>robbery_5mins_20260703_104214</div>
+        <div><strong>Generated Files Location</strong><br>C:/Mukul K/vinfo1/video-search-engine/tests/tender_demo_case/debug_runs/robbery_5mins_20260703_104214</div>
+      </div>
+    </header>
+
+    <section class="section">
+      <h2>Executive Summary</h2>
+      <p>The optimized Top-K pipeline analyzed 20 selected clips. No priority suspicious event was confirmed, but 3 clip(s) were marked for review. The selected clips show people moving in a shop area, including A person is moving right to left in the shop, A person is moving right to left while another person is standing, and walking, around person, tv, and laptop. Review is recommended for clips where people are bending or reaching near display areas.</p>
+      
+    </section>
+
+    
+    <section class="section">
+      <h2>Scene Overview</h2>
+      <div class="kv-grid">
+        <div><strong>Dominant Scene Type</strong><br>shop</div>
+        <div><strong>Common Activities</strong><br>A person is moving right to left in the shop, A person is moving right to left while another person is standing, walking, A person moves right to left in a jewelry shop, A person is walking right to left, A person is moving left to right in the shop</div>
+        <div><strong>Common Objects</strong><br>person, tv, laptop, chair, keyboard, potted plant</div>
+        <div><strong>People Count Observed</strong><br>2 to 2</div>
+      </div>
+    </section>
+    
+
+    <section class="section">
+      <h2>Processing Summary</h2>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Top-K Clips</div><div class="stat-value">20</div></div><div class="stat-card"><div class="stat-label">Successful Parses</div><div class="stat-value">20</div></div><div class="stat-card"><div class="stat-label">Failed Parses</div><div class="stat-value">0</div></div><div class="stat-card"><div class="stat-label">Priority Events</div><div class="stat-value">0</div></div><div class="stat-card"><div class="stat-label">Review Clips</div><div class="stat-value">3</div></div><div class="stat-card"><div class="stat-label">Normal Clips</div><div class="stat-value">17</div></div><div class="stat-card"><div class="stat-label">Uncertain Clips</div><div class="stat-value">0</div></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Compiled Review Video</h2>
+      <video controls preload="metadata" class="video-player"><source src="18_exported_clips/18_compiled_review_video.mp4" type="video/mp4">Your browser does not support the video tag.</video><div class="path-text">18_exported_clips/18_compiled_review_video.mp4</div><div class='kv-grid'><div><strong>Backend</strong><br>ffmpeg_h264</div><div><strong>Playable</strong><br>yes</div><div><strong>FPS</strong><br>5.0</div><div><strong>Total Frames</strong><br>69</div><div><strong>Estimated Duration</strong><br>69 frames</div><div><strong>Verification</strong><br>readable</div></div><div class='path-text'><strong>File Path:</strong> tests/tender_demo_case/debug_runs/robbery_5mins_20260703_104214/18_exported_clips/18_compiled_review_video.mp4</div>
+    </section>
+
+    <section class="section">
+      <h2>Priority Suspicious Events</h2>
+      <div class="media-missing">No priority suspicious events found.</div>
+    </section>
+
+    <section class="section">
+      <h2>Possible Review Clips</h2>
+      <div class="card-grid">
+        
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000018</h4>
+                <span class="badge badge-warning">possible_review_clip</span>
+              </div>
+              <div><strong>Time</strong>: 00:02:57 - 00:03:09</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person in a red cap moves left to right near a display case.</div>
+              <div><strong>Motion</strong>: 0.668358</div><div><strong>YOLO People</strong>: 4</div><div><strong>YOLO Classes</strong>: person, tv, book, chair, potted plant</div>
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000012_clip_000018.jpg" alt="clip_000018 strip">
+                <img class="thumb" src="11_yolo_annotated_frames/yolo_annotated_005250.jpg" alt="clip_000018 yolo frame">
+              </div>
+              <div class="path-text">18_exported_clips/review_001_clip_000018.mp4</div>
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person in a red cap moves left to right near a display case.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;,
+    &quot;display case&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person in a red cap walks left to right near a display case.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;display case&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person in a red cap is walking near a display case in a shop.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000023</h4>
+                <span class="badge badge-warning">possible_review_clip</span>
+              </div>
+              <div><strong>Time</strong>: 00:03:47 - 00:03:59</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person in a red cap moves right to left near a display case.</div>
+              <div><strong>Motion</strong>: 0.676725</div><div><strong>YOLO People</strong>: 5</div><div><strong>YOLO Classes</strong>: person, tv, laptop, book, potted plant</div>
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000011_clip_000023.jpg" alt="clip_000023 strip">
+                <img class="thumb" src="11_yolo_annotated_frames/yolo_annotated_007170.jpg" alt="clip_000023 yolo frame">
+              </div>
+              <div class="path-text">18_exported_clips/review_002_clip_000023.mp4</div>
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person in a red cap moves right to left near a display case.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person in a red cap is moving right to left.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person in a red cap is moving right to left near a display case.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000032</h4>
+                <span class="badge badge-warning">possible_review_clip</span>
+              </div>
+              <div><strong>Time</strong>: 00:05:15 - 00:05:27</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Two individuals interact near display cases.</div>
+              <div><strong>Motion</strong>: 0.654661</div><div><strong>YOLO People</strong>: 3</div><div><strong>YOLO Classes</strong>: tv, person, laptop, chair, potted plant</div>
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000020_clip_000032.jpg" alt="clip_000032 strip">
+                <img class="thumb" src="11_yolo_annotated_frames/yolo_annotated_009750.jpg" alt="clip_000032 yolo frame">
+              </div>
+              <div class="path-text">18_exported_clips/review_003_clip_000032.mp4</div>
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Two individuals interact near display cases.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;standing&quot;,
+    &quot;carrying&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;One individual moves left to right, another remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;Two individuals are engaged in an interaction within a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;interaction&quot;,
+    &quot;shop&quot;,
+    &quot;individuals&quot;
+  ]
+}</pre></details>
+            </article>
+            
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Normal Activity Clips</h2>
+      <div class="card-grid">
+        
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000004</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:00:37 - 00:00:49</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving right to left in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000017_clip_000004.jpg" alt="clip_000004 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving right to left in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is moving right to left while another person is standing.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving right to left in the shop, while another person is standing.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000006</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:00:57 - 00:01:09</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person moves right to left in a jewelry shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000006_clip_000006.jpg" alt="clip_000006 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person moves right to left in a jewelry shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is walking right to left.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is walking right to left in a jewelry shop.&quot;,
+  &quot;keywords&quot;: [
+    &quot;jewelry&quot;,
+    &quot;shop&quot;,
+    &quot;movement&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000007</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:01:07 - 00:01:19</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving right to left in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000009_clip_000007.jpg" alt="clip_000007 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving right to left in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is moving right to left while another person is standing.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving right to left in the shop, while another person is standing.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000008</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:01:17 - 00:01:29</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving left to right in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000013_clip_000008.jpg" alt="clip_000008 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving left to right in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is moving left to right while another person is standing still.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving left to right in the shop, while another person is standing still.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000011</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:01:47 - 00:01:59</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person in a red hat moves right to left while another person stands still.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000019_clip_000011.jpg" alt="clip_000011 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person in a red hat moves right to left while another person stands still.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;,
+    &quot;standing&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person walks right to left while another person remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person wearing a red hat is walking right to left in a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000012</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:01:57 - 00:02:09</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Person moves left to right in shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000018_clip_000012.jpg" alt="clip_000012 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Person moves left to right in shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;Person walks left to right.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is walking left to right in a shop.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000016</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:02:37 - 00:02:49</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving left to right in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000016_clip_000016.jpg" alt="clip_000016 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving left to right in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is walking left to right.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is walking left to right in the shop.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000017</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:02:47 - 00:02:59</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving left to right in a shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000007_clip_000017.jpg" alt="clip_000017 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving left to right in a shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is walking left to right.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is walking left to right in a shop with another person standing still.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000019</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:03:07 - 00:03:19</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Two individuals interact with display cases in a shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000015_clip_000019.jpg" alt="clip_000019 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Two individuals interact with display cases in a shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;,
+    &quot;display case&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;standing&quot;,
+    &quot;interacting&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;One individual moves left to right, another remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;Two individuals are engaged with display cases in a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;interaction&quot;,
+    &quot;display cases&quot;,
+    &quot;shop&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000021</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:03:27 - 00:03:39</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Two individuals interact with display cases in a shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000004_clip_000021.jpg" alt="clip_000021 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Two individuals interact with display cases in a shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;,
+    &quot;display case&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;standing&quot;,
+    &quot;interacting&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;One individual moves right to left, another remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;Two individuals are engaged with display cases in a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;interaction&quot;,
+    &quot;display cases&quot;,
+    &quot;shop&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000022</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:03:37 - 00:03:49</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Two individuals interact with display cases in a shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000005_clip_000022.jpg" alt="clip_000022 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Two individuals interact with display cases in a shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;,
+    &quot;display case&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;standing&quot;,
+    &quot;interacting&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;One individual moves left to right, another remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;Two individuals are engaged with display cases in a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;interaction&quot;,
+    &quot;movement&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000024</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:03:57 - 00:04:09</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Person moves right to left in shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000014_clip_000024.jpg" alt="clip_000024 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Person moves right to left in shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;Person moves right to left while another person stands still.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving right to left in a shop environment.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000026</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:04:17 - 00:04:29</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving towards the camera while another person remains stationary.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000002_clip_000026.jpg" alt="clip_000026 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving towards the camera while another person remains stationary.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;,
+    &quot;standing&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is moving bottom to top while another person remains stationary.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving towards the camera while another person remains stationary in a shop setting.&quot;,
+  &quot;keywords&quot;: [
+    &quot;movement&quot;,
+    &quot;stationarity&quot;,
+    &quot;shop&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000027</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:04:27 - 00:04:39</div>
+              <div><strong>Event Label</strong>: normal_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person walks left to right in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000001_clip_000027.jpg" alt="clip_000027 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person walks left to right in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is walking left to right.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;normal_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is walking left to right in the shop.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000028</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:04:37 - 00:04:49</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person is moving left to right in the shop.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000008_clip_000028.jpg" alt="clip_000028 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person is moving left to right in the shop.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person is moving left to right while another person is standing still.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person is moving left to right in the shop, while another person is standing still.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000030</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:04:55 - 00:05:07</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: A person in a red cap moves right to left while another person stands still.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000003_clip_000030.jpg" alt="clip_000030 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;A person in a red cap moves right to left while another person stands still.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;walking&quot;,
+    &quot;standing&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;A person in a red cap is moving right to left while another person is standing still.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;no&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person in a red cap is moving right to left while another person is standing still.&quot;,
+  &quot;keywords&quot;: [
+    &quot;shop&quot;,
+    &quot;movement&quot;,
+    &quot;person&quot;
+  ]
+}</pre></details>
+            </article>
+            
+            <article class="compact-card">
+              <div class="event-header">
+                <h4>clip_000031</h4>
+                <span class="badge badge-success">normal_activity</span>
+              </div>
+              <div><strong>Time</strong>: 00:05:05 - 00:05:17</div>
+              <div><strong>Event Label</strong>: uncertain_activity</div>
+              <div><strong>Risk</strong>: low</div>
+              <div><strong>Confidence</strong>: unknown</div>
+              <div><strong>Description</strong>: Two individuals interact within a jewelry store.</div>
+              
+              <div class="thumb-row">
+                <img class="thumb" src="15_topk_vlm_inputs/topk_vlm_input_000010_clip_000031.jpg" alt="clip_000031 strip">
+                
+              </div>
+              
+              <details><summary>Qwen Output</summary><pre>{
+  &quot;scene_type&quot;: &quot;shop&quot;,
+  &quot;caption&quot;: &quot;Two individuals interact within a jewelry store.&quot;,
+  &quot;people_count&quot;: 2,
+  &quot;main_objects&quot;: [
+    &quot;person&quot;,
+    &quot;bag&quot;
+  ],
+  &quot;main_activities&quot;: [
+    &quot;carrying&quot;,
+    &quot;standing&quot;
+  ],
+  &quot;motion_summary&quot;: &quot;One individual moves left to right, another stands still.&quot;,
+  &quot;moving_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;stationary_objects&quot;: [
+    &quot;person&quot;
+  ],
+  &quot;traffic_state&quot;: &quot;unclear&quot;,
+  &quot;event_label&quot;: &quot;uncertain_activity&quot;,
+  &quot;suspicious_activity&quot;: &quot;unclear&quot;,
+  &quot;risk_level&quot;: &quot;low&quot;,
+  &quot;description&quot;: &quot;A person carrying a bag moves left to right while another person stands near a counter.&quot;,
+  &quot;keywords&quot;: [
+    &quot;jewelry&quot;,
+    &quot;store&quot;,
+    &quot;interaction&quot;
+  ]
+}</pre></details>
+            </article>
+            
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Event Timeline</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Clip</th>
+            <th>Category</th>
+            <th>Event Label</th>
+            <th>Risk</th>
+            <th>Confidence</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          
+            <tr>
+              <td>00:00:37 - 00:00:49</td>
+              <td>clip_000004</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving right to left in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:00:57 - 00:01:09</td>
+              <td>clip_000006</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person moves right to left in a jewelry shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:01:07 - 00:01:19</td>
+              <td>clip_000007</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving right to left in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:01:17 - 00:01:29</td>
+              <td>clip_000008</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving left to right in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:01:47 - 00:01:59</td>
+              <td>clip_000011</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person in a red hat moves right to left while another person stands still.</td>
+            </tr>
+            
+            <tr>
+              <td>00:01:57 - 00:02:09</td>
+              <td>clip_000012</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Person moves left to right in shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:02:37 - 00:02:49</td>
+              <td>clip_000016</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving left to right in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:02:47 - 00:02:59</td>
+              <td>clip_000017</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving left to right in a shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:02:57 - 00:03:09</td>
+              <td>clip_000018</td>
+              <td><span class="badge badge-warning">possible_review_clip</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person in a red cap moves left to right near a display case.</td>
+            </tr>
+            
+            <tr>
+              <td>00:03:07 - 00:03:19</td>
+              <td>clip_000019</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Two individuals interact with display cases in a shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:03:27 - 00:03:39</td>
+              <td>clip_000021</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Two individuals interact with display cases in a shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:03:37 - 00:03:49</td>
+              <td>clip_000022</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Two individuals interact with display cases in a shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:03:47 - 00:03:59</td>
+              <td>clip_000023</td>
+              <td><span class="badge badge-warning">possible_review_clip</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person in a red cap moves right to left near a display case.</td>
+            </tr>
+            
+            <tr>
+              <td>00:03:57 - 00:04:09</td>
+              <td>clip_000024</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Person moves right to left in shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:04:17 - 00:04:29</td>
+              <td>clip_000026</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving towards the camera while another person remains stationary.</td>
+            </tr>
+            
+            <tr>
+              <td>00:04:27 - 00:04:39</td>
+              <td>clip_000027</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>normal_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person walks left to right in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:04:37 - 00:04:49</td>
+              <td>clip_000028</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person is moving left to right in the shop.</td>
+            </tr>
+            
+            <tr>
+              <td>00:04:55 - 00:05:07</td>
+              <td>clip_000030</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>A person in a red cap moves right to left while another person stands still.</td>
+            </tr>
+            
+            <tr>
+              <td>00:05:05 - 00:05:17</td>
+              <td>clip_000031</td>
+              <td><span class="badge badge-success">normal_activity</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Two individuals interact within a jewelry store.</td>
+            </tr>
+            
+            <tr>
+              <td>00:05:15 - 00:05:27</td>
+              <td>clip_000032</td>
+              <td><span class="badge badge-warning">possible_review_clip</span></td>
+              <td>uncertain_activity</td>
+              <td>low</td>
+              <td>unknown</td>
+              <td>Two individuals interact near display cases.</td>
+            </tr>
+            
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Evidence Files</h2>
+      <ul>
+        <li><strong>13_ranked_clips.json</strong>: 13_ranked_clips.json</li><li><strong>14_selected_top_clips.json</strong>: 14_selected_top_clips.json</li><li><strong>15_topk_vlm_inputs.json</strong>: 15_topk_vlm_inputs.json</li><li><strong>16_topk_vlm_outputs.json</strong>: 16_topk_vlm_outputs.json</li><li><strong>17_topk_final_summary.json</strong>: 17_topk_final_summary.json</li><li><strong>17_topk_final_summary.md</strong>: 17_topk_final_summary.md</li><li><strong>18_exported_clips.json</strong>: 18_exported_clips.json</li><li><strong>18_compiled_review_video.json</strong>: 18_compiled_review_video.json</li><li><strong>19_demo_report.html</strong>: 19_demo_report.html</li>
+      </ul>
+    </section>
+  </div>
+</body>
+</html>

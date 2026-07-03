@@ -66,7 +66,7 @@ def _read_env_int(name: str, default: int) -> int:
     try:
         return int(raw_value)
     except ValueError as exc:
-        raise ValueError(f"Environment variable {name} must be an integer. Received: {raw_value!r}") from exc
+        return default
 
 
 def _contains_mandatory_event_keyword(text: Any) -> bool:
@@ -158,7 +158,11 @@ def select_topk_clips_for_qwen(run_dir: Path) -> dict[str, Any]:
     if fused_clips is not None and not isinstance(fused_clips, list):
         fused_clips = None
 
-    top_k_requested = _read_env_int("TENDER_DEMO_TOP_K_CLIPS", 10)
+    requested_top_k = _read_env_int("TENDER_DEMO_TOP_K_CLIPS", 5)
+    top_k_max = max(1, _read_env_int("TENDER_DEMO_TOP_K_MAX_CLIPS", 25))
+    if requested_top_k < 1:
+        requested_top_k = 1
+    effective_top_k = min(requested_top_k, top_k_max)
     guardrails_enabled = _read_env_bool("TENDER_DEMO_ENABLE_SELECTION_GUARDRAILS", True)
     high_motion_guardrail_count = _read_env_int("TENDER_DEMO_HIGH_MOTION_GUARDRAIL_COUNT", 3)
     min_selected_clips = _read_env_int("TENDER_DEMO_MIN_SELECTED_CLIPS", 5)
@@ -168,7 +172,7 @@ def select_topk_clips_for_qwen(run_dir: Path) -> dict[str, Any]:
     }
     selected_by_clip_id: dict[str, dict[str, Any]] = {}
 
-    base_top_k = ranked_clips[: max(top_k_requested, 0)]
+    base_top_k = ranked_clips[: max(effective_top_k, 0)]
     for item in base_top_k:
         _add_selection_reason(selected_by_clip_id, item, "top_k_ranked")
 
@@ -256,7 +260,10 @@ def select_topk_clips_for_qwen(run_dir: Path) -> dict[str, Any]:
         )
 
     report = {
-        "top_k_requested": top_k_requested,
+        "requested_top_k": requested_top_k,
+        "effective_top_k": effective_top_k,
+        "top_k_max": top_k_max,
+        "top_k_requested": requested_top_k,
         "guardrails_enabled": guardrails_enabled,
         "total_ranked_clips": len(ranked_clips),
         "base_top_k_selected": len(base_top_k),
@@ -265,6 +272,7 @@ def select_topk_clips_for_qwen(run_dir: Path) -> dict[str, Any]:
         "high_motion_guardrail_added": high_motion_added,
         "minimum_fill_added": minimum_fill_added,
         "total_selected_clips": len(selected_items),
+        "selected_clips_count": len(selected_items),
         "selected_clip_ids": selected_clip_ids,
         "selection_summary": selection_summary,
         "recommendation": "Use 15_topk_vlm_inputs.json in the next step to generate temporal strips only for selected clips.",
@@ -273,7 +281,9 @@ def select_topk_clips_for_qwen(run_dir: Path) -> dict[str, Any]:
     report_output_path = run_dir / "14_selected_top_clips_report.json"
     report_output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
-    print(f"[tender-demo] Top-K requested: {top_k_requested}")
+    print(f"[tender-demo] Top-K requested: {requested_top_k}")
+    print(f"[tender-demo] Top-K max cap: {top_k_max}")
+    print(f"[tender-demo] Effective Top-K: {effective_top_k}")
     print(f"[tender-demo] Guardrails enabled: {guardrails_enabled}")
     print(f"[tender-demo] Total ranked clips: {len(ranked_clips)}")
     print(f"[tender-demo] Base Top-K selected: {len(base_top_k)}")

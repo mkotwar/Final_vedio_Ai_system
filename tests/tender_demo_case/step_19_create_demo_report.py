@@ -348,9 +348,15 @@ def _timeline_rows(items: list[dict[str, Any]]) -> str:
 
 def _evidence_paths(run_dir: Path) -> list[tuple[str, str]]:
     candidates = [
+        ("02b_adaptive_frames.json", run_dir / "02b_adaptive_frames.json"),
+        ("02b_adaptive_sampling_report.json", run_dir / "02b_adaptive_sampling_report.json"),
+        ("02c_frame_candidate_pool.json", run_dir / "02c_frame_candidate_pool.json"),
         ("13_ranked_clips.json", run_dir / "13_ranked_clips.json"),
         ("14_selected_top_clips.json", run_dir / "14_selected_top_clips.json"),
+        ("14b_coverage_selected_clips.json", run_dir / "14b_coverage_selected_clips.json"),
+        ("14b_coverage_guardrail_report.json", run_dir / "14b_coverage_guardrail_report.json"),
         ("15_topk_vlm_inputs.json", run_dir / "15_topk_vlm_inputs.json"),
+        ("15_vlm_coverage_audit.json", run_dir / "15_vlm_coverage_audit.json"),
         ("16_topk_vlm_outputs.json", run_dir / "16_topk_vlm_outputs.json"),
         ("17_topk_final_summary.json", run_dir / "17_topk_final_summary.json"),
         ("17_topk_final_summary.md", run_dir / "17_topk_final_summary.md"),

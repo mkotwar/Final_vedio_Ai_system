@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,44 @@ AMBIGUITY_TERMS = [
     "unclear",
 ]
 
+RELATED_REVIEW_CLUSTER_LABELS = {
+    "possible_robbery",
+    "possible_weapon_visible",
+    "possible_assault_or_grabbing",
+    "possible_employee_threat_or_restraint",
+    "possible_theft_from_display",
+    "possible_group_robbery",
+}
+
+CATEGORY_PRIORITY = {
+    "priority_suspicious_event": 0,
+    "possible_review_clip": 1,
+    "uncertain_activity": 2,
+    "normal_activity": 3,
+}
+
+EVIDENCE_STRENGTH_PRIORITY = {
+    "strong": 0,
+    "medium": 1,
+    "weak": 2,
+    "none": 3,
+    "unknown": 4,
+}
+
+RISK_LEVEL_PRIORITY = {
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "unknown": 3,
+}
+
+CONFIDENCE_PRIORITY = {
+    "high": 0,
+    "medium": 1,
+    "low": 2,
+    "unknown": 3,
+}
+
 
 def _load_required_json(path: Path) -> dict[str, Any] | list[dict[str, Any]]:
     if not path.exists():
@@ -93,6 +132,27 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _read_env_bool(name: str, default: bool) -> bool:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() == "true"
+
+
+def _read_env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return _safe_float(raw_value, default)
+
+
+def _read_env_int(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+    return _safe_int(raw_value, default)
 
 
 def format_seconds(seconds: float | int | None) -> str:
@@ -210,6 +270,45 @@ def _load_step16_items(run_dir: Path) -> tuple[dict[str, Any], list[dict[str, An
     return payload, items
 
 
+def _load_step16b_items(run_dir: Path) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    payload = _load_optional_json(run_dir / "16b_incident_recheck_outputs.json")
+    if not isinstance(payload, dict):
+        return {}, {}
+    items = payload.get("items", [])
+    if not isinstance(items, list):
+        return payload, {}
+    return payload, {
+        str(item.get("source_clip_id", "")).strip(): item
+        for item in items
+        if isinstance(item, dict) and str(item.get("source_clip_id", "")).strip()
+    }
+
+
+def _analysis_settings_from_env() -> dict[str, Any]:
+    sample_every_seconds = _read_env_float("TENDER_DEMO_SAMPLE_EVERY_SECONDS", 2.0)
+    return {
+        "mode": os.environ.get("TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE", "Balanced"),
+        "incident_focus": os.environ.get("TENDER_DEMO_INCIDENT_FOCUS", "general"),
+        "sample_every_seconds": sample_every_seconds,
+        "approx_sampled_fps": round(1.0 / sample_every_seconds, 3) if sample_every_seconds > 0 else 0.0,
+        "top_k_clips": _read_env_int("TENDER_DEMO_TOP_K_CLIPS", 8),
+        "top_k_max": _read_env_int("TENDER_DEMO_TOP_K_MAX_CLIPS", 25),
+        "motion_threshold": _read_env_float("TENDER_DEMO_MOTION_THRESHOLD", 0.15),
+        "yolo_imgsz": _read_env_int("TENDER_DEMO_YOLO_IMGSZ", 512),
+        "yolo_conf": _read_env_float("TENDER_DEMO_YOLO_CONF", 0.30),
+        "qwen_max_new_tokens": _read_env_int("TENDER_DEMO_QWEN_MAX_NEW_TOKENS", 384),
+        "incident_fallback_pass_enabled": _read_env_bool("TENDER_DEMO_INCIDENT_FALLBACK_PASS", False),
+        "incident_fallback_pass_used": _read_env_bool("TENDER_DEMO_INCIDENT_FALLBACK_PASS_USED", False),
+        "enable_incident_recheck": _read_env_bool("TENDER_DEMO_ENABLE_INCIDENT_RECHECK", False),
+        "incident_recheck_all_topk": _read_env_bool("TENDER_DEMO_INCIDENT_RECHECK_ALL_TOPK", False),
+        "adaptive_sampling_enabled": _read_env_bool("TENDER_DEMO_ENABLE_ADAPTIVE_SAMPLING", False),
+        "coverage_guardrails_enabled": _read_env_bool("TENDER_DEMO_ENABLE_COVERAGE_GUARDRAILS", False),
+        "vlm_input_strategy": os.environ.get("TENDER_DEMO_VLM_INPUT_STRATEGY", "center_only"),
+        "max_vlm_inputs": _read_env_int("TENDER_DEMO_MAX_VLM_INPUTS", 25),
+        "critical_timestamps": [part.strip() for part in os.environ.get("TENDER_DEMO_CRITICAL_TIMESTAMPS", "").split(",") if part.strip()],
+    }
+
+
 def _selection_reason_summary(selection_reasons: list[str]) -> str:
     reasons = {str(reason) for reason in selection_reasons}
     if reasons & PRIORITY_SELECTION_REASONS:
@@ -223,17 +322,85 @@ def _selection_reason_summary(selection_reasons: list[str]) -> str:
     return "Selected as part of the optimized Top-K review set."
 
 
-def _build_review_note(final_category: str, best_event_description: str) -> str:
+def _build_review_note(
+    final_category: str,
+    best_event_description: str,
+    incident_recheck: dict[str, Any] | None = None,
+) -> str:
+    incident_recheck = incident_recheck if isinstance(incident_recheck, dict) else {}
+    incident_label = clean_text(str(incident_recheck.get("primary_event_label") or incident_recheck.get("event_label", ""))).rstrip(".").lower()
     if final_category == "priority_suspicious_event":
+        review_reason = clean_text(str(incident_recheck.get("review_reason", ""))).rstrip(".")
+        if review_reason:
+            return review_reason + "."
         lowered = best_event_description.lower()
-        if "display case" in lowered:
-            return "Priority review recommended. The clip contains suspicious visual evidence such as reaching into a display case."
+        if "weapon" in incident_label:
+            return "Priority review recommended because a weapon-like object may be visible."
+        if "grabbing" in incident_label or "restraint" in incident_label or "threat" in incident_label:
+            return "Priority review recommended because a person may be grabbing, restraining, or threatening another person."
+        if "display" in lowered or "theft" in incident_label or "robbery" in incident_label:
+            return "Priority review recommended because a person may be taking items from a display or counter."
         return f"Priority review recommended. {best_event_description}"
     if final_category == "possible_review_clip":
-        return "Review if needed. The clip contains reaching/bending near counters, but may be normal shop activity."
+        if "robbery" in incident_label:
+            return "Possible robbery-related behavior; review recommended."
+        if "weapon" in incident_label:
+            return "Possible weapon visible; review recommended."
+        if "grabbing" in incident_label or "restraint" in incident_label:
+            return "Possible grabbing or restraint; review recommended."
+        if "theft" in incident_label or "display" in incident_label:
+            return "Possible theft from display or counter; review recommended."
+        review_reason = clean_text(str(incident_recheck.get("review_reason", ""))).rstrip(".")
+        if review_reason:
+            return review_reason + "."
+        return "Possible suspicious interaction; review recommended."
     if final_category == "normal_activity":
         return "Routine activity visible."
     return "Output was unclear or failed parsing; manual review recommended if needed."
+
+
+def _build_event_title(
+    final_category: str,
+    event_label: str,
+    scene_type: str,
+    people_count: int,
+    object_names: list[str],
+    activity_descriptions: list[str],
+) -> str:
+    normalized_label = clean_text(event_label).rstrip(".").replace("_", " ").strip().lower()
+    normalized_scene = clean_text(scene_type).rstrip(".").replace("_", " ").strip().lower()
+    object_text = _join_terms_for_sentence(object_names, limit=2)
+    activity_text = _join_terms_for_sentence(activity_descriptions, limit=2)
+
+    if final_category == "priority_suspicious_event":
+        if normalized_label and normalized_label != "unknown":
+            return normalized_label.replace("possible ", "").title()
+        return "Priority Incident Review"
+
+    if final_category == "possible_review_clip":
+        if "theft" in normalized_label or "robbery" in normalized_label:
+            return "Possible Theft Or Robbery"
+        if "fight" in normalized_label or "assault" in normalized_label or "grabbing" in normalized_label:
+            return "Possible Person-To-Person Incident"
+        if "collision" in normalized_label:
+            return "Possible Collision Review"
+        if "intrusion" in normalized_label:
+            return "Possible Intrusion Review"
+        if normalized_scene in {"shop", "office"}:
+            return "Review-Worthy Counter Or People Interaction"
+        if "traffic" in normalized_scene or normalized_scene in {"road", "street", "parking"}:
+            return "Review-Worthy Traffic Activity"
+        return "Review-Worthy Activity"
+
+    if normalized_scene in {"road", "street", "parking"} and object_text:
+        return f"Road Activity With {object_text.title()}"
+    if normalized_scene in {"shop", "office", "warehouse"} and activity_text:
+        return f"{normalized_scene.title()} Activity: {activity_text.title()}"
+    if people_count > 0 and activity_text:
+        return f"People Visible: {activity_text.title()}"
+    if normalized_label and normalized_label != "normal activity":
+        return normalized_label.title()
+    return "Routine Activity"
 
 
 def _event_label_has_priority_signal(event_label: str) -> bool:
@@ -254,6 +421,7 @@ def _classify_clip(
     label_value = event_label.lower()
     risk_value = risk_level.lower()
     reasons = {str(reason) for reason in selection_reasons}
+    normalized_evidence = str(evidence_text or "").lower()
 
     useful_evidence = bool(clean_text(evidence_text).rstrip("."))
     generic_evidence = clean_text(evidence_text).rstrip(".").lower() in {
@@ -261,7 +429,47 @@ def _classify_clip(
         "selected clip contains visually important activity",
         "no usable qwen text was returned",
     }
+    display_interaction_signal = any(
+        term in normalized_evidence
+        for term in [
+            "display case",
+            "display",
+            "counter",
+            "reaching",
+            "taking items",
+            "object removed",
+            "person near counter",
+            "person object interaction",
+        ]
+    )
+    people_interaction_signal = any(
+        term in normalized_evidence
+        for term in [
+            "grabbing",
+            "restraining",
+            "blocking",
+            "threat",
+            "person-person interaction",
+            "multiple people",
+            "surrounding",
+        ]
+    )
+    elevated_reason_signal = bool(
+        reasons
+        & {
+            "manual_critical_timestamp",
+            "adaptive_target_timestamp",
+            "adaptive_high_change",
+            "person_person_interaction_possible",
+            "person_object_interaction_possible",
+            "mandatory_suspicious_or_high_priority",
+            "mandatory_summary_event",
+        }
+    )
+    review_context_signal = useful_evidence and (display_interaction_signal or people_interaction_signal)
 
+    if (label_value == "normal_activity" or suspicious_value == "no") and review_context_signal and elevated_reason_signal:
+        return "possible_review_clip"
     if label_value == "normal_activity" or suspicious_value == "no":
         return "normal_activity"
     if "traffic_activity" in label_value:
@@ -294,9 +502,13 @@ def _classify_clip(
         return "uncertain_activity"
 
     if risk_value == "low" and useful_evidence:
+        if review_context_signal and elevated_reason_signal:
+            return "possible_review_clip"
         return "normal_activity"
 
     if useful_evidence and not generic_evidence:
+        if review_context_signal and elevated_reason_signal:
+            return "possible_review_clip"
         if "possible_" in label_value or contains_weak_suspicious_terms(evidence_text):
             return "possible_review_clip"
         return "normal_activity"
@@ -403,6 +615,44 @@ def _extract_motion_objects(items: Any) -> list[str]:
     return _dedupe_preserve_order(values, limit=8)
 
 
+def _extract_visible_evidence(items: Any) -> list[str]:
+    if not isinstance(items, list):
+        return []
+    return _dedupe_preserve_order([clean_text(str(item)).rstrip(".") for item in items], limit=6)
+
+
+def _override_category_from_incident_recheck(
+    base_category: str,
+    incident_recheck: dict[str, Any],
+) -> str:
+    incident_category = clean_text(str(incident_recheck.get("incident_category", ""))).rstrip(".").lower()
+    if incident_category in {"priority_suspicious_event", "possible_review_clip", "normal_activity", "uncertain_activity"}:
+        return incident_category
+    return base_category
+
+
+def _incident_sort_key(item: dict[str, Any]) -> tuple[int, float, int, int, int, float]:
+    return (
+        CATEGORY_PRIORITY.get(str(item.get("final_category", "")), 9),
+        -_safe_float(item.get("incident_score"), 0.0),
+        EVIDENCE_STRENGTH_PRIORITY.get(str(item.get("evidence_strength", "unknown")).lower(), 9),
+        RISK_LEVEL_PRIORITY.get(str(item.get("risk_level", "unknown")).lower(), 9),
+        CONFIDENCE_PRIORITY.get(str(item.get("confidence", "unknown")).lower(), 9),
+        _safe_float(item.get("start_time"), 0.0),
+    )
+
+
+def _cluster_sort_key(cluster: dict[str, Any]) -> tuple[int, float, int, int, int, float]:
+    return (
+        CATEGORY_PRIORITY.get(str(cluster.get("category", "")), 9),
+        -_safe_float(cluster.get("max_incident_score"), 0.0),
+        EVIDENCE_STRENGTH_PRIORITY.get(str(cluster.get("evidence_strength", "unknown")).lower(), 9),
+        RISK_LEVEL_PRIORITY.get(str(cluster.get("risk_level", "unknown")).lower(), 9),
+        CONFIDENCE_PRIORITY.get(str(cluster.get("confidence", "unknown")).lower(), 9),
+        _safe_float(cluster.get("start_time"), 0.0),
+    )
+
+
 def _extract_object_names(parsed_json: dict[str, Any], yolo_top_classes: list[str]) -> list[str]:
     values: list[str] = []
     main_objects = parsed_json.get("main_objects", [])
@@ -457,49 +707,156 @@ def _collect_scene_overview(event_timeline: list[dict[str, Any]]) -> dict[str, A
     }
 
 
-def build_descriptive_video_summary(event_timeline: list[dict[str, Any]], processing_summary: dict) -> str:
+def _incident_cluster_family(label: str) -> str:
+    normalized = clean_text(label).rstrip(".").lower()
+    if normalized in RELATED_REVIEW_CLUSTER_LABELS:
+        return "robbery_related"
+    return normalized or "unknown"
+
+
+def _cluster_primary_label(items: list[dict[str, Any]]) -> str:
+    counts: dict[str, int] = {}
+    for item in items:
+        label = clean_text(str(item.get("incident_event_label") or item.get("event_label", ""))).rstrip(".").lower()
+        if label:
+            counts[label] = counts.get(label, 0) + 1
+    if not counts:
+        return "uncertain_activity"
+    return sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))[0][0]
+
+
+def _related_cluster_labels(primary_label: str, labels: list[str]) -> list[str]:
+    family = _incident_cluster_family(primary_label)
+    result: list[str] = []
+    for label in labels:
+        normalized = clean_text(label).rstrip(".").lower()
+        if not normalized or normalized == primary_label:
+            continue
+        if _incident_cluster_family(normalized) == family or normalized in RELATED_REVIEW_CLUSTER_LABELS:
+            result.append(normalized)
+    return _dedupe_preserve_order(result, limit=5)
+
+
+def _build_review_clusters(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    cluster_candidates = [
+        item
+        for item in items
+        if str(item.get("final_category", "")).strip() in {"priority_suspicious_event", "possible_review_clip"}
+    ]
+    cluster_candidates.sort(key=lambda item: (_safe_float(item.get("start_time"), 0.0), _incident_sort_key(item)))
+    clusters: list[list[dict[str, Any]]] = []
+    current_cluster: list[dict[str, Any]] = []
+
+    for item in cluster_candidates:
+        label = clean_text(str(item.get("incident_event_label") or item.get("event_label", ""))).rstrip(".").lower()
+        start_time = _safe_float(item.get("start_time"), 0.0)
+        if not current_cluster:
+            current_cluster = [item]
+            continue
+        previous = current_cluster[-1]
+        previous_time = _safe_float(previous.get("start_time"), 0.0)
+        previous_label = clean_text(str(previous.get("incident_event_label") or previous.get("event_label", ""))).rstrip(".").lower()
+        same_family = _incident_cluster_family(label) == _incident_cluster_family(previous_label)
+        if (start_time - previous_time) <= 30.0 and same_family:
+            current_cluster.append(item)
+        else:
+            clusters.append(current_cluster)
+            current_cluster = [item]
+    if current_cluster:
+        clusters.append(current_cluster)
+
+    cluster_records: list[dict[str, Any]] = []
+    for index, cluster_items in enumerate(clusters, start=1):
+        strongest_item = sorted(cluster_items, key=_incident_sort_key)[0]
+        primary_label = _cluster_primary_label(cluster_items)
+        labels = [
+            clean_text(str(item.get("incident_event_label") or item.get("event_label", ""))).rstrip(".").lower()
+            for item in cluster_items
+        ]
+        key_evidence: list[str] = []
+        for item in cluster_items:
+            if isinstance(item.get("incident_visible_evidence"), list):
+                key_evidence.extend(str(entry) for entry in item.get("incident_visible_evidence", []) if str(entry).strip())
+            description = clean_text(str(item.get("best_event_description", ""))).rstrip(".")
+            if description:
+                key_evidence.append(description)
+        cluster_records.append(
+            {
+                "cluster_id": f"review_cluster_{index:03d}",
+                "category": strongest_item.get("final_category", "possible_review_clip"),
+                "start_time": min(_safe_float(item.get("start_time"), 0.0) for item in cluster_items),
+                "end_time": max(_safe_float(item.get("end_time"), 0.0) for item in cluster_items),
+                "display_time": (
+                    f"{format_seconds(min(_safe_float(item.get('start_time'), 0.0) for item in cluster_items))} - "
+                    f"{format_seconds(max(_safe_float(item.get('end_time'), 0.0) for item in cluster_items))}"
+                ),
+                "primary_event_label": primary_label,
+                "secondary_event_labels": _related_cluster_labels(primary_label, labels),
+                "max_incident_score": max(_safe_float(item.get("incident_score"), 0.0) for item in cluster_items),
+                "evidence_strength": strongest_item.get("evidence_strength", "unknown"),
+                "risk_level": strongest_item.get("risk_level", "unknown"),
+                "confidence": strongest_item.get("confidence", "unknown"),
+                "clip_ids": [str(item.get("clip_id", "")) for item in cluster_items if str(item.get("clip_id", "")).strip()],
+                "key_evidence": _dedupe_preserve_order(key_evidence, limit=6),
+                "description": clean_text(str(strongest_item.get("best_event_description", ""))),
+                "review_reason": clean_text(str(strongest_item.get("incident_review_reason") or strongest_item.get("review_note", ""))),
+            }
+        )
+    cluster_records.sort(key=_cluster_sort_key)
+    return cluster_records
+
+
+def build_descriptive_video_summary(
+    event_timeline: list[dict[str, Any]],
+    processing_summary: dict,
+    analysis_settings: dict[str, Any] | None = None,
+) -> str:
     total_clips = _safe_int(processing_summary.get("topk_inputs"), len(event_timeline))
     priority_items = [item for item in event_timeline if item.get("final_category") == "priority_suspicious_event"]
     review_items = [item for item in event_timeline if item.get("final_category") == "possible_review_clip"]
     normal_items = [item for item in event_timeline if item.get("final_category") == "normal_activity"]
+    analysis_settings = analysis_settings if isinstance(analysis_settings, dict) else {}
+    mode_value = clean_text(str(analysis_settings.get("mode", ""))).rstrip(".").lower()
+    sensitive_mode = mode_value in {"sensitive incident review", "high accuracy review"}
+    review_clusters = _build_review_clusters(event_timeline)
+    strongest_cluster = review_clusters[0] if review_clusters else {}
 
     scene_overview = _collect_scene_overview(event_timeline)
     scene_type = scene_overview.get("dominant_scene_type", "unknown")
     activity_text = _join_terms_for_sentence(scene_overview.get("common_activities", []), limit=3)
-    object_text = _join_terms_for_sentence(scene_overview.get("common_objects", []), limit=3)
+    common_objects = scene_overview.get("common_objects", []) if isinstance(scene_overview.get("common_objects"), list) else []
+    non_person_objects = [obj for obj in common_objects if str(obj).strip().lower() not in {"person", "people"}]
+    object_text = _join_terms_for_sentence(non_person_objects or common_objects, limit=3)
     people_range = scene_overview.get("people_count_observed", {})
     max_people = _safe_int(people_range.get("max"), 0) if isinstance(people_range, dict) else 0
 
     if priority_items:
-        first_priority = sorted(
-            priority_items,
-            key=lambda item: (_safe_float(item.get("start_time"), 0.0), _safe_int(item.get("selection_order"), 999999)),
-        )[0]
-        first_time = format_seconds(_safe_float(first_priority.get("start_time"), 0.0))
-        priority_description = clean_text(str(first_priority.get("best_event_description", ""))).rstrip(".")
+        evidence = _join_terms_for_sentence(strongest_cluster.get("key_evidence", []), limit=2)
+        time_text = strongest_cluster.get("display_time") or format_seconds(_safe_float(priority_items[0].get("start_time"), 0.0))
         summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
-            f"It identified {len(priority_items)} priority suspicious event(s). "
-            f"The main priority event occurs around {first_time}, where {priority_description}."
+            f"The pipeline analyzed {total_clips} selected clips and flagged {len(review_items) + len(priority_items)} clip(s) for review, "
+            f"including {len(priority_items)} priority clip(s). The strongest review-worthy activity occurs around {time_text}, "
+            f"where the system observed {evidence or 'possible serious person-to-person or item-taking activity'}. "
+            "This may indicate possible robbery or assault behavior. Manual review is recommended."
         )
-        if review_items:
-            summary += (
-                f" Additional clips were marked for review because they show {activity_text or 'similar movement near the scene'}."
-            )
         return clean_text(summary)
 
     if review_items:
-        scene_phrase = f"in {_scene_area_phrase(scene_type)}" if scene_type != "unknown" else "in the selected scene"
-        summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
-            f"No priority suspicious event was confirmed, but {len(review_items)} clip(s) were marked for review. "
-            f"The selected clips show people moving {scene_phrase}"
-        )
-        if activity_text:
-            summary += f", including {activity_text}"
-        if object_text:
-            summary += f", around {object_text}"
-        summary += ". Review is recommended for clips where people are bending or reaching near display areas."
+        time_text = strongest_cluster.get("display_time") or format_seconds(_safe_float(review_items[0].get("start_time"), 0.0))
+        evidence = _join_terms_for_sentence(strongest_cluster.get("key_evidence", []), limit=2)
+        primary_label = clean_text(str(strongest_cluster.get("primary_event_label", ""))).lower()
+        scene_phrase = _scene_area_phrase(scene_type) if scene_type != "unknown" else "the scene"
+        people_phrase = f" with up to {max_people} people visible" if max_people > 0 else ""
+        if "theft" in primary_label or "display" in primary_label or "robbery" in primary_label:
+            summary = (
+                f"The selected clips mainly show activity in {scene_phrase}{people_phrase}. Around {time_text}, the pipeline flagged a review-worthy shop/display interaction, "
+                f"including {evidence or 'possible item handling near a counter or display'}. This may indicate possible theft from display or robbery-related behavior."
+            )
+        else:
+            summary = (
+                f"The selected clips mainly show activity in {scene_phrase}{people_phrase}. Around {time_text}, the pipeline flagged review-worthy activity involving "
+                f"{evidence or 'ambiguous but relevant interaction'}. These are not confirmed incidents, but should be manually reviewed."
+            )
         return clean_text(summary)
 
     if normal_items:
@@ -524,7 +881,14 @@ def build_descriptive_video_summary(event_timeline: list[dict[str, Any]], proces
         )
         if object_text and scene_overview_phrase.lower().find(object_text.lower()) == -1:
             summary += f"Several selected clips contain {object_text}. "
-        summary += "No priority suspicious event was detected in the selected clips."
+        if sensitive_mode:
+            summary += (
+                f"No priority suspicious event was detected in the selected clips. Because this was a sensitive incident review, "
+                f"the system reviewed {total_clips} selected clips. Manual review is still recommended if the incident is very subtle "
+                "or outside the selected clips."
+            )
+        else:
+            summary += "No priority suspicious event was detected in the selected clips."
         return clean_text(summary)
 
     return clean_text(
@@ -532,7 +896,7 @@ def build_descriptive_video_summary(event_timeline: list[dict[str, Any]], proces
     )
 
 
-def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
+def _build_summary_item(item: dict[str, Any], incident_recheck_record: dict[str, Any] | None = None) -> dict[str, Any]:
     parse_success = bool(item.get("parse_success"))
     fallback_used = bool(item.get("fallback_used"))
     parsed_json = item.get("parsed_json", {})
@@ -558,10 +922,14 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
     motion_state_hints = item.get("motion_state_hints", {})
     if not isinstance(motion_state_hints, dict):
         motion_state_hints = {}
+    incident_recheck_record = incident_recheck_record if isinstance(incident_recheck_record, dict) else {}
+    incident_recheck = incident_recheck_record.get("incident_recheck", {})
+    if not isinstance(incident_recheck, dict):
+        incident_recheck = {}
 
     events = parsed_json.get("events", [])
     activities = parsed_json.get("activities", [])
-    keywords = parsed_json.get("keywords", [])
+    keywords = parsed_json.get("keywords", parsed_json.get("search_keywords", []))
 
     if not isinstance(events, list):
         events = []
@@ -583,7 +951,16 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
     if not stationary_objects:
         stationary_objects = _extract_motion_objects(motion_state_hints.get("stationary_objects", []))
     traffic_state = clean_text(str(parsed_json.get("traffic_state", ""))).rstrip(".") or "unclear"
+    incident_visible_evidence = _extract_visible_evidence(incident_recheck.get("visible_evidence", []))
+    incident_description = clean_text(str(incident_recheck.get("description", "")))
+    incident_review_reason = clean_text(str(incident_recheck.get("review_reason", "")))
+    incident_suspicious_explanation = clean_text(str(incident_recheck.get("suspicious_explanation", "")))
+    incident_normal_explanation = clean_text(str(incident_recheck.get("normal_explanation", "")))
     best_event_description = (
+        incident_suspicious_explanation
+        or incident_description
+        or incident_review_reason
+        or
         extract_best_event_description(parsed_json)
         or motion_summary
         or clean_text(str(parsed_json.get("description", "")))
@@ -608,11 +985,17 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
         [clean_text(str(event.get("description", ""))).rstrip(".") for event in events if isinstance(event, dict)],
         limit=6,
     )
+    event_descriptions.extend(incident_visible_evidence)
+    event_descriptions = _dedupe_preserve_order(event_descriptions, limit=6)
     combined_evidence_text = " ".join(
         [
             caption,
             best_event_description,
             clean_text(str(parsed_json.get("description", ""))),
+            incident_description,
+            incident_review_reason,
+            incident_suspicious_explanation,
+            " ".join(incident_visible_evidence),
             motion_summary,
             clean_text(str(parsed_json.get("event_label", ""))),
             " ".join(clean_text(str(event.get("description", ""))) for event in events if isinstance(event, dict)),
@@ -625,12 +1008,28 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
 
     suspicious_activity = str(parsed_json.get("suspicious_activity", "unclear")).strip().lower() or "unclear"
     risk_level = str(parsed_json.get("risk_level", "unknown")).strip().lower() or "unknown"
-    event_label = clean_text(str(parsed_json.get("event_label", ""))).rstrip(".")
+    event_label = clean_text(str(parsed_json.get("event_label") or parsed_json.get("primary_event_label", ""))).rstrip(".")
     confidence = clean_text(str(parsed_json.get("confidence", ""))).rstrip(".") or "unknown"
     if fallback_used and not parse_success:
         confidence = "low"
 
-    final_category = _classify_clip(
+    incident_category = clean_text(str(incident_recheck.get("incident_category", ""))).rstrip(".").lower()
+    incident_event_label = clean_text(str(incident_recheck.get("primary_event_label") or incident_recheck.get("event_label", ""))).rstrip(".").lower()
+    incident_risk_level = clean_text(str(incident_recheck.get("risk_level", ""))).rstrip(".").lower()
+    incident_confidence = clean_text(str(incident_recheck.get("confidence", ""))).rstrip(".").lower()
+    incident_suspicious_activity = clean_text(str(incident_recheck.get("suspicious_activity", ""))).rstrip(".").lower()
+    secondary_event_labels = incident_recheck.get("secondary_event_labels", []) if isinstance(incident_recheck.get("secondary_event_labels"), list) else []
+    secondary_event_labels = _dedupe_preserve_order([str(label).replace("_", " ") for label in secondary_event_labels], limit=5)
+    if incident_event_label:
+        event_label = incident_event_label
+    if incident_risk_level:
+        risk_level = incident_risk_level
+    if incident_confidence:
+        confidence = incident_confidence
+    if incident_suspicious_activity:
+        suspicious_activity = incident_suspicious_activity
+
+    base_final_category = _classify_clip(
         parse_success=parse_success,
         fallback_used=fallback_used,
         suspicious_activity=suspicious_activity,
@@ -639,10 +1038,19 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
         selection_reasons=selection_reasons,
         evidence_text=combined_evidence_text,
     )
+    final_category = _override_category_from_incident_recheck(base_final_category, incident_recheck)
 
     start_time = item.get("start_time")
     end_time = item.get("end_time")
     yolo_person_max = _safe_int(yolo.get("person_max"), 0)
+    title = _build_event_title(
+        final_category=final_category,
+        event_label=incident_event_label or event_label or "unknown",
+        scene_type=scene_type,
+        people_count=_safe_int(parsed_json.get("people_count"), yolo_person_max),
+        object_names=object_names,
+        activity_descriptions=activity_descriptions,
+    )
     summary_item = {
         "clip_id": item.get("source_clip_id"),
         "selection_order": item.get("selection_order"),
@@ -659,7 +1067,9 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
         "suspicious_activity": suspicious_activity,
         "parse_success": parse_success,
         "fallback_used": fallback_used,
+        "title": title,
         "caption": caption,
+        "description": best_event_description,
         "best_event_description": best_event_description,
         "people_count": _safe_int(parsed_json.get("people_count"), yolo_person_max),
         "selection_reasons": selection_reasons,
@@ -669,6 +1079,31 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
         "yolo_person_max": yolo_person_max,
         "yolo_top_classes": yolo_top_classes,
         "scene_type": scene_type,
+        "incident_category": incident_category or final_category,
+        "incident_event_label": incident_event_label or event_label or "unknown",
+        "primary_event_label": incident_event_label or event_label or "unknown",
+        "secondary_event_labels": secondary_event_labels,
+        "incident_score": _safe_float(incident_recheck.get("incident_score"), 0.0),
+        "evidence_strength": clean_text(str(incident_recheck.get("evidence_strength", ""))).rstrip(".").lower() or "unknown",
+        "weapon_visible": clean_text(str(incident_recheck.get("weapon_visible", ""))).rstrip(".").lower() or "unclear",
+        "weapon_description": clean_text(str(incident_recheck.get("weapon_description", ""))),
+        "person_grabbing_or_restraining": clean_text(str(incident_recheck.get("person_grabbing_or_restraining", ""))).rstrip(".").lower() or "unclear",
+        "grabbing_description": clean_text(str(incident_recheck.get("grabbing_description", ""))),
+        "person_threatened_or_controlled": clean_text(str(incident_recheck.get("person_threatened_or_controlled", ""))).rstrip(".").lower() or "unclear",
+        "threat_description": clean_text(str(incident_recheck.get("threat_description", ""))),
+        "taking_items_visible": clean_text(str(incident_recheck.get("taking_items_visible", ""))).rstrip(".").lower() or "unclear",
+        "item_taking_description": clean_text(str(incident_recheck.get("item_taking_description", ""))),
+        "display_or_counter_interaction": clean_text(str(incident_recheck.get("display_or_counter_interaction", ""))).rstrip(".").lower() or "unclear",
+        "display_interaction_description": clean_text(str(incident_recheck.get("display_interaction_description", ""))),
+        "people_involved_estimate": clean_text(str(incident_recheck.get("people_involved_estimate", ""))).rstrip(".") or "unclear",
+        "incident_visible_evidence": incident_visible_evidence,
+        "incident_normal_explanation": incident_normal_explanation,
+        "incident_suspicious_explanation": incident_suspicious_explanation,
+        "incident_review_reason": incident_review_reason,
+        "incident_recheck_performed": bool(incident_recheck_record.get("recheck_performed")),
+        "incident_recheck_parse_success": bool(incident_recheck_record.get("parse_success")),
+        "incident_recheck_fallback_used": bool(incident_recheck_record.get("fallback_used")),
+        "incident_recheck": incident_recheck,
         "motion_summary": motion_summary,
         "moving_objects": moving_objects,
         "stationary_objects": stationary_objects,
@@ -677,13 +1112,14 @@ def _build_summary_item(item: dict[str, Any]) -> dict[str, Any]:
         "visible_people": visible_people,
         "activity_descriptions": activity_descriptions,
         "object_names": object_names,
+        "keywords": keywords,
         "event_descriptions": event_descriptions,
         "strip_path": item.get("strip_path"),
         "top_annotated_frame_path": item.get("top_annotated_frame_path"),
         "why_selected": _selection_reason_summary(selection_reasons),
         "review_note": "",
     }
-    summary_item["review_note"] = _build_review_note(final_category, best_event_description)
+    summary_item["review_note"] = _build_review_note(final_category, best_event_description, incident_recheck)
     return summary_item
 
 
@@ -703,42 +1139,45 @@ def _build_final_summary_text(
     priority_items: list[dict[str, Any]],
     review_items: list[dict[str, Any]],
     normal_items: list[dict[str, Any]],
+    analysis_settings: dict[str, Any] | None = None,
 ) -> str:
+    analysis_settings = analysis_settings if isinstance(analysis_settings, dict) else {}
+    mode_value = clean_text(str(analysis_settings.get("mode", ""))).rstrip(".").lower()
+    sensitive_mode = mode_value in {"sensitive incident review", "high accuracy review"}
+    review_clusters = _build_review_clusters(priority_items + review_items + normal_items)
+    strongest_cluster = review_clusters[0] if review_clusters else {}
     if priority_items:
-        def priority_sort_key(item: dict[str, Any]) -> tuple[int, int, float]:
-            reasons = {str(reason) for reason in item.get("selection_reasons", [])}
-            if reasons & PRIORITY_SELECTION_REASONS:
-                return (0, _safe_int(item.get("selection_order"), 999999), _safe_float(item.get("start_time"), 0.0))
-            return (1, _safe_int(item.get("selection_order"), 999999), _safe_float(item.get("start_time"), 0.0))
-
-        first_priority = sorted(priority_items, key=priority_sort_key)[0]
-        first_time = format_seconds(_safe_float(first_priority.get("start_time"), 0.0))
-        description = clean_text(str(first_priority.get("best_event_description", ""))).rstrip(".")
+        time_text = strongest_cluster.get("display_time") or format_seconds(_safe_float(priority_items[0].get("start_time"), 0.0))
+        evidence = _join_terms_for_sentence(strongest_cluster.get("key_evidence", []), limit=2)
         summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips instead of all motion clips. "
-            f"It identified {len(priority_items)} priority suspicious event(s). "
-            f"The main priority event occurs around {first_time}, where {description}."
+            f"The pipeline analyzed {total_clips} selected clips and flagged {len(priority_items) + len(review_items)} clip(s) for review, including {len(priority_items)} priority clip(s). "
+            f"The strongest review-worthy activity occurs around {time_text}, where the system observed {evidence or 'possible serious incident activity'}. "
+            "This may indicate possible robbery or assault behavior. Manual review is recommended."
         )
-        if review_items:
-            summary += (
-                " Additional clips are marked for possible review because they show reaching or bending near "
-                "counters/display cases."
-            )
         return clean_text(summary)
 
     if review_items:
-        summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
-            f"No confirmed priority event was produced, but {len(review_items)} clips were marked for possible review "
-            "because they show reaching or bending near counters/display cases."
-        )
+        time_text = strongest_cluster.get("display_time") or format_seconds(_safe_float(review_items[0].get("start_time"), 0.0))
+        primary_label = clean_text(str(strongest_cluster.get("primary_event_label", ""))).lower()
+        if "theft" in primary_label or "display" in primary_label or "robbery" in primary_label:
+            summary = (
+                f"The pipeline flagged review-worthy shop/display interaction around {time_text}, where a person appears to reach into or take items from a display case. "
+                "This may indicate possible theft from display or robbery-related behavior."
+            )
+        else:
+            summary = "The system flagged review-worthy clips. These are not confirmed incidents, but should be manually reviewed."
         return clean_text(summary)
 
     if normal_items:
-        summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
-            "The selected clips mainly show routine activity with people interacting near counters or display areas."
-        )
+        summary = f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
+        if sensitive_mode:
+            summary += (
+                f"No priority suspicious event was detected in the selected clips. Because this was a sensitive incident review, "
+                f"the system reviewed {total_clips} selected clips. Manual review is still recommended if the incident is very subtle "
+                "or outside the selected clips."
+            )
+        else:
+            summary += "The selected clips mainly show routine activity with people interacting near counters or display areas."
         return clean_text(summary)
 
     return clean_text(
@@ -847,10 +1286,40 @@ def _build_markdown_report(summary: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _merge_summary_items_by_clip(summary_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    passthrough: list[dict[str, Any]] = []
+    for item in summary_items:
+        clip_id = str(item.get("clip_id", "")).strip()
+        if not clip_id:
+            passthrough.append(item)
+            continue
+        grouped.setdefault(clip_id, []).append(item)
+
+    merged_items: list[dict[str, Any]] = []
+    for _, items in grouped.items():
+        best_item = sorted(items, key=_incident_sort_key)[0]
+        merged = dict(best_item)
+        merged["selection_reasons"] = _dedupe_preserve_order(
+            [str(reason) for item in items for reason in item.get("selection_reasons", []) if str(reason).strip()]
+        )
+        merged["ranking_reasons"] = _dedupe_preserve_order(
+            [str(reason) for item in items for reason in item.get("ranking_reasons", []) if str(reason).strip()]
+        )
+        merged["source_vlm_input_count"] = len(items)
+        merged_items.append(merged)
+
+    merged_items.extend(passthrough)
+    return merged_items
+
+
 def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
     print("[tender-demo] Starting Step 17: Top-K final summary")
 
     payload, items = _load_step16_items(run_dir)
+    incident_recheck_payload, incident_recheck_by_clip_id = _load_step16b_items(run_dir)
+    analysis_settings = _analysis_settings_from_env()
+    coverage_audit_payload = _load_optional_json(run_dir / "15_vlm_coverage_audit.json")
     print(f"[tender-demo] Top-K outputs read: {len(items)}")
 
     video_info = _load_optional_json(run_dir / "01_video_info.json")
@@ -860,16 +1329,23 @@ def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
 
     if not isinstance(video_info, dict):
         video_info = {}
+    if not isinstance(coverage_audit_payload, dict):
+        coverage_audit_payload = {}
 
     summary_items: list[dict[str, Any]] = []
     keyword_source_items: list[dict[str, Any]] = []
     for item in items:
         try:
-            summary_item = _build_summary_item(item if isinstance(item, dict) else {})
+            clip_id = str(item.get("source_clip_id", "")).strip() if isinstance(item, dict) else ""
+            summary_item = _build_summary_item(
+                item if isinstance(item, dict) else {},
+                incident_recheck_by_clip_id.get(clip_id, {}),
+            )
             parsed_json = item.get("parsed_json", {}) if isinstance(item, dict) else {}
             if not isinstance(parsed_json, dict):
                 parsed_json = {}
-            summary_item["keywords"] = parsed_json.get("keywords", []) if isinstance(parsed_json.get("keywords", []), list) else []
+            parsed_keywords = parsed_json.get("keywords", parsed_json.get("search_keywords", []))
+            summary_item["keywords"] = parsed_keywords if isinstance(parsed_keywords, list) else []
             summary_items.append(summary_item)
             keyword_source_items.append(summary_item)
         except Exception as exc:
@@ -907,12 +1383,18 @@ def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
                 }
             )
 
+    summary_items = _merge_summary_items_by_clip(summary_items)
     summary_items.sort(key=lambda entry: (_safe_float(entry.get("start_time"), 0.0), _safe_int(entry.get("selection_order"), 999999)))
 
     priority_items = [item for item in summary_items if item.get("final_category") == "priority_suspicious_event"]
     review_items = [item for item in summary_items if item.get("final_category") == "possible_review_clip"]
     normal_items = [item for item in summary_items if item.get("final_category") == "normal_activity"]
     uncertain_items = [item for item in summary_items if item.get("final_category") == "uncertain_activity"]
+    priority_items.sort(key=_incident_sort_key)
+    review_items.sort(key=_incident_sort_key)
+    uncertain_items.sort(key=_incident_sort_key)
+    normal_items.sort(key=lambda item: (_safe_float(item.get("start_time"), 0.0), _safe_int(item.get("selection_order"), 999999)))
+    review_clusters = _build_review_clusters(summary_items)
 
     scene_overview = _collect_scene_overview(summary_items)
     descriptive_summary = build_descriptive_video_summary(
@@ -923,11 +1405,13 @@ def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
             "possible_review_clips": len(review_items),
             "normal_activity_clips": len(normal_items),
         },
+        analysis_settings=analysis_settings,
     )
     normal_activity_summary = (
         build_descriptive_video_summary(
             event_timeline=normal_items,
             processing_summary={"topk_inputs": len(normal_items)},
+            analysis_settings=analysis_settings,
         )
         if normal_items
         else ""
@@ -937,10 +1421,45 @@ def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
         priority_items=priority_items,
         review_items=review_items,
         normal_items=normal_items,
+        analysis_settings=analysis_settings,
     )
 
     output_json_path = run_dir / "17_topk_final_summary.json"
     output_md_path = run_dir / "17_topk_final_summary.md"
+    incident_recheck_summary = {
+        "enabled": bool(incident_recheck_payload),
+        "rechecked_clips": _safe_int(incident_recheck_payload.get("rechecked_clips"), 0) if isinstance(incident_recheck_payload, dict) else 0,
+        "priority_suspicious_events": 0,
+        "possible_review_clips": 0,
+        "normal_activity": 0,
+        "uncertain_activity": 0,
+        "failed_outputs": 0,
+        "top_event_labels": [],
+        "top_primary_event_labels": [],
+        "weapon_visible_clips": 0,
+        "grabbing_or_restraint_clips": 0,
+        "threat_or_control_clips": 0,
+        "taking_items_clips": 0,
+        "display_interaction_clips": 0,
+    }
+    if isinstance(incident_recheck_payload, dict):
+        report_payload = _load_optional_json(run_dir / "16b_incident_recheck_report.json")
+        if isinstance(report_payload, dict):
+            incident_recheck_summary = {
+                **incident_recheck_summary,
+                "priority_suspicious_events": _safe_int(report_payload.get("priority_suspicious_events"), 0),
+                "possible_review_clips": _safe_int(report_payload.get("possible_review_clips"), 0),
+                "normal_activity": _safe_int(report_payload.get("normal_activity"), 0),
+                "uncertain_activity": _safe_int(report_payload.get("uncertain_activity"), 0),
+                "failed_outputs": _safe_int(report_payload.get("failed_outputs"), 0),
+                "top_event_labels": report_payload.get("top_event_labels", []) if isinstance(report_payload.get("top_event_labels"), list) else [],
+                "top_primary_event_labels": report_payload.get("top_primary_event_labels", []) if isinstance(report_payload.get("top_primary_event_labels"), list) else [],
+                "weapon_visible_clips": _safe_int(report_payload.get("weapon_visible_clips"), 0),
+                "grabbing_or_restraint_clips": _safe_int(report_payload.get("grabbing_or_restraint_clips"), 0),
+                "threat_or_control_clips": _safe_int(report_payload.get("threat_or_control_clips"), 0),
+                "taking_items_clips": _safe_int(report_payload.get("taking_items_clips"), 0),
+                "display_interaction_clips": _safe_int(report_payload.get("display_interaction_clips"), 0),
+            }
 
     summary = {
         "video_info": video_info,
@@ -957,8 +1476,15 @@ def create_topk_final_summary(run_dir: Path) -> dict[str, Any]:
         "scene_overview": scene_overview,
         "descriptive_summary": descriptive_summary,
         "normal_activity_summary": normal_activity_summary,
+        "incident_recheck_summary": incident_recheck_summary,
+        "vlm_coverage_audit": coverage_audit_payload,
+        "analysis_settings": analysis_settings,
+        "analysis_sensitivity_mode": analysis_settings.get("mode"),
+        "incident_fallback_pass_used": analysis_settings.get("incident_fallback_pass_used", False),
+        "incident_fallback_reason": os.environ.get("TENDER_DEMO_INCIDENT_FALLBACK_REASON", ""),
         "final_summary_text": final_summary_text,
         "overall_summary": final_summary_text,
+        "review_clusters": review_clusters,
         "priority_suspicious_events": priority_items,
         "possible_review_clips": review_items,
         "normal_activity_clips": normal_items,

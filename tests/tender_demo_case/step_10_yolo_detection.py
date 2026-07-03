@@ -15,6 +15,7 @@ DEFAULT_YOLO_INPUT_SCOPE = "motion_candidates"
 INPUT_SCOPE_TO_FILENAME = {
     "motion_candidates": "04_motion_candidates.json",
     "sampled_frames": "02_sampled_frames.json",
+    "frame_candidate_pool": "02c_frame_candidate_pool.json",
 }
 
 VEHICLE_CLASSES = {"car", "motorcycle", "bus", "truck", "bicycle"}
@@ -64,10 +65,21 @@ def _read_input_scope() -> str:
 
 def _load_input_items(run_dir: Path, input_scope: str) -> list[dict[str, Any]]:
     input_path = run_dir / INPUT_SCOPE_TO_FILENAME[input_scope]
+    if input_scope == "frame_candidate_pool" and not input_path.exists():
+        fallback_path = run_dir / INPUT_SCOPE_TO_FILENAME["motion_candidates"]
+        if not fallback_path.exists():
+            fallback_path = run_dir / INPUT_SCOPE_TO_FILENAME["sampled_frames"]
+        print(
+            f"[tender-demo] Warning: frame candidate pool is missing. "
+            f"Falling back to {fallback_path.name}."
+        )
+        input_path = fallback_path
     if not input_path.exists():
         raise FileNotFoundError(f"Missing YOLO input file for scope '{input_scope}': {input_path}")
 
     items = json.loads(input_path.read_text(encoding="utf-8"))
+    if isinstance(items, dict):
+        items = items.get("items", [])
     if not isinstance(items, list):
         raise ValueError(f"Expected a list in YOLO input file: {input_path}")
     return items

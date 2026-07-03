@@ -23,6 +23,8 @@ SUPPORTED_EXTENSIONS = {"mp4", "avi", "mov", "mkv", "webm", "m4v"}
 STANDARD_STAGE_WEIGHTS = {
     1: 3,
     2: 5,
+    "02B": 5,
+    "02C": 3,
     3: 5,
     4: 3,
     5: 4,
@@ -34,8 +36,11 @@ STANDARD_STAGE_WEIGHTS = {
     12: 4,
     13: 4,
     14: 3,
+    "14B": 3,
     15: 5,
+    "15B": 2,
     16: 25,
+    "16B": 12,
     17: 4,
     18: 6,
     19: 2,
@@ -43,6 +48,8 @@ STANDARD_STAGE_WEIGHTS = {
 STANDARD_STAGE_LABELS = {
     1: "Reading video information",
     2: "Sampling frames",
+    "02B": "Adaptive sampling",
+    "02C": "Building frame candidate pool",
     3: "Scoring motion",
     4: "Selecting motion candidates",
     5: "Grouping motion into clips",
@@ -54,8 +61,11 @@ STANDARD_STAGE_LABELS = {
     12: "Fusing motion + YOLO + VLM evidence",
     13: "Ranking candidate clips",
     14: "Selecting Top-K + guardrail clips",
+    "14B": "Applying incident coverage guardrails",
     15: "Creating Top-K VLM inputs",
+    "15B": "Auditing VLM coverage",
     16: "Running Qwen on Top-K clips",
+    "16B": "Incident recheck reasoning",
     17: "Creating final summary",
     18: "Exporting/compiling review video",
     19: "Creating HTML demo report",
@@ -63,6 +73,8 @@ STANDARD_STAGE_LABELS = {
 STANDARD_STAGE_PROGRESS_PERCENT = {
     1: 3,
     2: 8,
+    "02B": 12,
+    "02C": 15,
     3: 13,
     4: 18,
     5: 22,
@@ -74,8 +86,11 @@ STANDARD_STAGE_PROGRESS_PERCENT = {
     12: 60,
     13: 66,
     14: 70,
+    "14B": 73,
     15: 75,
+    "15B": 78,
     16: 85,
+    "16B": 90,
     17: 92,
     18: 97,
     19: 99,
@@ -83,13 +98,18 @@ STANDARD_STAGE_PROGRESS_PERCENT = {
 FAST_STAGE_WEIGHTS = {
     1: 5,
     2: 5,
+    "02B": 5,
+    "02C": 3,
     3: 5,
     4: 5,
     56: 35,
     13: 7,
     14: 6,
+    "14B": 4,
     15: 5,
+    "15B": 2,
     16: 15,
+    "16B": 10,
     17: 5,
     18: 4,
     19: 3,
@@ -97,13 +117,18 @@ FAST_STAGE_WEIGHTS = {
 FAST_STAGE_PROGRESS_PERCENT = {
     1: 5,
     2: 10,
+    "02B": 13,
+    "02C": 16,
     3: 15,
     4: 20,
     56: 55,
     13: 62,
     14: 68,
+    "14B": 71,
     15: 73,
+    "15B": 77,
     16: 88,
+    "16B": 91,
     17: 93,
     18: 97,
     19: 99,
@@ -125,6 +150,29 @@ PIPELINE_ENGINE_MAP = {
     },
 }
 PROCESSING_PRESETS = {
+    "Quick scan": {
+        "sample_every_seconds": 4.0,
+        "top_k": 3,
+        "qwen_max_new_tokens": 192,
+        "qwen_batch_size": 1,
+        "yolo_imgsz": 416,
+        "yolo_conf": 0.40,
+        "motion_threshold": 0.25,
+        "parallel_branches": True,
+        "enable_incident_recheck": False,
+        "incident_recheck_all_topk": False,
+        "incident_fallback_pass": False,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": False,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": False,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "center_only",
+        "max_vlm_inputs": 25,
+        "yolo_input_scope": "motion_candidates",
+    },
     "Fast demo": {
         "sample_every_seconds": 3.0,
         "top_k": 5,
@@ -132,7 +180,21 @@ PROCESSING_PRESETS = {
         "qwen_batch_size": 1,
         "yolo_imgsz": 416,
         "yolo_conf": 0.35,
+        "motion_threshold": 0.20,
         "parallel_branches": True,
+        "enable_incident_recheck": False,
+        "incident_recheck_all_topk": False,
+        "incident_fallback_pass": False,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": False,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": False,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "center_only",
+        "max_vlm_inputs": 25,
+        "yolo_input_scope": "motion_candidates",
     },
     "Balanced": {
         "sample_every_seconds": 2.0,
@@ -141,17 +203,122 @@ PROCESSING_PRESETS = {
         "qwen_batch_size": 1,
         "yolo_imgsz": 512,
         "yolo_conf": 0.30,
+        "motion_threshold": 0.15,
         "parallel_branches": True,
+        "enable_incident_recheck": False,
+        "incident_recheck_all_topk": False,
+        "incident_fallback_pass": False,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": False,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": False,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "center_only",
+        "max_vlm_inputs": 25,
+        "yolo_input_scope": "motion_candidates",
     },
-    "Higher accuracy": {
+    "Jewelry shop robbery demo": {
         "sample_every_seconds": 1.0,
-        "top_k": 10,
+        "top_k": 8,
+        "qwen_max_new_tokens": 384,
+        "qwen_batch_size": 1,
+        "yolo_imgsz": 416,
+        "yolo_conf": 0.35,
+        "motion_threshold": 0.15,
+        "parallel_branches": True,
+        "enable_incident_recheck": True,
+        "incident_recheck_all_topk": False,
+        "incident_fallback_pass": False,
+        "incident_focus": "theft",
+        "adaptive_sampling_enabled": True,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": True,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "multi_focus",
+        "max_vlm_inputs": 8,
+        "yolo_input_scope": "frame_candidate_pool",
+    },
+    "Sensitive Incident Review": {
+        "sample_every_seconds": 1.0,
+        "top_k": 20,
         "qwen_max_new_tokens": 512,
         "qwen_batch_size": 1,
         "yolo_imgsz": 640,
         "yolo_conf": 0.25,
+        "motion_threshold": 0.10,
         "parallel_branches": True,
+        "enable_incident_recheck": True,
+        "incident_recheck_all_topk": True,
+        "incident_fallback_pass": True,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": True,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": True,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "multi_focus",
+        "max_vlm_inputs": 40,
+        "yolo_input_scope": "frame_candidate_pool",
     },
+    "High accuracy review": {
+        "sample_every_seconds": 0.5,
+        "top_k": 25,
+        "qwen_max_new_tokens": 512,
+        "qwen_batch_size": 1,
+        "yolo_imgsz": 640,
+        "yolo_conf": 0.20,
+        "motion_threshold": 0.08,
+        "parallel_branches": True,
+        "enable_incident_recheck": True,
+        "incident_recheck_all_topk": True,
+        "incident_fallback_pass": True,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": True,
+        "adaptive_base_interval_seconds": 0.5,
+        "adaptive_max_frame_gap_seconds": 3.0,
+        "coverage_guardrails_enabled": True,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "multi_focus",
+        "max_vlm_inputs": 50,
+        "yolo_input_scope": "frame_candidate_pool",
+    },
+    "Custom": {
+        "sample_every_seconds": 2.0,
+        "top_k": 8,
+        "qwen_max_new_tokens": 384,
+        "qwen_batch_size": 1,
+        "yolo_imgsz": 512,
+        "yolo_conf": 0.30,
+        "motion_threshold": 0.15,
+        "parallel_branches": True,
+        "enable_incident_recheck": False,
+        "incident_recheck_all_topk": False,
+        "incident_fallback_pass": False,
+        "incident_focus": "general",
+        "adaptive_sampling_enabled": False,
+        "adaptive_base_interval_seconds": 1.0,
+        "adaptive_max_frame_gap_seconds": 4.0,
+        "coverage_guardrails_enabled": False,
+        "critical_timestamps": "",
+        "critical_window_seconds": 8.0,
+        "vlm_input_strategy": "center_only",
+        "max_vlm_inputs": 25,
+        "yolo_input_scope": "motion_candidates",
+    },
+}
+INCIDENT_FOCUS_OPTIONS = {
+    "General incident review": "general",
+    "Robbery / weapon / assault": "robbery",
+    "Theft / shoplifting": "theft",
+    "Traffic / collision": "traffic",
+    "Fall / injury": "fall",
+    "Intrusion / restricted area": "intrusion",
 }
 INPUT_MODE_OPTIONS = [
     "Use existing local/server video path",
@@ -164,6 +331,7 @@ QUICK_RESULT_SETTINGS = {
     "qwen_max_new_tokens": 192,
     "yolo_imgsz": 416,
     "yolo_conf": 0.40,
+    "motion_threshold": 0.25,
 }
 
 
@@ -363,8 +531,11 @@ def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, s
     env_updates = {
         "TENDER_DEMO_INPUT_VIDEO": str(selected_video_path),
         "TENDER_DEMO_PIPELINE_ENGINE": str(settings["pipeline_engine_id"]),
+        "TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE": str(settings["analysis_sensitivity_mode"]),
         "TENDER_DEMO_SAMPLE_EVERY_SECONDS": str(settings["sample_every_seconds"]),
         "TENDER_DEMO_TOP_K_CLIPS": str(settings["top_k"]),
+        "TENDER_DEMO_TOP_K_MAX_CLIPS": str(settings["top_k_max"]),
+        "TENDER_DEMO_MOTION_THRESHOLD": str(settings["motion_threshold"]),
         "TENDER_DEMO_QWEN_MODEL_ID": str(settings["qwen_model_id"]),
         "TENDER_DEMO_QWEN_BATCH_SIZE": str(settings["qwen_batch_size"]),
         "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": str(settings["qwen_max_new_tokens"]),
@@ -374,6 +545,19 @@ def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, s
         "TENDER_DEMO_YOLO_IMGSZ": str(settings["yolo_imgsz"]),
         "TENDER_DEMO_FAST_PARALLEL_BRANCHES": "true" if settings["parallel_branches"] else "false",
         "TENDER_DEMO_QUICK_RESULT_MODE": "true" if settings.get("quick_result_mode") else "false",
+        "TENDER_DEMO_ENABLE_INCIDENT_RECHECK": "true" if settings.get("enable_incident_recheck") else "false",
+        "TENDER_DEMO_INCIDENT_RECHECK_ALL_TOPK": "true" if settings.get("incident_recheck_all_topk") else "false",
+        "TENDER_DEMO_INCIDENT_FALLBACK_PASS": "true" if settings.get("incident_fallback_pass") else "false",
+        "TENDER_DEMO_INCIDENT_FOCUS": str(settings.get("incident_focus", "general")),
+        "TENDER_DEMO_ENABLE_ADAPTIVE_SAMPLING": "true" if settings.get("adaptive_sampling_enabled") else "false",
+        "TENDER_DEMO_ADAPTIVE_BASE_INTERVAL_SECONDS": str(settings.get("adaptive_base_interval_seconds", 1.0)),
+        "TENDER_DEMO_ADAPTIVE_MAX_FRAME_GAP_SECONDS": str(settings.get("adaptive_max_frame_gap_seconds", 4.0)),
+        "TENDER_DEMO_ENABLE_COVERAGE_GUARDRAILS": "true" if settings.get("coverage_guardrails_enabled") else "false",
+        "TENDER_DEMO_CRITICAL_TIMESTAMPS": str(settings.get("critical_timestamps", "")),
+        "TENDER_DEMO_CRITICAL_WINDOW_SECONDS": str(settings.get("critical_window_seconds", 8.0)),
+        "TENDER_DEMO_VLM_INPUT_STRATEGY": str(settings.get("vlm_input_strategy", "center_only")),
+        "TENDER_DEMO_MAX_VLM_INPUTS": str(settings.get("max_vlm_inputs", 25)),
+        "TENDER_DEMO_YOLO_INPUT_SCOPE": str(settings.get("yolo_input_scope", "motion_candidates")),
         "TENDER_DEMO_CREATE_COMPILED_REVIEW_VIDEO": "true" if settings["create_compiled_review_video"] else "false",
         "TENDER_DEMO_COMPILED_VIDEO_FPS": str(settings["compiled_video_fps"]),
         "TENDER_DEMO_SECONDS_PER_FRAME": str(settings["seconds_per_frame"]),
@@ -406,6 +590,8 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
     standard_stage_map = [
         (["Starting Step 1", "01_video_info.json"], "Reading video information", 5),
         (["Starting Step 2", "02_sampled_frames.json"], "Sampling frames", 10),
+        (["Starting Step 02B", "02b_adaptive_sampling_report.json"], "Adaptive sampling", 13),
+        (["Starting Step 02C", "02c_frame_candidate_pool.json"], "Building frame candidate pool", 16),
         (["Starting Step 3", "03_motion_scores.json"], "Scoring motion", 15),
         (["Starting Step 4", "04_motion_candidates.json"], "Selecting motion candidates", 20),
         (["Starting Step 5", "05_candidate_clips.json"], "Grouping candidate clips", 25),
@@ -415,8 +601,11 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
+        (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
+        (["15_vlm_coverage_audit.json"], "Auditing VLM coverage", 77),
         (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 16B", "16b_incident_recheck_outputs.json"], "Incident recheck reasoning", 90),
         (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
         (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
         (["Starting Step 19", "19_demo_report.html"], "Creating HTML report", 99),
@@ -424,6 +613,8 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
     fast_stage_map = [
         (["Starting Step 1", "01_video_info.json"], "Reading video information", 5),
         (["Starting Step 2", "02_sampled_frames.json"], "Sampling frames", 10),
+        (["Starting Step 02B", "02b_adaptive_sampling_report.json"], "Adaptive sampling", 13),
+        (["Starting Step 02C", "02c_frame_candidate_pool.json"], "Building frame candidate pool", 16),
         (["Starting Step 3", "03_motion_scores.json"], "Scoring motion", 15),
         (["Starting Step 4", "04_motion_candidates.json"], "Selecting motion candidates", 20),
         (["Starting Step 5", "05_candidate_clips.json"], "Grouping candidate clips", 25),
@@ -434,8 +625,11 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
+        (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
+        (["15_vlm_coverage_audit.json"], "Auditing VLM coverage", 77),
         (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 16B", "16b_incident_recheck_outputs.json"], "Incident recheck reasoning", 91),
         (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
         (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
         (["Starting Step 19", "19_demo_report.html", "Runtime metrics path"], "Creating HTML report", 99),
@@ -451,6 +645,8 @@ def filter_user_friendly_log_line(line: str) -> str | None:
     mappings = {
         "Starting Step 1": "Reading video information...",
         "Starting Step 2": "Sampling frames...",
+        "Starting Step 02B": "Running adaptive sampling...",
+        "Starting Step 02C": "Building frame candidate pool...",
         "Starting Step 3": "Scoring motion...",
         "Starting Step 4": "Selecting motion candidates...",
         "Starting Step 5": "Grouping motion into clips...",
@@ -462,8 +658,11 @@ def filter_user_friendly_log_line(line: str) -> str | None:
         "Starting Step 12": "Fusing motion + YOLO + VLM evidence...",
         "Starting Step 13": "Ranking candidate clips...",
         "Starting Step 14": "Selecting Top-K + guardrail clips...",
+        "Starting Step 14B": "Applying incident coverage guardrails...",
         "Starting Step 15": "Creating Top-K VLM input strips...",
+        "15_vlm_coverage_audit.json": "Auditing VLM coverage...",
         "Starting Step 16": "Running Qwen on selected Top-K clips...",
+        "Starting Step 16B": "Running incident recheck reasoning...",
         "Starting Step 17": "Creating final summary...",
         "Starting Step 18": "Creating compiled review video...",
         "Starting Step 19": "Creating HTML demo report...",
@@ -480,6 +679,9 @@ def filter_user_friendly_log_line(line: str) -> str | None:
         "Failed parses",
         "Priority suspicious events",
         "Possible review clips",
+        "Incident recheck priority clips",
+        "Incident recheck review clips",
+        "Rechecked clips",
         "Output path",
         "Compiled video path",
         "HTML report path",
@@ -778,6 +980,25 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
 
         description = str(event.get("best_event_description", "")).strip()
         caption = str(event.get("caption", "")).strip()
+        incident_category = str(event.get("incident_category", "")).strip()
+        incident_event_label = str(event.get("incident_event_label", "")).strip()
+        secondary_event_labels = [str(item).strip() for item in event.get("secondary_event_labels", []) if str(item).strip()] if isinstance(event.get("secondary_event_labels"), list) else []
+        incident_score = float(event.get("incident_score", 0.0) or 0.0)
+        evidence_strength = str(event.get("evidence_strength", "")).strip()
+        weapon_visible = str(event.get("weapon_visible", "")).strip()
+        weapon_description = str(event.get("weapon_description", "")).strip()
+        person_grabbing_or_restraining = str(event.get("person_grabbing_or_restraining", "")).strip()
+        grabbing_description = str(event.get("grabbing_description", "")).strip()
+        person_threatened_or_controlled = str(event.get("person_threatened_or_controlled", "")).strip()
+        threat_description = str(event.get("threat_description", "")).strip()
+        taking_items_visible = str(event.get("taking_items_visible", "")).strip()
+        item_taking_description = str(event.get("item_taking_description", "")).strip()
+        display_or_counter_interaction = str(event.get("display_or_counter_interaction", "")).strip()
+        display_interaction_description = str(event.get("display_interaction_description", "")).strip()
+        incident_visible_evidence = [str(item).strip() for item in event.get("incident_visible_evidence", []) if str(item).strip()] if isinstance(event.get("incident_visible_evidence"), list) else []
+        incident_review_reason = str(event.get("incident_review_reason", "")).strip()
+        incident_suspicious_explanation = str(event.get("incident_suspicious_explanation", "")).strip()
+        incident_normal_explanation = str(event.get("incident_normal_explanation", "")).strip()
         motion_summary = str(event.get("motion_summary", "")).strip()
         moving_objects = [str(item).strip() for item in event.get("moving_objects", []) if str(item).strip()] if isinstance(event.get("moving_objects"), list) else []
         stationary_objects = [str(item).strip() for item in event.get("stationary_objects", []) if str(item).strip()] if isinstance(event.get("stationary_objects"), list) else []
@@ -808,6 +1029,26 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
             str(event.get("confidence", "")),
             caption,
             description,
+            incident_category,
+            incident_event_label,
+            " ".join(secondary_event_labels),
+            str(incident_score),
+            evidence_strength,
+            weapon_visible,
+            weapon_description,
+            person_grabbing_or_restraining,
+            grabbing_description,
+            person_threatened_or_controlled,
+            threat_description,
+            taking_items_visible,
+            item_taking_description,
+            display_or_counter_interaction,
+            display_interaction_description,
+            incident_review_reason,
+            incident_suspicious_explanation,
+            incident_normal_explanation,
+            " ".join(incident_visible_evidence),
+            "possible robbery weapon gun knife grabbing restraint employee threat controlled display case counter taking items theft from display group robbery",
             motion_summary,
             traffic_state,
             " ".join(moving_objects),
@@ -851,6 +1092,25 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
                 "confidence": str(event.get("confidence", "")),
                 "caption": caption,
                 "description": description,
+                "incident_category": incident_category,
+                "incident_event_label": incident_event_label,
+                "secondary_event_labels": secondary_event_labels,
+                "incident_score": incident_score,
+                "evidence_strength": evidence_strength,
+                "weapon_visible": weapon_visible,
+                "weapon_description": weapon_description,
+                "person_grabbing_or_restraining": person_grabbing_or_restraining,
+                "grabbing_description": grabbing_description,
+                "person_threatened_or_controlled": person_threatened_or_controlled,
+                "threat_description": threat_description,
+                "taking_items_visible": taking_items_visible,
+                "item_taking_description": item_taking_description,
+                "display_or_counter_interaction": display_or_counter_interaction,
+                "display_interaction_description": display_interaction_description,
+                "incident_visible_evidence": incident_visible_evidence,
+                "incident_review_reason": incident_review_reason,
+                "incident_suspicious_explanation": incident_suspicious_explanation,
+                "incident_normal_explanation": incident_normal_explanation,
                 "motion_summary": motion_summary,
                 "moving_objects": moving_objects,
                 "stationary_objects": stationary_objects,
@@ -1011,6 +1271,23 @@ def _render_search_result(record: dict) -> None:
             "confidence": record.get("confidence"),
             "event_label": record.get("event_label"),
             "description": record.get("description"),
+            "incident_category": record.get("incident_category"),
+            "incident_event_label": record.get("incident_event_label"),
+            "secondary_event_labels": record.get("secondary_event_labels"),
+            "incident_score": record.get("incident_score"),
+            "evidence_strength": record.get("evidence_strength"),
+            "weapon_visible": record.get("weapon_visible"),
+            "weapon_description": record.get("weapon_description"),
+            "person_grabbing_or_restraining": record.get("person_grabbing_or_restraining"),
+            "grabbing_description": record.get("grabbing_description"),
+            "person_threatened_or_controlled": record.get("person_threatened_or_controlled"),
+            "threat_description": record.get("threat_description"),
+            "taking_items_visible": record.get("taking_items_visible"),
+            "item_taking_description": record.get("item_taking_description"),
+            "display_or_counter_interaction": record.get("display_or_counter_interaction"),
+            "display_interaction_description": record.get("display_interaction_description"),
+            "incident_review_reason": record.get("incident_review_reason"),
+            "incident_visible_evidence": record.get("incident_visible_evidence"),
             "motion_summary": record.get("motion_summary"),
             "moving_objects": record.get("moving_objects"),
             "stationary_objects": record.get("stationary_objects"),
@@ -1064,18 +1341,46 @@ def _render_json_details(label: str, payload: Any) -> None:
         st.json(payload)
 
 
+def _event_sort_key(event: dict) -> tuple[int, float, int, int, int, float]:
+    category_priority = {
+        "priority_suspicious_event": 0,
+        "possible_review_clip": 1,
+        "uncertain_activity": 2,
+        "normal_activity": 3,
+    }
+    evidence_priority = {"strong": 0, "medium": 1, "weak": 2, "none": 3, "unknown": 4}
+    risk_priority = {"high": 0, "medium": 1, "low": 2, "unknown": 3}
+    confidence_priority = {"high": 0, "medium": 1, "low": 2, "unknown": 3}
+    return (
+        category_priority.get(str(event.get("final_category", "")), 9),
+        -float(event.get("incident_score", 0.0) or 0.0),
+        evidence_priority.get(str(event.get("evidence_strength", "unknown")).lower(), 9),
+        risk_priority.get(str(event.get("risk_level", "unknown")).lower(), 9),
+        confidence_priority.get(str(event.get("confidence", "unknown")).lower(), 9),
+        float(event.get("start_time", 0.0) or 0.0),
+    )
+
+
 def render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False):
     clip_id = str(event.get("clip_id", "unknown_clip"))
     qwen_item = qwen_by_clip_id.get(clip_id, {})
+    event_title = str(event.get("title", "")).strip()
+    event_description = str(event.get("description", "")).strip() or str(event.get("best_event_description", "")).strip()
 
-    st.markdown(f"**{clip_id}**")
+    st.markdown(f"**{event_title or clip_id}**")
+    if event_title:
+        st.caption(clip_id)
     left, right = st.columns(2)
     with left:
         st.write(f"Time: `{event.get('time_range', 'unknown')}`")
         st.write(f"Event label: `{event.get('event_label', 'unknown')}`")
+        st.write(f"Primary event label: `{event.get('primary_event_label', event.get('incident_event_label', 'unknown'))}`")
+        st.write(f"Secondary event labels: {', '.join(event.get('secondary_event_labels', [])) if isinstance(event.get('secondary_event_labels'), list) and event.get('secondary_event_labels') else 'n/a'}")
         st.write(f"Risk: `{event.get('risk_level', 'unknown')}`")
         st.write(f"Confidence: `{event.get('confidence', 'unknown')}`")
-        st.write(f"Description: {event.get('best_event_description', 'n/a')}")
+        st.write(f"Incident score: `{event.get('incident_score', 'n/a')}`")
+        st.write(f"Evidence strength: `{event.get('evidence_strength', 'n/a')}`")
+        st.write(f"Description: {event_description or 'n/a'}")
         st.write(f"Selection reasons: {', '.join(event.get('selection_reasons', [])) or 'n/a'}")
         st.write(f"Why selected: {event.get('why_selected', 'n/a')}")
         st.write(f"Review note: {event.get('review_note', 'n/a')}")
@@ -1085,6 +1390,32 @@ def render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False):
         st.write(f"YOLO person max: `{event.get('yolo_person_max', 'n/a')}`")
         st.write(f"YOLO classes: {', '.join(event.get('yolo_top_classes', [])) or 'n/a'}")
         st.write(f"Traffic state: `{event.get('traffic_state', 'unclear') or 'unclear'}`")
+
+    incident_category = str(event.get("incident_category", "")).strip()
+    incident_event_label = str(event.get("incident_event_label", "")).strip()
+    incident_visible_evidence = [str(item).strip() for item in event.get("incident_visible_evidence", []) if str(item).strip()] if isinstance(event.get("incident_visible_evidence"), list) else []
+    incident_suspicious_explanation = str(event.get("incident_suspicious_explanation", "")).strip()
+    incident_normal_explanation = str(event.get("incident_normal_explanation", "")).strip()
+    incident_review_reason = str(event.get("incident_review_reason", "")).strip()
+    if incident_category or incident_event_label or incident_visible_evidence:
+        st.write("Incident recheck")
+        st.write(f"Incident category: `{incident_category or 'n/a'}`")
+        st.write(f"Incident event label: `{incident_event_label or 'n/a'}`")
+        st.write(f"Incident confidence: `{event.get('confidence', 'n/a')}`")
+        st.write(f"Weapon visible: `{event.get('weapon_visible', 'unclear')}`")
+        st.write(f"Weapon description: {event.get('weapon_description', 'n/a') or 'n/a'}")
+        st.write(f"Grabbing/restraint: `{event.get('person_grabbing_or_restraining', 'unclear')}`")
+        st.write(f"Grabbing description: {event.get('grabbing_description', 'n/a') or 'n/a'}")
+        st.write(f"Threat/control: `{event.get('person_threatened_or_controlled', 'unclear')}`")
+        st.write(f"Threat description: {event.get('threat_description', 'n/a') or 'n/a'}")
+        st.write(f"Taking items visible: `{event.get('taking_items_visible', 'unclear')}`")
+        st.write(f"Item-taking description: {event.get('item_taking_description', 'n/a') or 'n/a'}")
+        st.write(f"Display/counter interaction: `{event.get('display_or_counter_interaction', 'unclear')}`")
+        st.write(f"Display interaction description: {event.get('display_interaction_description', 'n/a') or 'n/a'}")
+        st.write(f"Visible evidence: {', '.join(incident_visible_evidence) if incident_visible_evidence else 'n/a'}")
+        st.write(f"Suspicious explanation: {incident_suspicious_explanation or 'n/a'}")
+        st.write(f"Normal explanation: {incident_normal_explanation or 'n/a'}")
+        st.write(f"Review reason: {incident_review_reason or 'n/a'}")
 
     motion_summary = str(event.get("motion_summary", "")).strip()
     moving_objects = [str(item).strip() for item in event.get("moving_objects", []) if str(item).strip()] if isinstance(event.get("moving_objects"), list) else []
@@ -1129,7 +1460,11 @@ def _load_run_results(run_dir: Path) -> dict[str, Any]:
     return {
         "video_info": load_json(run_dir / "01_video_info.json", default={}) or {},
         "summary": summary,
+        "adaptive_sampling": load_json(run_dir / "02b_adaptive_sampling_report.json", default={}) or {},
+        "frame_candidate_pool": load_json(run_dir / "02c_frame_candidate_pool.json", default={}) or {},
         "vlm_outputs": load_json(run_dir / "16_topk_vlm_outputs.json", default={}) or {},
+        "coverage_guardrails": load_json(run_dir / "14b_coverage_guardrail_report.json", default={}) or {},
+        "vlm_coverage_audit": load_json(run_dir / "15_vlm_coverage_audit.json", default={}) or {},
         "exported_clips": load_json(run_dir / "18_exported_clips.json", default={}) or {},
         "compiled_video": load_json(run_dir / "18_compiled_review_video.json", default=None)
         or load_json(run_dir / "18_exported_clips" / "18_compiled_review_video.json", default={})
@@ -1151,10 +1486,20 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
         or summary.get("overall_summary")
         or "Summary not available."
     )
+    incident_recheck_summary = summary.get("incident_recheck_summary", {}) if isinstance(summary.get("incident_recheck_summary"), dict) else {}
+    analysis_settings = summary.get("analysis_settings", {}) if isinstance(summary.get("analysis_settings"), dict) else {}
+    adaptive_sampling = results.get("adaptive_sampling", {}) if isinstance(results.get("adaptive_sampling"), dict) else {}
+    frame_candidate_pool = results.get("frame_candidate_pool", {}) if isinstance(results.get("frame_candidate_pool"), dict) else {}
+    coverage_guardrails = results.get("coverage_guardrails", {}) if isinstance(results.get("coverage_guardrails"), dict) else {}
+    vlm_coverage_audit = results.get("vlm_coverage_audit", {}) if isinstance(results.get("vlm_coverage_audit"), dict) else {}
+    review_clusters = summary.get("review_clusters", []) if isinstance(summary.get("review_clusters"), list) else []
+    if not analysis_settings:
+        analysis_settings = runtime_metrics.get("analysis_settings", {}) if isinstance(runtime_metrics.get("analysis_settings"), dict) else {}
 
     st.subheader("Final Summary")
     st.write(descriptive_summary)
     st.info("This summary is generated from selected Top-K clips. For richer summary, use the descriptive summary fields from Step 17.")
+    st.caption("Incident Recheck improves detection of subtle events like theft, shoplifting, fight, fall, and collision, but increases runtime.")
 
     metric_cols = st.columns(4)
     metric_cols[0].metric("Top-K Clips", processing_summary.get("topk_inputs", 0))
@@ -1200,6 +1545,68 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
             st.warning("Processing took longer than video length. To improve speed, use Quick Result Mode, increase sample interval, reduce Top-K, reduce Qwen max tokens, or use a smaller/faster VLM.")
         else:
             st.success("Processing completed faster than real time.")
+
+    st.subheader("Incident Recheck")
+    incident_cols = st.columns(5)
+    incident_cols[0].write(f"Enabled: `{incident_recheck_summary.get('enabled', False)}`")
+    incident_cols[1].write(f"Rechecked clips: `{incident_recheck_summary.get('rechecked_clips', 0)}`")
+    incident_cols[2].write(f"Priority: `{incident_recheck_summary.get('priority_suspicious_events', 0)}`")
+    incident_cols[3].write(f"Review: `{incident_recheck_summary.get('possible_review_clips', 0)}`")
+    incident_cols[4].write(f"Normal: `{incident_recheck_summary.get('normal_activity', 0)}`")
+    incident_cols_2 = st.columns(5)
+    incident_cols_2[0].write(f"Uncertain: `{incident_recheck_summary.get('uncertain_activity', 0)}`")
+    incident_cols_2[1].write(f"Weapon-visible clips: `{incident_recheck_summary.get('weapon_visible_clips', 0)}`")
+    incident_cols_2[2].write(f"Grabbing/restraint clips: `{incident_recheck_summary.get('grabbing_or_restraint_clips', 0)}`")
+    incident_cols_2[3].write(f"Threat/control clips: `{incident_recheck_summary.get('threat_or_control_clips', 0)}`")
+    incident_cols_2[4].write(f"Taking-items clips: `{incident_recheck_summary.get('taking_items_clips', 0)}`")
+    st.write(f"Display-interaction clips: `{incident_recheck_summary.get('display_interaction_clips', 0)}`")
+
+    st.subheader("Analysis Settings")
+    analysis_cols = st.columns(3)
+    analysis_cols[0].write(f"Mode: `{analysis_settings.get('mode', 'unavailable')}`")
+    analysis_cols[1].write(f"Sample interval: `{analysis_settings.get('sample_every_seconds', 'unavailable')}`")
+    analysis_cols[2].write(f"Approx sampled FPS: `{analysis_settings.get('approx_sampled_fps', 'unavailable')}`")
+    analysis_cols_2 = st.columns(3)
+    analysis_cols_2[0].write(f"Top-K clips sent to Qwen: `{analysis_settings.get('top_k_clips', processing_summary.get('topk_inputs', 'unavailable'))}`")
+    analysis_cols_2[1].write(f"Top-K max cap: `{analysis_settings.get('top_k_max', 'unavailable')}`")
+    analysis_cols_2[2].write(f"Motion threshold: `{analysis_settings.get('motion_threshold', 'unavailable')}`")
+    analysis_cols_3 = st.columns(3)
+    analysis_cols_3[0].write(f"YOLO image size: `{analysis_settings.get('yolo_imgsz', 'unavailable')}`")
+    analysis_cols_3[1].write(f"YOLO confidence: `{analysis_settings.get('yolo_conf', 'unavailable')}`")
+    analysis_cols_3[2].write(f"Qwen max tokens: `{analysis_settings.get('qwen_max_new_tokens', 'unavailable')}`")
+    analysis_cols_4 = st.columns(3)
+    analysis_cols_4[0].write(f"Incident fallback pass enabled: `{analysis_settings.get('incident_fallback_pass_enabled', analysis_settings.get('incident_fallback_pass', 'unavailable'))}`")
+    analysis_cols_4[1].write(f"Incident fallback pass used: `{summary.get('incident_fallback_pass_used', analysis_settings.get('incident_fallback_pass_used', False))}`")
+    analysis_cols_4[2].write(f"Enable incident recheck: `{analysis_settings.get('enable_incident_recheck', 'unavailable')}`")
+    st.write(f"Incident focus: `{analysis_settings.get('incident_focus', 'general')}`")
+    analysis_cols_5 = st.columns(4)
+    analysis_cols_5[0].write(f"Adaptive sampling enabled: `{analysis_settings.get('adaptive_sampling_enabled', adaptive_sampling.get('enabled', False))}`")
+    analysis_cols_5[1].write(f"Coverage guardrails enabled: `{analysis_settings.get('coverage_guardrails_enabled', coverage_guardrails.get('enabled', False))}`")
+    analysis_cols_5[2].write(f"VLM input strategy: `{analysis_settings.get('vlm_input_strategy', 'unavailable')}`")
+    analysis_cols_5[3].write(f"Max VLM inputs: `{analysis_settings.get('max_vlm_inputs', 'unavailable')}`")
+
+    st.subheader("Adaptive Coverage")
+    adaptive_cols = st.columns(4)
+    adaptive_cols[0].write(f"Adaptive retained frames: `{adaptive_sampling.get('retained_frames', 0)}`")
+    adaptive_cols[1].write(f"Frame candidate pool count: `{frame_candidate_pool.get('metadata', {}).get('merged_count', 0) if isinstance(frame_candidate_pool.get('metadata'), dict) else 0}`")
+    adaptive_cols[2].write(f"Coverage guardrail output clips: `{coverage_guardrails.get('output_selected_count', 0)}`")
+    adaptive_cols[3].write(f"Total VLM inputs sent to Qwen: `{vlm_coverage_audit.get('total_vlm_inputs', processing_summary.get('topk_inputs', 0))}`")
+    st.write(f"Critical timestamps requested: `{', '.join(vlm_coverage_audit.get('critical_timestamps_requested', analysis_settings.get('critical_timestamps', []))) or 'none'}`")
+    st.write(f"Current-panel covered critical timestamps: `{', '.join(vlm_coverage_audit.get('current_panel_covered', [])) or 'none'}`")
+    st.write(f"Missing critical timestamps: `{', '.join(vlm_coverage_audit.get('missing', [])) or 'none'}`")
+
+    if review_clusters:
+        st.subheader("Review Clusters")
+        for cluster in review_clusters:
+            st.markdown(f"**{cluster.get('cluster_id', 'review_cluster')}**")
+            st.write(f"Time range: `{cluster.get('display_time', 'unknown')}`")
+            st.write(f"Primary event label: `{cluster.get('primary_event_label', 'unknown')}`")
+            st.write(f"Secondary event labels: {', '.join(cluster.get('secondary_event_labels', [])) if isinstance(cluster.get('secondary_event_labels'), list) and cluster.get('secondary_event_labels') else 'n/a'}")
+            st.write(f"Risk level: `{cluster.get('risk_level', 'unknown')}`")
+            st.write(f"Max incident score: `{cluster.get('max_incident_score', 'n/a')}`")
+            st.write(f"Key evidence: {', '.join(cluster.get('key_evidence', [])) if isinstance(cluster.get('key_evidence'), list) and cluster.get('key_evidence') else 'n/a'}")
+            st.write(f"Review reason: {cluster.get('review_reason', 'n/a') or 'n/a'}")
+            st.caption(f"Clip IDs: {', '.join(cluster.get('clip_ids', [])) if isinstance(cluster.get('clip_ids'), list) else 'n/a'}")
 
     if scene_overview:
         st.subheader("Scene Overview")
@@ -1333,28 +1740,59 @@ def _render_events_tab(run_dir: Path, results: dict[str, Any]) -> None:
         if isinstance(item, dict) and str(item.get("source_clip_id", "")).strip()
     }
     show_raw_qwen = st.checkbox("Show raw Qwen output", value=False)
+    review_clusters = summary.get("review_clusters", []) if isinstance(summary.get("review_clusters"), list) else []
+
+    if review_clusters:
+        st.subheader("Review Clusters")
+        for cluster in review_clusters:
+            with st.expander(
+                f"{cluster.get('cluster_id', 'review_cluster')} | {cluster.get('display_time', 'unknown')} | {cluster.get('primary_event_label', 'unknown')}",
+                expanded=False,
+            ):
+                st.write(
+                    {
+                        "time_range": cluster.get("display_time"),
+                        "primary_event_label": cluster.get("primary_event_label"),
+                        "secondary_event_labels": cluster.get("secondary_event_labels", []),
+                        "risk_level": cluster.get("risk_level"),
+                        "max_incident_score": cluster.get("max_incident_score"),
+                        "key_evidence": cluster.get("key_evidence", []),
+                        "review_reason": cluster.get("review_reason"),
+                        "clip_ids": cluster.get("clip_ids", []),
+                    }
+                )
 
     st.subheader("Priority Suspicious Events")
-    for event in summary.get("priority_suspicious_events", []):
+    for event in sorted(summary.get("priority_suspicious_events", []), key=_event_sort_key):
         with st.expander(
-            f"{event.get('clip_id', 'unknown')} | {event.get('time_range', 'unknown')} | "
+            f"{event.get('title', event.get('clip_id', 'unknown'))} | {event.get('time_range', 'unknown')} | "
             f"{event.get('risk_level', 'unknown')} | {event.get('confidence', 'unknown')}",
             expanded=True,
         ):
             render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=show_raw_qwen)
 
     st.subheader("Possible Review Clips")
-    for event in summary.get("possible_review_clips", []):
+    for event in sorted(summary.get("possible_review_clips", []), key=_event_sort_key):
         with st.expander(
-            f"{event.get('clip_id', 'unknown')} | {event.get('time_range', 'unknown')} | "
+            f"{event.get('title', event.get('clip_id', 'unknown'))} | {event.get('time_range', 'unknown')} | "
             f"{event.get('risk_level', 'unknown')} | {event.get('confidence', 'unknown')}",
             expanded=False,
         ):
             render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=show_raw_qwen)
 
+    uncertain_items = summary.get("uncertain_clips", []) if isinstance(summary.get("uncertain_clips"), list) else []
+    if uncertain_items:
+        st.subheader("Uncertain Clips")
+        for event in sorted(uncertain_items, key=_event_sort_key):
+            with st.expander(
+                f"{event.get('title', event.get('clip_id', 'unknown'))} | {event.get('time_range', 'unknown')} | uncertain",
+                expanded=False,
+            ):
+                render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False)
+
     st.subheader("Normal Activity Clips")
-    for event in summary.get("normal_activity_clips", []):
-        with st.expander(f"{event.get('clip_id', 'unknown')} | {event.get('time_range', 'unknown')}", expanded=False):
+    for event in sorted(summary.get("normal_activity_clips", []), key=_event_sort_key):
+        with st.expander(f"{event.get('title', event.get('clip_id', 'unknown'))} | {event.get('time_range', 'unknown')}", expanded=False):
             render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False)
 
 
@@ -1557,7 +1995,7 @@ def main() -> None:
             st.warning("Standard demo pipeline can take longer than the video length because it may run extra compatibility steps. Use Fast parallel Top-K for faster processing.")
         else:
             st.caption("Standard pipeline is slower and mainly kept for compatibility/debugging. For tender demo processing, use Fast parallel Top-K pipeline.")
-        processing_preset = st.selectbox("Processing preset", ["Fast demo", "Balanced", "Higher accuracy"], index=0)
+        processing_preset = st.selectbox("Processing preset", list(PROCESSING_PRESETS.keys()), index=2)
         st.info("For large CCTV videos, use Existing video path or Import folder. Browser upload has Streamlit limits and can be slow. The analysis pipeline itself can process large files from disk.")
         input_mode = st.radio("Video input mode", INPUT_MODE_OPTIONS, index=0)
         uploaded_file = st.file_uploader(
@@ -1586,19 +2024,165 @@ def main() -> None:
 
         st.header("Pipeline Settings")
         preset_values = PROCESSING_PRESETS[processing_preset]
-        quick_result_mode = st.checkbox("Quick result mode", value=True)
+        robbery_demo_mode = processing_preset == "Jewelry shop robbery demo"
+        quick_result_mode = st.checkbox("Quick result mode", value=False if robbery_demo_mode else True)
+        if robbery_demo_mode and quick_result_mode:
+            st.warning("Quick result mode overrides this robbery-demo preset toward Quick scan behavior. Turn it OFF for jewelry robbery/theft analysis.")
         st.caption("Quick result mode scans the video, selects the most important few clips, and sends only those clips to Qwen. This is faster but less exhaustive.")
-        sample_every_seconds = st.number_input("Sample every seconds", min_value=0.1, value=float(preset_values["sample_every_seconds"]), step=0.1)
-        top_k = st.number_input("Top-K clips", min_value=1, value=int(preset_values["top_k"]), step=1)
+        st.subheader("Analysis sensitivity")
+        st.caption("Fast modes review fewer frames and fewer clips. They are good for normal traffic/road videos. Sensitive modes sample more frames and send more clips to Qwen. Use Jewelry shop robbery demo, Sensitive Incident Review, or High Accuracy Review for robbery, theft, fight, fall, collision, or other subtle incidents.")
+        is_custom_mode = processing_preset == "Custom"
+        if is_custom_mode:
+            sample_every_seconds = st.slider(
+                "Frame sampling interval, seconds",
+                min_value=0.25,
+                max_value=10.0,
+                value=float(preset_values["sample_every_seconds"]),
+                step=0.25,
+                help="Lower value means more frames are checked. Better for robbery, fight, theft, fall, and subtle incidents, but slower.",
+            )
+            sampled_fps = 1.0 / sample_every_seconds if sample_every_seconds > 0 else 0.0
+            st.caption(f"Equivalent analysis sampled FPS: `{sampled_fps:.3f}`")
+            st.caption("This is analysis sampling FPS, not the original video FPS.")
+            top_k = st.slider(
+                "Top-K clips sent to Qwen",
+                min_value=3,
+                max_value=25,
+                value=int(preset_values["top_k"]),
+                step=1,
+                help="More clips means Qwen reviews more moments. Better for subtle incidents, but slower.",
+            )
+            motion_threshold = st.slider(
+                "Motion threshold",
+                min_value=0.05,
+                max_value=0.50,
+                value=float(preset_values["motion_threshold"]),
+                step=0.01,
+                help="Lower threshold catches smaller movement but may include more normal activity.",
+            )
+            qwen_max_new_tokens = st.slider("Qwen max tokens", min_value=128, max_value=768, value=int(preset_values["qwen_max_new_tokens"]), step=64)
+        else:
+            sample_every_seconds = float(preset_values["sample_every_seconds"])
+            top_k = int(preset_values["top_k"])
+            motion_threshold = float(preset_values["motion_threshold"])
+            qwen_max_new_tokens = int(preset_values["qwen_max_new_tokens"])
+            sampled_fps = 1.0 / sample_every_seconds if sample_every_seconds > 0 else 0.0
+            st.write(f"Sample interval: `{sample_every_seconds}` sec")
+            st.write(f"Equivalent analysis sampled FPS: `{sampled_fps:.3f}`")
+            st.write(f"Top-K clips sent to Qwen: `{top_k}`")
+            st.write(f"Motion threshold: `{motion_threshold}`")
         qwen_model_id = st.text_input("Qwen model id", value="qwen2.5vl:7b")
-        qwen_max_new_tokens = st.number_input("Qwen max new tokens", min_value=1, value=int(preset_values["qwen_max_new_tokens"]), step=1)
         qwen_batch_size = st.number_input("Qwen batch size", min_value=1, value=int(preset_values["qwen_batch_size"]), step=1)
         st.caption("Batch size 4 may be slower or unstable depending on GPU memory. Start with 1 or 2.")
         run_yolo = st.checkbox("Run YOLO", value=True)
         yolo_model = st.text_input("YOLO model", value="yolov8n.pt")
-        yolo_conf = st.number_input("YOLO confidence", min_value=0.01, max_value=1.0, value=float(preset_values["yolo_conf"]), step=0.01)
-        yolo_imgsz = st.number_input("YOLO image size", min_value=32, value=int(preset_values["yolo_imgsz"]), step=32)
+        if is_custom_mode:
+            yolo_conf = st.slider("YOLO confidence", min_value=0.10, max_value=0.60, value=float(preset_values["yolo_conf"]), step=0.05)
+            yolo_imgsz = st.selectbox("YOLO image size", [416, 512, 640], index=[416, 512, 640].index(int(preset_values["yolo_imgsz"])))
+        else:
+            yolo_conf = float(preset_values["yolo_conf"])
+            yolo_imgsz = int(preset_values["yolo_imgsz"])
+            st.write(f"YOLO image size: `{yolo_imgsz}`")
+            st.write(f"YOLO confidence: `{yolo_conf}`")
         parallel_branches = st.checkbox("Enable fast parallel branches", value=bool(preset_values["parallel_branches"]))
+        sensitive_mode = processing_preset in {"Sensitive Incident Review", "High accuracy review"}
+        if is_custom_mode:
+            incident_fallback_pass = st.checkbox(
+                "Incident-sensitive fallback pass",
+                value=bool(preset_values.get("incident_fallback_pass", False)),
+                help="If no priority/review clips are found, the pipeline may retry with more Top-K clips. This is useful for subtle incidents but slower.",
+            )
+            enable_incident_recheck = st.checkbox(
+                "Enable incident recheck",
+                value=bool(preset_values.get("enable_incident_recheck", False)),
+                help="Reserved for Step 16B incident reasoning. If Step 16B is not implemented yet, this setting will be recorded but skipped safely.",
+            )
+            incident_recheck_all_topk = st.checkbox(
+                "Recheck all Top-K clips",
+                value=bool(preset_values.get("incident_recheck_all_topk", False)),
+                help="Reserved for high-accuracy incident reasoning.",
+            )
+            incident_focus_label = st.selectbox(
+                "Incident focus",
+                list(INCIDENT_FOCUS_OPTIONS.keys()),
+                index=list(INCIDENT_FOCUS_OPTIONS.values()).index(str(preset_values.get("incident_focus", "general"))),
+                help="Choose the main incident family the serious-incident recheck should prioritize.",
+            )
+            incident_focus = INCIDENT_FOCUS_OPTIONS[incident_focus_label]
+        else:
+            incident_fallback_pass = bool(preset_values.get("incident_fallback_pass", False))
+            enable_incident_recheck = bool(preset_values.get("enable_incident_recheck", False))
+            incident_recheck_all_topk = bool(preset_values.get("incident_recheck_all_topk", False))
+            incident_focus = str(preset_values.get("incident_focus", "general"))
+            st.write(f"Incident-sensitive fallback pass: `{incident_fallback_pass}`")
+            st.write(f"Enable incident recheck: `{enable_incident_recheck}`")
+            st.write(f"Recheck all Top-K clips: `{incident_recheck_all_topk}`")
+            st.write(f"Incident focus: `{incident_focus}`")
+        if is_custom_mode or sensitive_mode:
+            adaptive_sampling_enabled = st.checkbox(
+                "Enable adaptive sampling",
+                value=bool(preset_values.get("adaptive_sampling_enabled", False)),
+            )
+            adaptive_base_interval_seconds = st.number_input(
+                "Adaptive base interval seconds",
+                min_value=0.25,
+                value=float(preset_values.get("adaptive_base_interval_seconds", 1.0)),
+                step=0.25,
+            )
+            adaptive_max_frame_gap_seconds = st.number_input(
+                "Adaptive max frame gap seconds",
+                min_value=1.0,
+                value=float(preset_values.get("adaptive_max_frame_gap_seconds", 4.0)),
+                step=0.5,
+            )
+            coverage_guardrails_enabled = st.checkbox(
+                "Enable coverage guardrails",
+                value=bool(preset_values.get("coverage_guardrails_enabled", False)),
+            )
+            critical_timestamps = st.text_input(
+                "Critical timestamps",
+                value=str(preset_values.get("critical_timestamps", "")),
+                placeholder="00:21,01:00,01:12,02:18",
+            )
+            critical_window_seconds = st.number_input(
+                "Critical window seconds",
+                min_value=1.0,
+                value=float(preset_values.get("critical_window_seconds", 8.0)),
+                step=1.0,
+            )
+            vlm_input_strategy = st.selectbox(
+                "VLM input strategy",
+                ["center_only", "peak_motion", "adaptive_peak", "multi_focus"],
+                index=["center_only", "peak_motion", "adaptive_peak", "multi_focus"].index(str(preset_values.get("vlm_input_strategy", "center_only"))),
+            )
+            max_vlm_inputs = st.number_input(
+                "Max VLM inputs",
+                min_value=5,
+                max_value=80,
+                value=int(preset_values.get("max_vlm_inputs", 25)),
+                step=1,
+            )
+        else:
+            adaptive_sampling_enabled = bool(preset_values.get("adaptive_sampling_enabled", False))
+            adaptive_base_interval_seconds = float(preset_values.get("adaptive_base_interval_seconds", 1.0))
+            adaptive_max_frame_gap_seconds = float(preset_values.get("adaptive_max_frame_gap_seconds", 4.0))
+            coverage_guardrails_enabled = bool(preset_values.get("coverage_guardrails_enabled", False))
+            critical_timestamps = str(preset_values.get("critical_timestamps", ""))
+            critical_window_seconds = float(preset_values.get("critical_window_seconds", 8.0))
+            vlm_input_strategy = str(preset_values.get("vlm_input_strategy", "center_only"))
+            max_vlm_inputs = int(preset_values.get("max_vlm_inputs", 25))
+            st.write(f"Adaptive sampling enabled: `{adaptive_sampling_enabled}`")
+            st.write(f"Adaptive base interval seconds: `{adaptive_base_interval_seconds}`")
+            st.write(f"Adaptive max frame gap seconds: `{adaptive_max_frame_gap_seconds}`")
+            st.write(f"Coverage guardrails enabled: `{coverage_guardrails_enabled}`")
+            st.write(f"Critical timestamps: `{critical_timestamps or 'none'}`")
+            st.write(f"Critical window seconds: `{critical_window_seconds}`")
+            st.write(f"VLM input strategy: `{vlm_input_strategy}`")
+            st.write(f"Max VLM inputs: `{max_vlm_inputs}`")
+        if top_k >= 20 or sample_every_seconds <= 1.0:
+            st.warning("Sensitive settings may be slower because more frames are sampled and more clips are sent to Qwen.")
+        if sample_every_seconds >= 3.0:
+            st.warning("Sparse sampling can miss short actions. For robbery/theft/fight videos, use 1.0 sec or 0.5 sec sampling.")
         create_compiled_review_video = st.checkbox("Create compiled review video", value=True)
         compiled_video_fps = st.number_input("Compiled video FPS", min_value=1, value=5, step=1)
         seconds_per_frame = st.number_input("Seconds per frame", min_value=0.1, value=1.0, step=0.1)
@@ -1662,10 +2246,13 @@ def main() -> None:
     settings = {
         "pipeline_engine": pipeline_engine,
         "pipeline_engine_id": PIPELINE_ENGINE_MAP[pipeline_engine]["engine_id"],
+        "analysis_sensitivity_mode": processing_preset,
         "processing_preset": processing_preset,
         "quick_result_mode": quick_result_mode,
         "sample_every_seconds": sample_every_seconds,
         "top_k": int(top_k),
+        "top_k_max": 25,
+        "motion_threshold": motion_threshold,
         "qwen_model_id": qwen_model_id,
         "qwen_max_new_tokens": int(qwen_max_new_tokens),
         "qwen_batch_size": int(qwen_batch_size),
@@ -1674,21 +2261,75 @@ def main() -> None:
         "yolo_conf": yolo_conf,
         "yolo_imgsz": int(yolo_imgsz),
         "parallel_branches": parallel_branches,
+        "incident_fallback_pass": incident_fallback_pass,
+        "enable_incident_recheck": enable_incident_recheck,
+        "incident_recheck_all_topk": incident_recheck_all_topk,
+        "incident_focus": incident_focus,
+        "adaptive_sampling_enabled": adaptive_sampling_enabled,
+        "adaptive_base_interval_seconds": adaptive_base_interval_seconds,
+        "adaptive_max_frame_gap_seconds": adaptive_max_frame_gap_seconds,
+        "coverage_guardrails_enabled": coverage_guardrails_enabled,
+        "critical_timestamps": critical_timestamps,
+        "critical_window_seconds": critical_window_seconds,
+        "vlm_input_strategy": vlm_input_strategy,
+        "max_vlm_inputs": int(max_vlm_inputs),
+        "yolo_input_scope": "frame_candidate_pool" if adaptive_sampling_enabled else str(preset_values.get("yolo_input_scope", "motion_candidates")),
         "create_compiled_review_video": create_compiled_review_video,
         "compiled_video_fps": int(compiled_video_fps),
         "seconds_per_frame": seconds_per_frame,
         "seconds_per_title_card": seconds_per_title_card,
         "max_video_seconds": max_video_seconds,
     }
+    if robbery_demo_mode:
+        settings["quick_result_mode"] = False
     if quick_result_mode:
         settings["sample_every_seconds"] = QUICK_RESULT_SETTINGS["sample_every_seconds"]
         settings["top_k"] = QUICK_RESULT_SETTINGS["top_k"]
+        settings["top_k_max"] = 25
+        settings["motion_threshold"] = QUICK_RESULT_SETTINGS["motion_threshold"]
         settings["qwen_max_new_tokens"] = QUICK_RESULT_SETTINGS["qwen_max_new_tokens"]
         settings["yolo_imgsz"] = QUICK_RESULT_SETTINGS["yolo_imgsz"]
         settings["yolo_conf"] = QUICK_RESULT_SETTINGS["yolo_conf"]
+        settings["analysis_sensitivity_mode"] = "Quick scan"
         settings["pipeline_engine"] = "Fast parallel Top-K pipeline"
         settings["pipeline_engine_id"] = PIPELINE_ENGINE_MAP["Fast parallel Top-K pipeline"]["engine_id"]
         settings["parallel_branches"] = True
+        settings["incident_fallback_pass"] = False
+        settings["enable_incident_recheck"] = False
+        settings["incident_recheck_all_topk"] = False
+        settings["incident_focus"] = "general"
+        settings["adaptive_sampling_enabled"] = False
+        settings["coverage_guardrails_enabled"] = False
+        settings["critical_timestamps"] = ""
+        settings["vlm_input_strategy"] = "center_only"
+        settings["max_vlm_inputs"] = 25
+        settings["yolo_input_scope"] = "motion_candidates"
+    if robbery_demo_mode:
+        settings["quick_result_mode"] = False
+        settings["sample_every_seconds"] = float(preset_values["sample_every_seconds"])
+        settings["top_k"] = int(preset_values["top_k"])
+        settings["top_k_max"] = 25
+        settings["motion_threshold"] = float(preset_values["motion_threshold"])
+        settings["qwen_max_new_tokens"] = int(preset_values["qwen_max_new_tokens"])
+        settings["yolo_imgsz"] = int(preset_values["yolo_imgsz"])
+        settings["yolo_conf"] = float(preset_values["yolo_conf"])
+        settings["analysis_sensitivity_mode"] = processing_preset
+        settings["pipeline_engine"] = "Fast parallel Top-K pipeline"
+        settings["pipeline_engine_id"] = PIPELINE_ENGINE_MAP["Fast parallel Top-K pipeline"]["engine_id"]
+        settings["parallel_branches"] = bool(preset_values["parallel_branches"])
+        settings["incident_fallback_pass"] = bool(preset_values["incident_fallback_pass"])
+        settings["enable_incident_recheck"] = bool(preset_values["enable_incident_recheck"])
+        settings["incident_recheck_all_topk"] = bool(preset_values["incident_recheck_all_topk"])
+        settings["incident_focus"] = str(preset_values["incident_focus"])
+        settings["adaptive_sampling_enabled"] = bool(preset_values["adaptive_sampling_enabled"])
+        settings["adaptive_base_interval_seconds"] = float(preset_values["adaptive_base_interval_seconds"])
+        settings["adaptive_max_frame_gap_seconds"] = float(preset_values["adaptive_max_frame_gap_seconds"])
+        settings["coverage_guardrails_enabled"] = bool(preset_values["coverage_guardrails_enabled"])
+        settings["critical_timestamps"] = str(preset_values["critical_timestamps"])
+        settings["critical_window_seconds"] = float(preset_values["critical_window_seconds"])
+        settings["vlm_input_strategy"] = str(preset_values["vlm_input_strategy"])
+        settings["max_vlm_inputs"] = int(preset_values["max_vlm_inputs"])
+        settings["yolo_input_scope"] = str(preset_values["yolo_input_scope"])
     effective_pipeline_engine = settings["pipeline_engine"]
     st.session_state["pipeline_engine"] = effective_pipeline_engine
 
@@ -1766,6 +2407,33 @@ def main() -> None:
         st.write(f"Expected pipeline mode: `{effective_pipeline_engine}`")
         if quick_result_mode:
             st.info("Quick Result Mode is enabled. The UI will prioritize a fast first result using sparse sampling, small Top-K selection, and lower Qwen token limits.")
+        st.write("Analysis settings to be passed:")
+        st.json(
+            {
+                "mode": settings["analysis_sensitivity_mode"],
+                "sample_every_seconds": settings["sample_every_seconds"],
+                "approx_sampled_fps": round(1.0 / float(settings["sample_every_seconds"]), 3) if float(settings["sample_every_seconds"]) > 0 else 0.0,
+                "top_k_clips": settings["top_k"],
+                "top_k_max_clips": settings["top_k_max"],
+                "motion_threshold": settings["motion_threshold"],
+                "qwen_max_new_tokens": settings["qwen_max_new_tokens"],
+                "yolo_imgsz": settings["yolo_imgsz"],
+                "yolo_conf": settings["yolo_conf"],
+                "enable_incident_recheck": settings["enable_incident_recheck"],
+                "incident_recheck_all_topk": settings["incident_recheck_all_topk"],
+                "incident_fallback_pass": settings["incident_fallback_pass"],
+                "incident_focus": settings["incident_focus"],
+                "adaptive_sampling_enabled": settings["adaptive_sampling_enabled"],
+                "adaptive_base_interval_seconds": settings["adaptive_base_interval_seconds"],
+                "adaptive_max_frame_gap_seconds": settings["adaptive_max_frame_gap_seconds"],
+                "coverage_guardrails_enabled": settings["coverage_guardrails_enabled"],
+                "critical_timestamps": settings["critical_timestamps"],
+                "critical_window_seconds": settings["critical_window_seconds"],
+                "vlm_input_strategy": settings["vlm_input_strategy"],
+                "max_vlm_inputs": settings["max_vlm_inputs"],
+                "yolo_input_scope": settings["yolo_input_scope"],
+            }
+        )
 
         run_clicked = st.button("Run Tender Demo Pipeline")
         if run_clicked:
