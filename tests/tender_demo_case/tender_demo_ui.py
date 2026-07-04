@@ -201,23 +201,23 @@ PROCESSING_PRESETS = {
         "top_k": 8,
         "qwen_max_new_tokens": 384,
         "qwen_batch_size": 1,
-        "yolo_imgsz": 512,
-        "yolo_conf": 0.30,
+        "yolo_imgsz": 416,
+        "yolo_conf": 0.35,
         "motion_threshold": 0.15,
         "parallel_branches": True,
-        "enable_incident_recheck": False,
+        "enable_incident_recheck": True,
         "incident_recheck_all_topk": False,
         "incident_fallback_pass": False,
         "incident_focus": "general",
-        "adaptive_sampling_enabled": False,
+        "adaptive_sampling_enabled": True,
         "adaptive_base_interval_seconds": 1.0,
         "adaptive_max_frame_gap_seconds": 4.0,
-        "coverage_guardrails_enabled": False,
+        "coverage_guardrails_enabled": True,
         "critical_timestamps": "",
         "critical_window_seconds": 8.0,
-        "vlm_input_strategy": "center_only",
-        "max_vlm_inputs": 25,
-        "yolo_input_scope": "motion_candidates",
+        "vlm_input_strategy": "multi_focus",
+        "max_vlm_inputs": 8,
+        "yolo_input_scope": "frame_candidate_pool",
     },
     "Jewelry shop robbery demo": {
         "sample_every_seconds": 1.0,
@@ -293,23 +293,23 @@ PROCESSING_PRESETS = {
         "top_k": 8,
         "qwen_max_new_tokens": 384,
         "qwen_batch_size": 1,
-        "yolo_imgsz": 512,
-        "yolo_conf": 0.30,
+        "yolo_imgsz": 416,
+        "yolo_conf": 0.35,
         "motion_threshold": 0.15,
         "parallel_branches": True,
-        "enable_incident_recheck": False,
+        "enable_incident_recheck": True,
         "incident_recheck_all_topk": False,
         "incident_fallback_pass": False,
         "incident_focus": "general",
-        "adaptive_sampling_enabled": False,
+        "adaptive_sampling_enabled": True,
         "adaptive_base_interval_seconds": 1.0,
         "adaptive_max_frame_gap_seconds": 4.0,
-        "coverage_guardrails_enabled": False,
+        "coverage_guardrails_enabled": True,
         "critical_timestamps": "",
         "critical_window_seconds": 8.0,
-        "vlm_input_strategy": "center_only",
-        "max_vlm_inputs": 25,
-        "yolo_input_scope": "motion_candidates",
+        "vlm_input_strategy": "multi_focus",
+        "max_vlm_inputs": 8,
+        "yolo_input_scope": "frame_candidate_pool",
     },
 }
 INCIDENT_FOCUS_OPTIONS = {
@@ -854,7 +854,7 @@ def _timeline_description(item: dict[str, Any]) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def load_all_search_records(debug_runs_dir_str: str, scope: str, current_run_dir_str: str) -> list[dict]:
+def load_all_search_records(debug_runs_dir_str: str, scope: str, current_run_dir_str: str, cache_buster: str = "") -> list[dict]:
     debug_runs_dir = Path(debug_runs_dir_str)
     current_run_dir = Path(current_run_dir_str) if current_run_dir_str else None
     target_runs: list[Path] = []
@@ -870,10 +870,34 @@ def load_all_search_records(debug_runs_dir_str: str, scope: str, current_run_dir
     return all_records
 
 
+def _compute_search_cache_buster(debug_runs_dir: Path, scope: str, current_run_dir: Path | None) -> str:
+    if scope == "Current selected run" and current_run_dir and current_run_dir.exists():
+        candidates = [
+            current_run_dir / "20_search_index.json",
+            current_run_dir / "17_topk_final_summary.json",
+            current_run_dir / "16_topk_vlm_outputs.json",
+            current_run_dir / "11_yolo_object_scores.json",
+        ]
+        mtimes = [f"{path.name}:{path.stat().st_mtime_ns}" for path in candidates if path.exists()]
+        return "|".join(mtimes) or current_run_dir.name
+
+    if debug_runs_dir.exists():
+        parts: list[str] = []
+        for run_dir in sorted([path for path in debug_runs_dir.iterdir() if path.is_dir()], key=lambda path: path.name):
+            cache_path = run_dir / "20_search_index.json"
+            if cache_path.exists():
+                parts.append(f"{run_dir.name}:{cache_path.stat().st_mtime_ns}")
+            else:
+                parts.append(f"{run_dir.name}:{run_dir.stat().st_mtime_ns}")
+        return "|".join(parts)
+    return "no-runs"
+
+
 def build_or_load_search_index_for_run(run_dir: Path, force_rebuild=False) -> list[dict]:
     cache_path = run_dir / "20_search_index.json"
     summary_path = run_dir / "17_topk_final_summary.json"
     vlm_path = run_dir / "16_topk_vlm_outputs.json"
+    yolo_scores_path = run_dir / "11_yolo_object_scores.json"
     if not summary_path.exists():
         return []
 
@@ -881,13 +905,129 @@ def build_or_load_search_index_for_run(run_dir: Path, force_rebuild=False) -> li
         cache_mtime = cache_path.stat().st_mtime
         summary_mtime = summary_path.stat().st_mtime
         vlm_mtime = vlm_path.stat().st_mtime if vlm_path.exists() else 0.0
-        if cache_mtime >= max(summary_mtime, vlm_mtime):
+        yolo_mtime = yolo_scores_path.stat().st_mtime if yolo_scores_path.exists() else 0.0
+        if cache_mtime >= max(summary_mtime, vlm_mtime, yolo_mtime):
             cached = load_json(cache_path, default=[])
             if isinstance(cached, list):
                 return cached
 
     records = build_search_records_for_run(run_dir)
     cache_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
+    return records
+
+
+def _build_object_search_records_for_run(
+    run_dir: Path,
+    video_info: dict[str, Any],
+    yolo_scores: list[dict[str, Any]],
+    compiled_video_path: str | None,
+) -> list[dict]:
+    records: list[dict] = []
+    for score_item in yolo_scores if isinstance(yolo_scores, list) else []:
+        if not isinstance(score_item, dict):
+            continue
+        frame_idx = int(score_item.get("frame_idx", 0) or 0)
+        timestamp_seconds = float(score_item.get("timestamp_seconds", 0.0) or 0.0)
+        annotated_frame_path = score_item.get("annotated_frame_path")
+        detections = score_item.get("detections", [])
+        if not isinstance(detections, list):
+            continue
+        for detection_index, detection in enumerate(detections):
+            if not isinstance(detection, dict):
+                continue
+            class_name = str(detection.get("class_name", "")).strip().lower()
+            if not class_name:
+                continue
+            appearance_terms = [str(term).strip().lower() for term in detection.get("appearance_terms", []) if str(term).strip()]
+            crop_path = detection.get("crop_path")
+            description = " ".join(
+                part
+                for part in [
+                    "Detected",
+                    class_name,
+                    "at",
+                    f"{timestamp_seconds:.1f}s.",
+                    f"Appearance: {', '.join(appearance_terms[:4])}." if appearance_terms else "",
+                ]
+                if part
+            ).strip()
+            raw_search_text = " ".join(
+                [
+                    str(video_info.get("video_name", run_dir.name)),
+                    f"object {class_name}",
+                    " ".join(appearance_terms),
+                    str(score_item.get("motion_level", "")),
+                    str(score_item.get("selection_reason", "")),
+                    str(score_item.get("motion_score_norm", "")),
+                ]
+            ).lower()
+            records.append(
+                {
+                    "record_type": "object_evidence",
+                    "run_dir": str(run_dir),
+                    "run_name": run_dir.name,
+                    "video_name": str(video_info.get("video_name", run_dir.name)),
+                    "clip_id": f"frame_{frame_idx:06d}_{detection_index:02d}_{class_name}",
+                    "time_range": f"{timestamp_seconds:.1f}s",
+                    "start_time": timestamp_seconds,
+                    "end_time": timestamp_seconds,
+                    "final_category": "object_evidence",
+                    "event_label": f"object_detected:{class_name}",
+                    "risk_level": "unknown",
+                    "confidence": f"{float(detection.get('confidence', 0.0) or 0.0):.2f}",
+                    "caption": description,
+                    "description": description,
+                    "incident_category": "",
+                    "incident_event_label": "",
+                    "secondary_event_labels": [],
+                    "incident_score": 0.0,
+                    "evidence_strength": "object_detection",
+                    "weapon_visible": "",
+                    "weapon_description": "",
+                    "person_grabbing_or_restraining": "",
+                    "grabbing_description": "",
+                    "person_threatened_or_controlled": "",
+                    "threat_description": "",
+                    "taking_items_visible": "",
+                    "item_taking_description": "",
+                    "display_or_counter_interaction": "",
+                    "display_interaction_description": "",
+                    "incident_visible_evidence": [],
+                    "incident_review_reason": "",
+                    "incident_suspicious_explanation": "",
+                    "incident_normal_explanation": "",
+                    "motion_summary": str(score_item.get("motion_level", "")),
+                    "moving_objects": [class_name] if str(score_item.get("motion_level", "")).lower() in {"medium", "high"} else [],
+                    "stationary_objects": [class_name] if str(score_item.get("motion_level", "")).lower() not in {"medium", "high"} else [],
+                    "traffic_state": "",
+                    "people_count": 1 if class_name == "person" else 0,
+                    "person_descriptions": appearance_terms if class_name == "person" else [],
+                    "person_clothing_text": appearance_terms if class_name == "person" else [],
+                    "object_names": [class_name],
+                    "yolo_object_classes": [class_name],
+                    "vehicle_terms": appearance_terms if class_name in {"car", "truck", "bus", "motorcycle", "bicycle"} else [],
+                    "activity_types": [],
+                    "event_types": [],
+                    "keywords": appearance_terms[:6],
+                    "selection_reasons": [str(score_item.get("selection_reason", "")).strip()] if str(score_item.get("selection_reason", "")).strip() else [],
+                    "ranking_reasons": [],
+                    "motion_score": score_item.get("motion_score_norm", 0.0),
+                    "ranked_clip_score": score_item.get("object_importance_score", 0.0),
+                    "strip_path": crop_path,
+                    "top_annotated_frame_path": annotated_frame_path,
+                    "compiled_video_path": compiled_video_path,
+                    "qwen_parsed_json": None,
+                    "raw_vlm_output": None,
+                    "parse_success": None,
+                    "parse_error": None,
+                    "frame_path": score_item.get("frame_path"),
+                    "object_crop_path": crop_path,
+                    "object_confidence": float(detection.get("confidence", 0.0) or 0.0),
+                    "object_class_name": class_name,
+                    "appearance_terms": appearance_terms,
+                    "raw_search_text": raw_search_text,
+                }
+            )
     return records
 
 
@@ -1079,6 +1219,7 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
 
         records.append(
             {
+                "record_type": "event_timeline",
                 "run_dir": str(run_dir),
                 "run_name": run_dir.name,
                 "video_name": str(video_info.get("video_name", run_dir.name)),
@@ -1138,6 +1279,15 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
                 "raw_search_text": raw_search_text,
             }
         )
+    compiled_video_path = None
+    if isinstance(compiled_manifest, dict) or isinstance(export_manifest, dict):
+        compiled_results = {
+            "compiled_video": compiled_manifest if isinstance(compiled_manifest, dict) else {},
+            "exported_clips": export_manifest if isinstance(export_manifest, dict) else {},
+        }
+        resolved_compiled = _extract_compiled_video_path(run_dir, compiled_results)
+        compiled_video_path = str(resolved_compiled) if resolved_compiled else None
+    records.extend(_build_object_search_records_for_run(run_dir, video_info, yolo_scores, compiled_video_path))
     return records
 
 
@@ -1150,7 +1300,9 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
     object_filter = str(filters.get("object_type", "")).strip().lower()
     appearance_filter = str(filters.get("person_appearance", "")).strip().lower()
     vehicle_filter = str(filters.get("vehicle", "")).strip().lower()
-    selected_video = filters.get("selected_video", "All videos")
+    selected_videos = filters.get("selected_videos", ["All videos"])
+    if not isinstance(selected_videos, list):
+        selected_videos = ["All videos"]
     time_start = filters.get("time_start")
     time_end = filters.get("time_end")
 
@@ -1159,6 +1311,7 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
         "Possible review clip": "possible_review_clip",
         "Normal activity": "normal_activity",
         "Uncertain activity": "uncertain_activity",
+        "Object evidence": "object_evidence",
     }
 
     filtered: list[dict] = []
@@ -1179,7 +1332,7 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
             if event_filter not in searchable_event_text:
                 continue
         if object_filter:
-            object_text = " ".join(record.get("object_names", []) + record.get("yolo_object_classes", [])).lower()
+            object_text = " ".join(record.get("object_names", []) + record.get("yolo_object_classes", []) + record.get("appearance_terms", [])).lower()
             if object_filter not in object_text:
                 continue
         if appearance_filter:
@@ -1187,11 +1340,13 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
             if appearance_filter not in appearance_text:
                 continue
         if vehicle_filter:
-            vehicle_text = " ".join(record.get("vehicle_terms", []) + record.get("object_names", [])).lower()
+            vehicle_text = " ".join(record.get("vehicle_terms", []) + record.get("object_names", []) + record.get("appearance_terms", [])).lower()
             if vehicle_filter not in vehicle_text:
                 continue
-        if selected_video != "All videos" and selected_video not in {record.get("video_name"), record.get("run_name")}:
-            continue
+        if "All videos" not in selected_videos:
+            record_video_keys = {record.get("video_name"), record.get("run_name")}
+            if not any(selected_video in record_video_keys for selected_video in selected_videos):
+                continue
         if time_start is not None and float(record.get("start_time", 0.0) or 0.0) < float(time_start):
             continue
         if time_end is not None and float(record.get("end_time", 0.0) or 0.0) > float(time_end):
@@ -1214,10 +1369,14 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
                     score += 4
                 if term in " ".join(record.get("object_names", []) + record.get("yolo_object_classes", [])).lower():
                     score += 5
+                if term in " ".join(record.get("appearance_terms", [])).lower():
+                    score += 5
                 if term in " ".join(record.get("person_descriptions", []) + record.get("person_clothing_text", [])).lower():
                     score += 5
         if record.get("final_category") == "priority_suspicious_event":
             score += 2
+        if record.get("final_category") == "object_evidence":
+            score += 1
         if str(record.get("risk_level", "")).lower() == "high":
             score += 2
         elif str(record.get("risk_level", "")).lower() == "medium":
@@ -1258,63 +1417,272 @@ def search_records(records: list[dict], filters: dict) -> list[dict]:
     return filtered
 
 
-def _render_search_result(record: dict) -> None:
-    st.markdown(
-        f"### {record.get('clip_id', 'unknown')} | {record.get('time_range', 'unknown')} | "
-        f"{record.get('video_name', 'unknown video')}"
-    )
-    st.write(
-        {
-            "run_name": record.get("run_name"),
-            "final_category": record.get("final_category"),
-            "risk_level": record.get("risk_level"),
-            "confidence": record.get("confidence"),
-            "event_label": record.get("event_label"),
-            "description": record.get("description"),
-            "incident_category": record.get("incident_category"),
-            "incident_event_label": record.get("incident_event_label"),
-            "secondary_event_labels": record.get("secondary_event_labels"),
-            "incident_score": record.get("incident_score"),
-            "evidence_strength": record.get("evidence_strength"),
-            "weapon_visible": record.get("weapon_visible"),
-            "weapon_description": record.get("weapon_description"),
-            "person_grabbing_or_restraining": record.get("person_grabbing_or_restraining"),
-            "grabbing_description": record.get("grabbing_description"),
-            "person_threatened_or_controlled": record.get("person_threatened_or_controlled"),
-            "threat_description": record.get("threat_description"),
-            "taking_items_visible": record.get("taking_items_visible"),
-            "item_taking_description": record.get("item_taking_description"),
-            "display_or_counter_interaction": record.get("display_or_counter_interaction"),
-            "display_interaction_description": record.get("display_interaction_description"),
-            "incident_review_reason": record.get("incident_review_reason"),
-            "incident_visible_evidence": record.get("incident_visible_evidence"),
-            "motion_summary": record.get("motion_summary"),
-            "moving_objects": record.get("moving_objects"),
-            "stationary_objects": record.get("stationary_objects"),
-            "traffic_state": record.get("traffic_state"),
-            "people_count": record.get("people_count"),
-            "yolo_object_classes": record.get("yolo_object_classes"),
-            "person_descriptions": record.get("person_descriptions"),
-            "activity_types": record.get("activity_types"),
-            "event_types": record.get("event_types"),
-            "matched_terms": record.get("matched_terms", []),
+SEARCH_OBJECT_TERMS = [
+    "display case",
+    "backpack",
+    "handbag",
+    "suitcase",
+    "motorcycle",
+    "bicycle",
+    "vehicle",
+    "person",
+    "people",
+    "woman",
+    "child",
+    "truck",
+    "phone",
+    "laptop",
+    "jewelry",
+    "bottle",
+    "bag",
+    "bike",
+    "bus",
+    "car",
+    "man",
+]
+
+SEARCH_APPEARANCE_TERMS = [
+    "person with bag",
+    "carrying bag",
+    "dark clothing",
+    "black shirt",
+    "white shirt",
+    "blue shirt",
+    "pink shirt",
+    "red shirt",
+    "red cap",
+    "black car",
+    "white car",
+    "grey car",
+    "blue car",
+    "red car",
+]
+
+SEARCH_EVENT_TERMS = [
+    "person object interaction",
+    "suspicious reaching",
+    "normal activity",
+    "collision",
+    "intrusion",
+    "crowding",
+    "accident",
+    "standing",
+    "robbery",
+    "walking",
+    "reaching",
+    "bending",
+    "theft",
+    "fight",
+    "fall",
+]
+
+
+def _parse_nl_search_time_seconds(text: str) -> float | None:
+    normalized = str(text or "").strip().lower()
+    match = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", normalized)
+    if not match:
+        return None
+    first = int(match.group(1))
+    second = int(match.group(2))
+    third = match.group(3)
+    if third is not None:
+        return float((first * 3600) + (second * 60) + int(third))
+    return float((first * 60) + second)
+
+
+def interpret_nl_search_query(query: str) -> dict[str, Any]:
+    normalized = str(query or "").strip().lower()
+    interpreted = {
+        "intent": "general_search",
+        "query": query,
+        "object_type": "",
+        "person_appearance": "",
+        "vehicle": "",
+        "event_type": "All",
+        "time_start": None,
+        "time_end": None,
+        "search_terms": [],
+    }
+    if not normalized:
+        return interpreted
+
+    matched_objects = [term for term in SEARCH_OBJECT_TERMS if term in normalized]
+    matched_appearance = [term for term in SEARCH_APPEARANCE_TERMS if term in normalized]
+    matched_events = [term for term in SEARCH_EVENT_TERMS if term in normalized]
+
+    if any(term in normalized for term in ["show", "find", "search", "look for", "where is", "track"]):
+        interpreted["intent"] = "find_object"
+    if any(term in normalized for term in ["robbery", "theft", "fight", "fall", "collision", "accident", "intrusion"]):
+        interpreted["intent"] = "find_incident"
+
+    if matched_objects:
+        preferred_object = max(matched_objects, key=len)
+        object_aliases = {
+            "man": "person",
+            "woman": "person",
+            "child": "person",
+            "people": "person",
+            "bike": "motorcycle",
         }
+        interpreted["object_type"] = object_aliases.get(preferred_object, preferred_object)
+
+    if matched_appearance:
+        interpreted["person_appearance"] = max(matched_appearance, key=len)
+
+    vehicle_terms = [
+        term for term in matched_objects + matched_appearance
+        if any(token in term for token in ["car", "truck", "bus", "bike", "bicycle", "motorcycle", "vehicle"])
+    ]
+    if vehicle_terms:
+        interpreted["vehicle"] = max(vehicle_terms, key=len)
+
+    if matched_events:
+        interpreted["event_type"] = max(matched_events, key=len)
+
+    start_match = re.search(r"\b(?:after|from|starting at)\s+(\d{1,2}:\d{2}(?::\d{2})?)", normalized)
+    end_match = re.search(r"\b(?:before|until|ending at)\s+(\d{1,2}:\d{2}(?::\d{2})?)", normalized)
+    between_match = re.search(
+        r"\bbetween\s+(\d{1,2}:\d{2}(?::\d{2})?)\s+and\s+(\d{1,2}:\d{2}(?::\d{2})?)",
+        normalized,
     )
+    if between_match:
+        interpreted["time_start"] = _parse_nl_search_time_seconds(between_match.group(1))
+        interpreted["time_end"] = _parse_nl_search_time_seconds(between_match.group(2))
+    else:
+        if start_match:
+            interpreted["time_start"] = _parse_nl_search_time_seconds(start_match.group(1))
+        if end_match:
+            interpreted["time_end"] = _parse_nl_search_time_seconds(end_match.group(1))
+        if interpreted["time_start"] is None and interpreted["time_end"] is None:
+            standalone_time = _parse_nl_search_time_seconds(normalized)
+            if standalone_time is not None:
+                interpreted["time_start"] = standalone_time
+
+    search_terms: list[str] = []
+    for value in [
+        interpreted["object_type"],
+        interpreted["person_appearance"],
+        interpreted["vehicle"],
+        interpreted["event_type"] if interpreted["event_type"] != "All" else "",
+    ]:
+        value_str = str(value).strip()
+        if value_str and value_str not in search_terms:
+            search_terms.append(value_str)
+    interpreted["search_terms"] = search_terms
+    return interpreted
+
+
+def _render_search_result(record: dict) -> None:
+    record_type = str(record.get("record_type", "event_timeline")).strip().lower()
+    if record_type == "object_evidence":
+        class_name = str(record.get("object_class_name", "") or record.get("event_label", "")).replace("object_detected:", "")
+        st.markdown(
+            f"### {class_name or 'object'} | {record.get('time_range', 'unknown')} | "
+            f"{record.get('video_name', 'unknown video')}"
+        )
+    else:
+        st.markdown(
+            f"### {record.get('clip_id', 'unknown')} | {record.get('time_range', 'unknown')} | "
+            f"{record.get('video_name', 'unknown video')}"
+        )
 
     run_dir = Path(str(record.get("run_dir")))
     media_cols = st.columns(2)
-    strip_path = resolve_media_path(run_dir, record.get("strip_path"))
+    strip_path = resolve_media_path(run_dir, record.get("object_crop_path") or record.get("strip_path"))
     yolo_path = resolve_media_path(run_dir, record.get("top_annotated_frame_path"))
-    with media_cols[0]:
-        if media_exists(strip_path):
-            st.image(str(strip_path), caption="Incident image / temporal strip", width="stretch")
-        else:
-            st.warning("Incident image not found.")
-    with media_cols[1]:
-        if media_exists(yolo_path):
-            st.image(str(yolo_path), caption="YOLO annotated frame", width="stretch")
-        else:
-            st.warning("YOLO annotated frame not found.")
+    if record_type == "object_evidence":
+        metric_cols = st.columns(5)
+        metric_cols[0].metric("Class", str(record.get("object_class_name", "unknown")))
+        metric_cols[1].metric("Timestamp", str(record.get("time_range", "unknown")))
+        metric_cols[2].metric("Confidence", str(record.get("confidence", "unknown")))
+        metric_cols[3].metric("Run", str(record.get("run_name", "unknown")))
+        metric_cols[4].metric("Score", str(record.get("search_score", 0)))
+
+        appearance_terms = [str(term).strip() for term in record.get("appearance_terms", []) if str(term).strip()]
+        if appearance_terms:
+            st.caption("Appearance terms")
+            st.write(", ".join(appearance_terms))
+
+        description = str(record.get("description", "")).strip()
+        if description:
+            st.write(description)
+
+        with media_cols[0]:
+            if media_exists(strip_path):
+                st.image(str(strip_path), caption="Object crop", width="stretch")
+            else:
+                st.warning("Object crop not found.")
+        with media_cols[1]:
+            if media_exists(yolo_path):
+                st.image(str(yolo_path), caption="Annotated frame", width="stretch")
+            else:
+                st.warning("Annotated frame not found.")
+
+        with st.expander("Object metadata", expanded=False):
+            st.write(
+                {
+                    "run_name": record.get("run_name"),
+                    "video_name": record.get("video_name"),
+                    "record_type": record.get("record_type"),
+                    "object_class_name": record.get("object_class_name"),
+                    "time_range": record.get("time_range"),
+                    "confidence": record.get("confidence"),
+                    "appearance_terms": record.get("appearance_terms", []),
+                    "motion_summary": record.get("motion_summary"),
+                    "matched_terms": record.get("matched_terms", []),
+                }
+            )
+    else:
+        st.write(
+            {
+                "run_name": record.get("run_name"),
+                "final_category": record.get("final_category"),
+                "risk_level": record.get("risk_level"),
+                "confidence": record.get("confidence"),
+                "event_label": record.get("event_label"),
+                "description": record.get("description"),
+                "incident_category": record.get("incident_category"),
+                "incident_event_label": record.get("incident_event_label"),
+                "secondary_event_labels": record.get("secondary_event_labels"),
+                "incident_score": record.get("incident_score"),
+                "evidence_strength": record.get("evidence_strength"),
+                "weapon_visible": record.get("weapon_visible"),
+                "weapon_description": record.get("weapon_description"),
+                "person_grabbing_or_restraining": record.get("person_grabbing_or_restraining"),
+                "grabbing_description": record.get("grabbing_description"),
+                "person_threatened_or_controlled": record.get("person_threatened_or_controlled"),
+                "threat_description": record.get("threat_description"),
+                "taking_items_visible": record.get("taking_items_visible"),
+                "item_taking_description": record.get("item_taking_description"),
+                "display_or_counter_interaction": record.get("display_or_counter_interaction"),
+                "display_interaction_description": record.get("display_interaction_description"),
+                "incident_review_reason": record.get("incident_review_reason"),
+                "incident_visible_evidence": record.get("incident_visible_evidence"),
+                "motion_summary": record.get("motion_summary"),
+                "moving_objects": record.get("moving_objects"),
+                "stationary_objects": record.get("stationary_objects"),
+                "traffic_state": record.get("traffic_state"),
+                "people_count": record.get("people_count"),
+                "yolo_object_classes": record.get("yolo_object_classes"),
+                "person_descriptions": record.get("person_descriptions"),
+                "activity_types": record.get("activity_types"),
+                "event_types": record.get("event_types"),
+                "matched_terms": record.get("matched_terms", []),
+                "record_type": record.get("record_type"),
+                "appearance_terms": record.get("appearance_terms", []),
+            }
+        )
+
+        with media_cols[0]:
+            if media_exists(strip_path):
+                st.image(str(strip_path), caption="Incident image / temporal strip", width="stretch")
+            else:
+                st.warning("Object/incident image not found.")
+        with media_cols[1]:
+            if media_exists(yolo_path):
+                st.image(str(yolo_path), caption="YOLO annotated frame", width="stretch")
+            else:
+                st.warning("YOLO annotated frame not found.")
 
     if record.get("qwen_parsed_json"):
         with st.expander("Qwen parsed JSON"):
@@ -1324,6 +1692,7 @@ def _render_search_result(record: dict) -> None:
             {
                 "run_dir": record.get("run_dir"),
                 "strip_path": record.get("strip_path"),
+                "object_crop_path": record.get("object_crop_path"),
                 "top_annotated_frame_path": record.get("top_annotated_frame_path"),
                 "compiled_video_path": record.get("compiled_video_path"),
             }
@@ -1586,14 +1955,7 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
     analysis_cols_5[3].write(f"Max VLM inputs: `{analysis_settings.get('max_vlm_inputs', 'unavailable')}`")
 
     st.subheader("Adaptive Coverage")
-    adaptive_cols = st.columns(4)
-    adaptive_cols[0].write(f"Adaptive retained frames: `{adaptive_sampling.get('retained_frames', 0)}`")
-    adaptive_cols[1].write(f"Frame candidate pool count: `{frame_candidate_pool.get('metadata', {}).get('merged_count', 0) if isinstance(frame_candidate_pool.get('metadata'), dict) else 0}`")
-    adaptive_cols[2].write(f"Coverage guardrail output clips: `{coverage_guardrails.get('output_selected_count', 0)}`")
-    adaptive_cols[3].write(f"Total VLM inputs sent to Qwen: `{vlm_coverage_audit.get('total_vlm_inputs', processing_summary.get('topk_inputs', 0))}`")
-    st.write(f"Critical timestamps requested: `{', '.join(vlm_coverage_audit.get('critical_timestamps_requested', analysis_settings.get('critical_timestamps', []))) or 'none'}`")
-    st.write(f"Current-panel covered critical timestamps: `{', '.join(vlm_coverage_audit.get('current_panel_covered', [])) or 'none'}`")
-    st.write(f"Missing critical timestamps: `{', '.join(vlm_coverage_audit.get('missing', [])) or 'none'}`")
+    st.write(f"Adaptive retained frames: `{adaptive_sampling.get('retained_frames', 0)}`")
 
     if review_clusters:
         st.subheader("Review Clusters")
@@ -1884,16 +2246,56 @@ def _render_search_tab(run_dir: Path | None) -> None:
     st.caption("Pipeline mode: Optimized Top-K + Safety Guardrails + Evidence Search")
 
     search_scope = st.radio("Search scope", ["Current selected run", "All completed runs"], horizontal=True)
+    st.text_area(
+        "Natural language search",
+        key="search_nl_query",
+        placeholder="Example: show me the person with a red shirt carrying a bag near the counter after 01:20",
+        height=90,
+    )
+    interpret_clicked = st.button("Interpret query")
+    if interpret_clicked:
+        interpreted = interpret_nl_search_query(st.session_state.get("search_nl_query", ""))
+        st.session_state["search_interpreted_filters"] = interpreted
+        st.session_state["search_query"] = ""
+        st.session_state["search_object_type"] = ""
+        st.session_state["search_person_appearance"] = ""
+        st.session_state["search_vehicle"] = ""
+        st.session_state["search_event_type"] = "All"
+        st.session_state["search_category"] = "All"
+        st.session_state["search_risk_level"] = "All"
+        st.session_state["search_time_start"] = 0.0
+        st.session_state["search_time_end"] = 0.0
+        if interpreted.get("search_terms"):
+            st.session_state["search_query"] = " ".join(interpreted["search_terms"])
+        if interpreted.get("object_type"):
+            st.session_state["search_object_type"] = str(interpreted["object_type"])
+        if interpreted.get("person_appearance"):
+            st.session_state["search_person_appearance"] = str(interpreted["person_appearance"])
+        if interpreted.get("vehicle"):
+            st.session_state["search_vehicle"] = str(interpreted["vehicle"])
+        if interpreted.get("event_type") and interpreted.get("event_type") != "All":
+            st.session_state["search_event_type"] = str(interpreted["event_type"])
+        if interpreted.get("time_start") is not None:
+            st.session_state["search_time_start"] = float(interpreted["time_start"])
+        if interpreted.get("time_end") is not None:
+            st.session_state["search_time_end"] = float(interpreted["time_end"])
+
+    interpreted_filters = st.session_state.get("search_interpreted_filters", {})
+    if interpreted_filters:
+        st.caption("Parsed filter JSON")
+        st.json(interpreted_filters)
+
     query = st.text_input(
         "Free text search",
         placeholder="Search: red cap, bag, display case, robbery, fight, accident, person bending...",
+        key="search_query",
     )
     st.caption("Examples: `red cap`, `display case`, `bag`, `person bending`, `suspicious reaching`, `robbery`, `collision`, `crowding`, `white shirt`")
 
     filter_cols = st.columns(3)
     with filter_cols[0]:
-        category = st.selectbox("Category", ["All", "Priority suspicious event", "Possible review clip", "Normal activity", "Uncertain activity"])
-        risk_level = st.selectbox("Risk level", ["All", "low", "medium", "high", "unknown"])
+        category = st.selectbox("Category", ["All", "Priority suspicious event", "Possible review clip", "Normal activity", "Uncertain activity", "Object evidence"], key="search_category")
+        risk_level = st.selectbox("Risk level", ["All", "low", "medium", "high", "unknown"], key="search_risk_level")
         event_type = st.selectbox(
             "Event/activity type",
             [
@@ -1914,19 +2316,21 @@ def _render_search_tab(run_dir: Path | None) -> None:
                 "walking",
                 "standing",
             ],
+            key="search_event_type",
         )
     with filter_cols[1]:
-        object_type = st.text_input("Object type", placeholder="bag, backpack, bottle, laptop, phone, display case, jewelry, vehicle, car, bike")
-        person_appearance = st.text_input("Person appearance / clothing", placeholder="red cap, black shirt, white shirt, dark clothing")
-        vehicle = st.text_input("Vehicle", placeholder="car, bike, truck, white car")
+        object_type = st.text_input("Object type", placeholder="bag, backpack, bottle, laptop, phone, display case, jewelry, vehicle, car, bike", key="search_object_type")
+        person_appearance = st.text_input("Person appearance / clothing", placeholder="red cap, black shirt, white shirt, dark clothing", key="search_person_appearance")
+        vehicle = st.text_input("Vehicle", placeholder="car, bike, truck, white car", key="search_vehicle")
     with filter_cols[2]:
-        time_start = st.number_input("Start seconds", min_value=0.0, value=0.0, step=1.0)
-        time_end = st.number_input("End seconds", min_value=0.0, value=0.0, step=1.0)
+        time_start = st.number_input("Start seconds", min_value=0.0, step=1.0, key="search_time_start")
+        time_end = st.number_input("End seconds", min_value=0.0, step=1.0, key="search_time_end")
         st.caption("Vehicle speed search is not available yet because speed needs tracking across frames. This can be added in a future tracking step.")
 
     debug_runs_dir = project_root() / "tests" / "tender_demo_case" / "debug_runs"
     current_run_str = str(run_dir) if run_dir and run_dir.exists() else ""
-    records = load_all_search_records(str(debug_runs_dir), search_scope, current_run_str)
+    cache_buster = _compute_search_cache_buster(debug_runs_dir, search_scope, run_dir if run_dir and run_dir.exists() else None)
+    records = load_all_search_records(str(debug_runs_dir), search_scope, current_run_str, cache_buster)
     if search_scope == "Current selected run" and run_dir is None:
         st.info("Select or run a debug session first, or change scope to All completed runs.")
         return
@@ -1939,7 +2343,16 @@ def _render_search_tab(run_dir: Path | None) -> None:
                 if candidate and candidate not in seen:
                     seen.append(candidate)
         video_options.extend(seen)
-    selected_video = st.selectbox("Video selection", video_options)
+    selected_videos = st.multiselect(
+        "Video selection",
+        video_options,
+        default=["All videos"],
+        help="Choose All videos, one video, or multiple videos to search across.",
+    )
+    if not selected_videos:
+        selected_videos = ["All videos"]
+    elif "All videos" in selected_videos and len(selected_videos) > 1:
+        selected_videos = ["All videos"]
 
     search_clicked = st.button("Search")
     filters = {
@@ -1950,7 +2363,7 @@ def _render_search_tab(run_dir: Path | None) -> None:
         "object_type": object_type,
         "person_appearance": person_appearance,
         "vehicle": vehicle,
-        "selected_video": selected_video,
+        "selected_videos": selected_videos,
         "time_start": time_start if time_start > 0 else None,
         "time_end": time_end if time_end > 0 else None,
     }
@@ -1978,6 +2391,17 @@ def _initialize_state() -> None:
     st.session_state.setdefault("progress_percent", 0)
     st.session_state.setdefault("pipeline_running", False)
     st.session_state.setdefault("pipeline_process_pid", None)
+    st.session_state.setdefault("search_nl_query", "")
+    st.session_state.setdefault("search_interpreted_filters", {})
+    st.session_state.setdefault("search_query", "")
+    st.session_state.setdefault("search_category", "All")
+    st.session_state.setdefault("search_risk_level", "All")
+    st.session_state.setdefault("search_event_type", "All")
+    st.session_state.setdefault("search_object_type", "")
+    st.session_state.setdefault("search_person_appearance", "")
+    st.session_state.setdefault("search_vehicle", "")
+    st.session_state.setdefault("search_time_start", 0.0)
+    st.session_state.setdefault("search_time_end", 0.0)
 
 
 def main() -> None:
@@ -2025,7 +2449,7 @@ def main() -> None:
         st.header("Pipeline Settings")
         preset_values = PROCESSING_PRESETS[processing_preset]
         robbery_demo_mode = processing_preset == "Jewelry shop robbery demo"
-        quick_result_mode = st.checkbox("Quick result mode", value=False if robbery_demo_mode else True)
+        quick_result_mode = st.checkbox("Quick result mode", value=False)
         if robbery_demo_mode and quick_result_mode:
             st.warning("Quick result mode overrides this robbery-demo preset toward Quick scan behavior. Turn it OFF for jewelry robbery/theft analysis.")
         st.caption("Quick result mode scans the video, selects the most important few clips, and sends only those clips to Qwen. This is faster but less exhaustive.")

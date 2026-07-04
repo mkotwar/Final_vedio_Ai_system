@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import cv2
+import numpy as np
 
 
 IMPORTANT_OBJECT_CLASSES = {
@@ -18,9 +19,127 @@ IMPORTANT_OBJECT_CLASSES = {
     "sports ball",
 }
 
+VEHICLE_CLASS_NAMES = {"car", "truck", "bus", "motorcycle", "bicycle"}
+BAG_CLASS_NAMES = {"backpack", "handbag", "suitcase"}
+
 
 def _safe_round(value: float) -> float:
     return round(float(value), 6)
+
+
+def _crop_image(image, bbox_xyxy: list[float]):
+    height, width = image.shape[:2]
+    x1, y1, x2, y2 = [int(round(float(value))) for value in bbox_xyxy]
+    x1 = max(0, min(width - 1, x1))
+    y1 = max(0, min(height - 1, y1))
+    x2 = max(x1 + 1, min(width, x2))
+    y2 = max(y1 + 1, min(height, y2))
+    return image[y1:y2, x1:x2]
+
+
+def _bbox_iou(box_a: list[float], box_b: list[float]) -> float:
+    ax1, ay1, ax2, ay2 = [float(value) for value in box_a]
+    bx1, by1, bx2, by2 = [float(value) for value in box_b]
+    inter_x1 = max(ax1, bx1)
+    inter_y1 = max(ay1, by1)
+    inter_x2 = min(ax2, bx2)
+    inter_y2 = min(ay2, by2)
+    inter_w = max(0.0, inter_x2 - inter_x1)
+    inter_h = max(0.0, inter_y2 - inter_y1)
+    inter_area = inter_w * inter_h
+    if inter_area <= 0.0:
+        return 0.0
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    denom = area_a + area_b - inter_area
+    return inter_area / denom if denom > 0 else 0.0
+
+
+def _classify_bgr_color(bgr_pixel) -> str:
+    b, g, r = [int(v) for v in bgr_pixel.tolist()]
+    sample = np.uint8([[[b, g, r]]])
+    sample = cv2.cvtColor(sample, cv2.COLOR_BGR2HSV)[0][0]
+    h, s, v = [int(x) for x in sample.tolist()]
+    if v < 40:
+        return "dark"
+    if s < 30:
+        if v > 210:
+            return "white"
+        if v > 130:
+            return "grey"
+        return "black"
+    if h < 8 or h >= 170:
+        return "red"
+    if h < 18:
+        return "orange"
+    if h < 32:
+        return "yellow"
+    if h < 85:
+        return "green"
+    if h < 130:
+        return "blue"
+    if h < 150:
+        return "purple"
+    if h < 170:
+        return "pink"
+    return "brown"
+
+
+def _dominant_color_label(image) -> str:
+    if image is None or image.size == 0:
+        return "unknown"
+    trimmed = image
+    height, width = image.shape[:2]
+    if height > 12 and width > 12:
+        pad_h = max(1, int(height * 0.12))
+        pad_w = max(1, int(width * 0.12))
+        trimmed = image[pad_h: height - pad_h, pad_w: width - pad_w]
+        if trimmed.size == 0:
+            trimmed = image
+    small = cv2.resize(trimmed, (24, 24), interpolation=cv2.INTER_AREA)
+    pixels = small.reshape((-1, 3))
+    sample_pixel = pixels.mean(axis=0)
+    return _classify_bgr_color(sample_pixel)
+
+
+def _build_detection_appearance_terms(detection: dict[str, Any], crop_image, all_detections: list[dict[str, Any]]) -> list[str]:
+    class_name = str(detection.get("class_name", "")).strip().lower()
+    color_label = _dominant_color_label(crop_image)
+    terms = [class_name]
+    if class_name == "person":
+        carrying_bag = any(
+            str(other.get("class_name", "")).strip().lower() in BAG_CLASS_NAMES
+            and _bbox_iou(detection.get("bbox_xyxy", []), other.get("bbox_xyxy", [])) > 0.01
+            for other in all_detections
+            if isinstance(other, dict)
+        )
+        upper_crop = crop_image[: max(1, crop_image.shape[0] // 2), :] if crop_image is not None and crop_image.size else crop_image
+        lower_crop = crop_image[max(0, crop_image.shape[0] // 2):, :] if crop_image is not None and crop_image.size else crop_image
+        upper_color = _dominant_color_label(upper_crop)
+        lower_color = _dominant_color_label(lower_crop)
+        terms.extend(
+            [
+                upper_color,
+                f"{upper_color} shirt",
+                f"{upper_color} upper clothing",
+                lower_color,
+                f"{lower_color} lower clothing",
+            ]
+        )
+        if carrying_bag:
+            terms.extend(["bag", "person with bag", "carrying bag"])
+    elif class_name in VEHICLE_CLASS_NAMES:
+        terms.extend(["vehicle", color_label, f"{color_label} {class_name}", f"{color_label} vehicle"])
+        if color_label in {"white", "black", "grey", "red", "blue", "yellow", "green"}:
+            terms.append(f"{color_label} car" if class_name == "car" else f"{color_label} {class_name}")
+    else:
+        terms.extend([color_label, f"{color_label} {class_name}"])
+    cleaned_terms: list[str] = []
+    for term in terms:
+        term_str = str(term).strip().lower()
+        if term_str and term_str not in cleaned_terms:
+            cleaned_terms.append(term_str)
+    return cleaned_terms
 
 
 def _load_yolo_detections(run_dir: Path) -> list[dict[str, Any]]:
@@ -174,6 +293,8 @@ def run_yolo_object_scoring(run_dir: Path) -> dict[str, Any]:
 
     annotated_dir = run_dir / "11_yolo_annotated_frames"
     annotated_dir.mkdir(parents=True, exist_ok=True)
+    object_crops_dir = run_dir / "11_yolo_object_crops"
+    object_crops_dir.mkdir(parents=True, exist_ok=True)
 
     scored_items: list[dict[str, Any]] = []
     frames_with_detections = 0
@@ -238,6 +359,28 @@ def run_yolo_object_scoring(run_dir: Path) -> dict[str, Any]:
                 frame_idx=int(item.get("frame_idx", 0) or 0),
             )
 
+        enriched_detections: list[dict[str, Any]] = []
+        for detection_index, detection in enumerate(detections):
+            detection_copy = dict(detection)
+            bbox_xyxy = detection_copy.get("bbox_xyxy", [])
+            crop_path_relative = None
+            appearance_terms: list[str] = []
+            if image is not None and isinstance(bbox_xyxy, list) and len(bbox_xyxy) == 4:
+                crop_image = _crop_image(image, bbox_xyxy)
+                if crop_image is not None and crop_image.size > 0:
+                    crop_name = (
+                        f"frame_{int(item.get('frame_idx', 0) or 0):06d}"
+                        f"_{detection_index:02d}_{str(detection_copy.get('class_name', 'object')).strip().lower()}.jpg"
+                    )
+                    crop_path = object_crops_dir / crop_name
+                    cv2.imwrite(str(crop_path), crop_image)
+                    repo_root = Path(__file__).resolve().parents[2]
+                    crop_path_relative = crop_path.resolve().relative_to(repo_root).as_posix()
+                    appearance_terms = _build_detection_appearance_terms(detection_copy, crop_image, detections)
+            detection_copy["crop_path"] = crop_path_relative
+            detection_copy["appearance_terms"] = appearance_terms
+            enriched_detections.append(detection_copy)
+
         if detection_count > 0:
             frames_with_detections += 1
         if person_count > 0:
@@ -253,6 +396,7 @@ def run_yolo_object_scoring(run_dir: Path) -> dict[str, Any]:
         scored_items.append(
             {
                 **item,
+                "detections": enriched_detections,
                 "score_components": {
                     "person_presence_score": _safe_round(person_presence_score),
                     "person_count_score": _safe_round(person_count_score),
@@ -330,10 +474,12 @@ def run_yolo_object_scoring(run_dir: Path) -> dict[str, Any]:
     print(f"[tender-demo] YOLO object scores output path: {scores_output_path}")
     print(f"[tender-demo] YOLO usefulness report output path: {report_output_path}")
     print(f"[tender-demo] Annotated frames folder path: {annotated_dir}")
+    print(f"[tender-demo] Object crops folder path: {object_crops_dir}")
     return {
         "scored_items": scored_items,
         "report": report,
         "scores_output_path": str(scores_output_path),
         "report_output_path": str(report_output_path),
         "annotated_frames_dir": str(annotated_dir),
+        "object_crops_dir": str(object_crops_dir),
     }
