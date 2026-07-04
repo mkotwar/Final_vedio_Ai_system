@@ -103,6 +103,26 @@ CONFIDENCE_PRIORITY = {
     "unknown": 3,
 }
 
+SUMMARY_SCHEMA_FRAGMENTS = (
+    "scene_type",
+    "caption",
+    "current panel",
+    "json schema",
+    "short factual sentence",
+    "short sentence",
+    "return only",
+    "use previous and next",
+    "people|",
+    "shop|office|road",
+    "street|parking|warehouse",
+)
+
+SUMMARY_GENERIC_ACTIVITY_PREFIXES = (
+    "there is no indication of suspicious activity",
+    "no indication of suspicious activity",
+    "no suspicious activity",
+)
+
 
 def _load_required_json(path: Path) -> dict[str, Any] | list[dict[str, Any]]:
     if not path.exists():
@@ -196,8 +216,8 @@ def _first_non_generic_text(values: list[str]) -> str:
         "selected clip contains visually important activity",
         "no useful description was produced for this clip.",
         "no useful description was produced for this clip",
-        "no usable qwen text was returned.",
-        "no usable qwen text was returned",
+        "no usable vlm text was returned.",
+        "no usable vlm text was returned",
     }
     for value in values:
         cleaned = clean_text(value)
@@ -207,6 +227,14 @@ def _first_non_generic_text(values: list[str]) -> str:
 
 
 def extract_best_event_description(parsed_json: dict[str, Any]) -> str:
+    best_event_description = clean_text(str(parsed_json.get("best_event_description", "")))
+    if best_event_description:
+        return best_event_description
+
+    temporal_change_summary = clean_text(str(parsed_json.get("temporal_change_summary", "")))
+    if temporal_change_summary:
+        return temporal_change_summary
+
     events = parsed_json.get("events", [])
     if isinstance(events, list):
         for event in events:
@@ -229,6 +257,9 @@ def extract_best_event_description(parsed_json: dict[str, Any]) -> str:
     description = clean_text(str(parsed_json.get("description", "")))
     if description:
         return description
+    scene_description = clean_text(str(parsed_json.get("scene_description", "")))
+    if scene_description:
+        return scene_description
     return ""
 
 
@@ -289,6 +320,9 @@ def _analysis_settings_from_env() -> dict[str, Any]:
     return {
         "mode": os.environ.get("TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE", "Balanced"),
         "incident_focus": os.environ.get("TENDER_DEMO_INCIDENT_FOCUS", "general"),
+        "vlm_backend": os.environ.get("TENDER_DEMO_VLM_BACKEND", "qwen"),
+        "qwen_model_id": os.environ.get("TENDER_DEMO_QWEN_MODEL_ID", ""),
+        "smolvlm_model_id": os.environ.get("TENDER_DEMO_SMOLVLM_MODEL_ID", "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"),
         "sample_every_seconds": sample_every_seconds,
         "approx_sampled_fps": round(1.0 / sample_every_seconds, 3) if sample_every_seconds > 0 else 0.0,
         "top_k_clips": _read_env_int("TENDER_DEMO_TOP_K_CLIPS", 8),
@@ -427,7 +461,7 @@ def _classify_clip(
     generic_evidence = clean_text(evidence_text).rstrip(".").lower() in {
         "",
         "selected clip contains visually important activity",
-        "no usable qwen text was returned",
+        "no usable vlm text was returned",
     }
     display_interaction_signal = any(
         term in normalized_evidence
@@ -552,6 +586,41 @@ def _dedupe_preserve_order(values: list[str], limit: int | None = None) -> list[
     return result
 
 
+def _clean_summary_phrase(text: Any) -> str:
+    cleaned = clean_text(str(text or "")).rstrip(".").strip()
+    if not cleaned:
+        return ""
+    lowered = cleaned.lower()
+    if any(fragment in lowered for fragment in SUMMARY_SCHEMA_FRAGMENTS):
+        return ""
+    if any(prefix in lowered for prefix in SUMMARY_GENERIC_ACTIVITY_PREFIXES):
+        return ""
+    if "{" in cleaned or "}" in cleaned or '": "' in cleaned or '"scene_type"' in cleaned:
+        return ""
+    if cleaned.count("|") >= 2:
+        return ""
+    if len(cleaned) > 140:
+        return ""
+    return cleaned
+
+
+def _normalize_activity_label(text: Any) -> str:
+    cleaned = _clean_summary_phrase(text)
+    if not cleaned:
+        return ""
+    lowered = cleaned.lower()
+    replacements = {
+        "walking or moving": "people walking or moving",
+        "walking": "people walking",
+        "standing": "people standing",
+        "running": "people running",
+        "person near counter interacting with items": "person interacting near a counter",
+        "two individuals interact near a counter in a shop": "two people interacting near a counter",
+        "a person is walking towards the counter": "person walking toward a counter",
+    }
+    return replacements.get(lowered, cleaned)
+
+
 def _join_terms_for_sentence(values: list[str], limit: int = 3) -> str:
     items = _dedupe_preserve_order(values, limit=limit)
     if not items:
@@ -586,17 +655,45 @@ def _extract_visible_people_notes(parsed_json: dict[str, Any]) -> list[str]:
 def _extract_activity_phrases(parsed_json: dict[str, Any], caption: str, description: str) -> list[str]:
     values: list[str] = []
     for activity in _safe_list_of_dicts(parsed_json.get("activities")):
-        activity_type = clean_text(str(activity.get("activity_type", ""))).rstrip(".")
-        activity_desc = clean_text(str(activity.get("description", ""))).rstrip(".")
+        activity_type = _normalize_activity_label(activity.get("activity_type"))
+        activity_desc = _normalize_activity_label(activity.get("description"))
         if activity_desc:
             values.append(activity_desc)
         elif activity_type:
             values.append(activity_type.replace("_", " "))
+    main_activities = parsed_json.get("main_activities", [])
+    if isinstance(main_activities, list):
+        for activity in main_activities:
+            normalized = _normalize_activity_label(str(activity).replace("_", " "))
+            if normalized:
+                values.append(normalized)
+    main_interactions = parsed_json.get("main_interactions", [])
+    if isinstance(main_interactions, list):
+        for interaction in main_interactions:
+            normalized = _normalize_activity_label(str(interaction).replace("_", " "))
+            if normalized:
+                values.append(normalized)
     for text in [caption, description]:
-        cleaned = clean_text(text).rstrip(".")
+        cleaned = _normalize_activity_label(text)
         if cleaned:
             values.append(cleaned)
     return _dedupe_preserve_order(values, limit=8)
+
+
+def _extract_scene_description(parsed_json: dict[str, Any]) -> str:
+    for key in ["scene_description", "caption", "description"]:
+        cleaned = _clean_summary_phrase(parsed_json.get(key))
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _extract_temporal_change_summary(parsed_json: dict[str, Any]) -> str:
+    for key in ["temporal_change_summary", "best_event_description", "description"]:
+        cleaned = _normalize_activity_label(parsed_json.get(key))
+        if cleaned:
+            return cleaned
+    return ""
 
 
 def _extract_motion_objects(items: Any) -> list[str]:
@@ -657,15 +754,23 @@ def _extract_object_names(parsed_json: dict[str, Any], yolo_top_classes: list[st
     values: list[str] = []
     main_objects = parsed_json.get("main_objects", [])
     if isinstance(main_objects, list):
-        values.extend(str(name).replace("_", " ") for name in main_objects if str(name).strip())
+        values.extend(
+            str(name).replace("_", " ")
+            for name in main_objects
+            if str(name).strip() and _clean_summary_phrase(str(name).replace("_", " "))
+        )
     for obj in _safe_list_of_dicts(parsed_json.get("objects")):
-        name = clean_text(str(obj.get("name", ""))).rstrip(".")
-        subtype = clean_text(str(obj.get("subtype", ""))).rstrip(".")
-        obj_type = clean_text(str(obj.get("type", ""))).rstrip(".")
+        name = _clean_summary_phrase(obj.get("name"))
+        subtype = _clean_summary_phrase(obj.get("subtype"))
+        obj_type = _clean_summary_phrase(obj.get("type"))
         label = name or subtype or obj_type
         if label and label.lower() != "unknown":
             values.append(label.replace("_", " "))
-    values.extend(str(class_name).replace("_", " ") for class_name in yolo_top_classes if str(class_name).strip())
+    values.extend(
+        str(class_name).replace("_", " ")
+        for class_name in yolo_top_classes
+        if str(class_name).strip() and _clean_summary_phrase(str(class_name).replace("_", " "))
+    )
     return _dedupe_preserve_order(values, limit=8)
 
 
@@ -674,16 +779,29 @@ def _collect_scene_overview(event_timeline: list[dict[str, Any]]) -> dict[str, A
     activity_terms: list[str] = []
     object_terms: list[str] = []
     people_counts: list[int] = []
+    scene_descriptions: list[str] = []
+    temporal_summaries: list[str] = []
 
     for item in event_timeline:
         scene_type = clean_text(str(item.get("scene_type", ""))).rstrip(".").lower()
         if scene_type and scene_type != "unknown":
             scene_counts[scene_type] = scene_counts.get(scene_type, 0) + 1
-        activity_terms.extend(item.get("activity_descriptions", []) if isinstance(item.get("activity_descriptions"), list) else [])
-        object_terms.extend(item.get("object_names", []) if isinstance(item.get("object_names"), list) else [])
-        activity_terms.extend(item.get("motion_descriptions", []) if isinstance(item.get("motion_descriptions"), list) else [])
-        object_terms.extend(item.get("moving_objects", []) if isinstance(item.get("moving_objects"), list) else [])
-        object_terms.extend(item.get("stationary_objects", []) if isinstance(item.get("stationary_objects"), list) else [])
+        scene_description = _clean_summary_phrase(item.get("scene_description"))
+        if scene_description:
+            scene_descriptions.append(scene_description)
+        temporal_summary = _normalize_activity_label(item.get("temporal_change_summary"))
+        if temporal_summary:
+            temporal_summaries.append(temporal_summary)
+        if isinstance(item.get("activity_descriptions"), list):
+            activity_terms.extend(_normalize_activity_label(entry) for entry in item.get("activity_descriptions", []))
+        if isinstance(item.get("object_names"), list):
+            object_terms.extend(_clean_summary_phrase(entry) for entry in item.get("object_names", []))
+        if isinstance(item.get("motion_descriptions"), list):
+            activity_terms.extend(_normalize_activity_label(entry) for entry in item.get("motion_descriptions", []))
+        if isinstance(item.get("moving_objects"), list):
+            object_terms.extend(_clean_summary_phrase(entry) for entry in item.get("moving_objects", []))
+        if isinstance(item.get("stationary_objects"), list):
+            object_terms.extend(_clean_summary_phrase(entry) for entry in item.get("stationary_objects", []))
         people_counts.append(_safe_int(item.get("people_count"), 0))
 
     dominant_scene_type = "unknown"
@@ -698,13 +816,31 @@ def _collect_scene_overview(event_timeline: list[dict[str, Any]]) -> dict[str, A
 
     return {
         "dominant_scene_type": dominant_scene_type,
-        "common_activities": _dedupe_preserve_order(activity_terms, limit=6),
-        "common_objects": _dedupe_preserve_order(object_terms, limit=6),
+        "scene_descriptions": _dedupe_preserve_order([term for term in scene_descriptions if term], limit=4),
+        "temporal_summaries": _dedupe_preserve_order([term for term in temporal_summaries if term], limit=4),
+        "common_activities": _dedupe_preserve_order([term for term in activity_terms if term], limit=6),
+        "common_objects": _dedupe_preserve_order([term for term in object_terms if term], limit=6),
         "people_count_observed": {
             "min": min(people_counts) if people_counts else 0,
             "max": max(people_counts) if people_counts else 0,
         },
     }
+
+
+def _top_clip_descriptions(items: list[dict[str, Any]], limit: int = 3) -> list[str]:
+    descriptions: list[str] = []
+    for item in sorted(items, key=lambda row: _safe_float(row.get("start_time"), 0.0)):
+        for key in ["best_event_description", "temporal_change_summary", "description"]:
+            cleaned = _clean_summary_phrase(item.get(key))
+            if cleaned:
+                descriptions.append(cleaned)
+                break
+    return _dedupe_preserve_order(descriptions, limit=limit)
+
+
+def _as_sentence(text: Any) -> str:
+    cleaned = clean_text(str(text or "")).strip()
+    return cleaned
 
 
 def _incident_cluster_family(label: str) -> str:
@@ -823,21 +959,25 @@ def build_descriptive_video_summary(
 
     scene_overview = _collect_scene_overview(event_timeline)
     scene_type = scene_overview.get("dominant_scene_type", "unknown")
+    scene_descriptions = scene_overview.get("scene_descriptions", []) if isinstance(scene_overview.get("scene_descriptions"), list) else []
+    temporal_summaries = scene_overview.get("temporal_summaries", []) if isinstance(scene_overview.get("temporal_summaries"), list) else []
     activity_text = _join_terms_for_sentence(scene_overview.get("common_activities", []), limit=3)
     common_objects = scene_overview.get("common_objects", []) if isinstance(scene_overview.get("common_objects"), list) else []
     non_person_objects = [obj for obj in common_objects if str(obj).strip().lower() not in {"person", "people"}]
     object_text = _join_terms_for_sentence(non_person_objects or common_objects, limit=3)
     people_range = scene_overview.get("people_count_observed", {})
     max_people = _safe_int(people_range.get("max"), 0) if isinstance(people_range, dict) else 0
+    clip_sequence = _top_clip_descriptions(event_timeline, limit=3)
+    scene_sentence = scene_descriptions[0] if scene_descriptions else ""
+    sequence_sentence = clip_sequence[0] if clip_sequence else (temporal_summaries[0] if temporal_summaries else "")
 
     if priority_items:
         evidence = _join_terms_for_sentence(strongest_cluster.get("key_evidence", []), limit=2)
         time_text = strongest_cluster.get("display_time") or format_seconds(_safe_float(priority_items[0].get("start_time"), 0.0))
         summary = (
-            f"The pipeline analyzed {total_clips} selected clips and flagged {len(review_items) + len(priority_items)} clip(s) for review, "
-            f"including {len(priority_items)} priority clip(s). The strongest review-worthy activity occurs around {time_text}, "
-            f"where the system observed {evidence or 'possible serious person-to-person or item-taking activity'}. "
-            "This may indicate possible robbery or assault behavior. Manual review is recommended."
+            f"The selected clips show activity in {_scene_area_phrase(scene_type) if scene_type != 'unknown' else 'the scene'}. "
+            f"Around {time_text}, the clearest high-priority moment shows {evidence or 'serious person-to-person or item-related activity'}. "
+            f"{_as_sentence(scene_sentence) + ' ' if scene_sentence else ''}Manual review is recommended."
         )
         return clean_text(summary)
 
@@ -849,38 +989,30 @@ def build_descriptive_video_summary(
         people_phrase = f" with up to {max_people} people visible" if max_people > 0 else ""
         if "theft" in primary_label or "display" in primary_label or "robbery" in primary_label:
             summary = (
-                f"The selected clips mainly show activity in {scene_phrase}{people_phrase}. Around {time_text}, the pipeline flagged a review-worthy shop/display interaction, "
-                f"including {evidence or 'possible item handling near a counter or display'}. This may indicate possible theft from display or robbery-related behavior."
+                f"The selected clips show activity in {scene_phrase}{people_phrase}. Around {time_text}, one review-worthy moment shows "
+                f"{evidence or 'item handling near a counter or display'}. {_as_sentence(scene_sentence) + ' ' if scene_sentence else ''}This clip should be checked manually."
             )
         else:
             summary = (
-                f"The selected clips mainly show activity in {scene_phrase}{people_phrase}. Around {time_text}, the pipeline flagged review-worthy activity involving "
-                f"{evidence or 'ambiguous but relevant interaction'}. These are not confirmed incidents, but should be manually reviewed."
+                f"The selected clips show activity in {scene_phrase}{people_phrase}. Around {time_text}, one review-worthy moment shows "
+                f"{evidence or 'an ambiguous but relevant interaction'}. {_as_sentence(scene_sentence) + ' ' if scene_sentence else ''}This is not a confirmed incident, but it should be reviewed manually."
             )
         return clean_text(summary)
 
     if normal_items:
-        scene_overview_phrase = "visible activity in the selected scene"
-        object_text_lower = object_text.lower()
-        traffic_states = {str(item.get("traffic_state", "")).strip().lower() for item in normal_items}
-        if "moving_traffic" in traffic_states or "mixed_motion" in traffic_states:
-            scene_overview_phrase = "vehicles and pedestrians moving through the scene"
-        elif any(term in object_text_lower for term in ["bicycle", "motorcycle", "vehicle"]):
-            scene_overview_phrase = "people and two-wheelers moving in an outdoor road-side area"
-        elif max_people > 0 and "backpack" in object_text_lower:
-            scene_overview_phrase = "people moving through the scene, including people carrying or wearing bags"
-        elif max_people > 0 and object_text:
-            scene_overview_phrase = f"people moving around {object_text}"
+        scene_phrase = _scene_area_phrase(scene_type) if scene_type != "unknown" else "the scene"
+        summary = f"The selected clips show activity in {scene_phrase}. "
+        if scene_sentence:
+            summary += f"{_as_sentence(scene_sentence)} "
         elif activity_text:
-            scene_overview_phrase = activity_text.lower()
-        elif scene_type != "unknown":
-            scene_overview_phrase = f"activity in {_scene_area_phrase(scene_type)}"
-        summary = (
-            f"The optimized Top-K pipeline analyzed {total_clips} selected clips. "
-            f"The selected clips mainly show {scene_overview_phrase}. "
-        )
-        if object_text and scene_overview_phrase.lower().find(object_text.lower()) == -1:
-            summary += f"Several selected clips contain {object_text}. "
+            summary += f"{_as_sentence(f'Common visible activity includes {activity_text}')} "
+        if sequence_sentence:
+            summary += f"{_as_sentence(f'Across the selected moments, {sequence_sentence}')} "
+        people_phrase = f"Up to {max_people} people are visible across the selected clips. " if max_people > 0 else ""
+        summary += people_phrase
+        existing_summary_text = summary.lower()
+        if object_text and object_text.lower() not in existing_summary_text:
+            summary += f"Common visible objects include {object_text}. "
         if sensitive_mode:
             summary += (
                 f"No priority suspicious event was detected in the selected clips. Because this was a sensitive incident review, "
@@ -939,7 +1071,9 @@ def _build_summary_item(item: dict[str, Any], incident_recheck_record: dict[str,
         keywords = []
 
     raw_vlm_output = clean_text(str(item.get("raw_vlm_output", "")))
-    caption = clean_text(str(parsed_json.get("caption", ""))) or _first_non_generic_text([raw_vlm_output])
+    scene_description = _extract_scene_description(parsed_json)
+    temporal_change_summary = _extract_temporal_change_summary(parsed_json)
+    caption = clean_text(str(parsed_json.get("caption", ""))) or scene_description
     motion_summary = (
         clean_text(str(parsed_json.get("motion_summary", "")))
         or clean_text(str(motion_state_hints.get("motion_summary", "")))
@@ -960,11 +1094,11 @@ def _build_summary_item(item: dict[str, Any], incident_recheck_record: dict[str,
         incident_suspicious_explanation
         or incident_description
         or incident_review_reason
-        or
-        extract_best_event_description(parsed_json)
+        or extract_best_event_description(parsed_json)
+        or temporal_change_summary
         or motion_summary
         or clean_text(str(parsed_json.get("description", "")))
-        or _first_non_generic_text([raw_vlm_output, caption])
+        or _first_non_generic_text([caption, scene_description, raw_vlm_output])
         or "No useful description was produced for this clip."
     )
     scene_type = clean_text(str(parsed_json.get("scene_type", ""))).rstrip(".").lower() or "unknown"
@@ -1069,6 +1203,8 @@ def _build_summary_item(item: dict[str, Any], incident_recheck_record: dict[str,
         "fallback_used": fallback_used,
         "title": title,
         "caption": caption,
+        "scene_description": scene_description,
+        "temporal_change_summary": temporal_change_summary,
         "description": best_event_description,
         "best_event_description": best_event_description,
         "people_count": _safe_int(parsed_json.get("people_count"), yolo_person_max),

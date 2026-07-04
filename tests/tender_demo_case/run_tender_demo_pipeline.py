@@ -890,7 +890,7 @@ def _clean_qwen_json_output(raw_output: str) -> str:
 
 def run_qwen_on_vlm_inputs(run_dir: Path) -> list[dict[str, object]]:
     try:
-        from tests.tender_demo_case.tender_demo_vlm_adapter import TenderDemoQwenVLM
+        from tests.tender_demo_case.tender_demo_vlm_adapter import create_tender_demo_vlm
     except ModuleNotFoundError:
         adapter_path = Path(__file__).resolve().parent / "tender_demo_vlm_adapter.py"
         spec = importlib.util.spec_from_file_location("tender_demo_vlm_adapter", adapter_path)
@@ -898,9 +898,10 @@ def run_qwen_on_vlm_inputs(run_dir: Path) -> list[dict[str, object]]:
             raise ImportError(f"Unable to load tender demo VLM adapter from: {adapter_path}")
         adapter_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(adapter_module)
-        TenderDemoQwenVLM = adapter_module.TenderDemoQwenVLM
+        create_tender_demo_vlm = adapter_module.create_tender_demo_vlm
 
-    print("[tender-demo] Starting Step 8: running isolated Qwen adapter on temporal strips")
+    requested_backend = os.environ.get("TENDER_DEMO_VLM_BACKEND", "qwen").strip().lower() or "qwen"
+    print(f"[tender-demo] Starting Step 8: running isolated {requested_backend} adapter on temporal strips")
 
     manifest_path = run_dir / "07_vlm_inputs.json"
     if not manifest_path.exists():
@@ -922,7 +923,7 @@ def run_qwen_on_vlm_inputs(run_dir: Path) -> list[dict[str, object]]:
         image_paths.append(repo_root / str(strip_path))
         prompts.append(prompt)
 
-    vlm = TenderDemoQwenVLM()
+    vlm = create_tender_demo_vlm()
     model_health = vlm.health_check()
     print(f"[tender-demo] Total VLM inputs: {len(vlm_input_items)}")
     print(f"[tender-demo] Model health check: {model_health}")
@@ -930,7 +931,7 @@ def run_qwen_on_vlm_inputs(run_dir: Path) -> list[dict[str, object]]:
     raw_outputs = vlm.generate_batch(image_paths=image_paths, prompts=prompts)
     if len(raw_outputs) != len(vlm_input_items):
         raise RuntimeError(
-            "Qwen output count did not match VLM input count: "
+            "Selected VLM output count did not match VLM input count: "
             f"{len(raw_outputs)} vs {len(vlm_input_items)}"
         )
 

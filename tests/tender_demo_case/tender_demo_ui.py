@@ -64,7 +64,7 @@ STANDARD_STAGE_LABELS = {
     "14B": "Applying incident coverage guardrails",
     15: "Creating Top-K VLM inputs",
     "15B": "Auditing VLM coverage",
-    16: "Running Qwen on Top-K clips",
+    16: "Running VLM on Top-K clips",
     "16B": "Incident recheck reasoning",
     17: "Creating final summary",
     18: "Exporting/compiling review video",
@@ -333,6 +333,13 @@ QUICK_RESULT_SETTINGS = {
     "yolo_conf": 0.40,
     "motion_threshold": 0.25,
 }
+VLM_BACKEND_OPTIONS = {
+    "Qwen 2.5 VL": "qwen",
+    "SmolVLM2 500M": "smolvlm",
+}
+DEFAULT_QWEN_MODEL_ID = "qwen2.5vl:7b"
+DEFAULT_SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+DEFAULT_STEP16_TEST_PROMPT_PATH = "tests/tender_demo_case/prompts/temporal_strip_observation_prompt.txt"
 
 
 def project_root() -> Path:
@@ -536,7 +543,9 @@ def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, s
         "TENDER_DEMO_TOP_K_CLIPS": str(settings["top_k"]),
         "TENDER_DEMO_TOP_K_MAX_CLIPS": str(settings["top_k_max"]),
         "TENDER_DEMO_MOTION_THRESHOLD": str(settings["motion_threshold"]),
+        "TENDER_DEMO_VLM_BACKEND": str(settings["vlm_backend"]),
         "TENDER_DEMO_QWEN_MODEL_ID": str(settings["qwen_model_id"]),
+        "TENDER_DEMO_SMOLVLM_MODEL_ID": str(settings["smolvlm_model_id"]),
         "TENDER_DEMO_QWEN_BATCH_SIZE": str(settings["qwen_batch_size"]),
         "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": str(settings["qwen_max_new_tokens"]),
         "TENDER_DEMO_RUN_YOLO": "true" if settings["run_yolo"] else "false",
@@ -563,6 +572,10 @@ def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, s
         "TENDER_DEMO_SECONDS_PER_FRAME": str(settings["seconds_per_frame"]),
         "TENDER_DEMO_SECONDS_PER_TITLE_CARD": str(settings["seconds_per_title_card"]),
     }
+    step16_prompt_file = str(settings.get("step16_prompt_file", "")).strip()
+    if step16_prompt_file:
+        env_updates["TENDER_DEMO_STEP16_PROMPT_FILE"] = step16_prompt_file
+    env_updates["TENDER_DEMO_QWEN_LOCAL_FILES_ONLY"] = "true" if settings.get("qwen_local_files_only", False) else "false"
     max_video_seconds = str(settings.get("max_video_seconds", "")).strip()
     if max_video_seconds:
         env_updates["TENDER_DEMO_MAX_VIDEO_SECONDS"] = max_video_seconds
@@ -604,7 +617,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
         (["15_vlm_coverage_audit.json"], "Auditing VLM coverage", 77),
-        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running VLM on selected clips", 88),
         (["Starting Step 16B", "16b_incident_recheck_outputs.json"], "Incident recheck reasoning", 90),
         (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
         (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
@@ -628,7 +641,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
         (["Starting Step 15", "15_topk_vlm_inputs.json"], "Creating Top-K VLM inputs", 73),
         (["15_vlm_coverage_audit.json"], "Auditing VLM coverage", 77),
-        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running Qwen on selected clips", 88),
+        (["Starting Step 16", "16_topk_vlm_outputs.json"], "Running VLM on selected clips", 88),
         (["Starting Step 16B", "16b_incident_recheck_outputs.json"], "Incident recheck reasoning", 91),
         (["Starting Step 17", "17_topk_final_summary.json", "17_topk_final_summary.md"], "Creating final summary", 93),
         (["Starting Step 18", "18_compiled_review_video.json", "18_exported_clips.json"], "Creating compiled review video", 97),
@@ -661,7 +674,7 @@ def filter_user_friendly_log_line(line: str) -> str | None:
         "Starting Step 14B": "Applying incident coverage guardrails...",
         "Starting Step 15": "Creating Top-K VLM input strips...",
         "15_vlm_coverage_audit.json": "Auditing VLM coverage...",
-        "Starting Step 16": "Running Qwen on selected Top-K clips...",
+        "Starting Step 16": "Running VLM on selected Top-K clips...",
         "Starting Step 16B": "Running incident recheck reasoning...",
         "Starting Step 17": "Creating final summary...",
         "Starting Step 18": "Creating compiled review video...",
@@ -789,7 +802,7 @@ def run_pipeline_with_live_logs(command, env, cwd, placeholders, stage_weights) 
             placeholders["eta_placeholder"].caption(
                 f"Elapsed: {format_duration(elapsed)} | Estimated remaining: {remaining_caption} | "
                 f"Progress: {max(int(display_progress * 100), current_progress_percent)}%\n"
-                "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and Qwen."
+                "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and the selected VLM."
             )
             if latest_output_hint:
                 placeholders["output_placeholder"].caption(f"Latest output: {latest_output_hint}")
@@ -1609,12 +1622,12 @@ def _render_search_result(record: dict) -> None:
 
         with media_cols[0]:
             if media_exists(strip_path):
-                st.image(str(strip_path), caption="Object crop", width="stretch")
+                _render_fixed_width_image(strip_path, "Object crop")
             else:
                 st.warning("Object crop not found.")
         with media_cols[1]:
             if media_exists(yolo_path):
-                st.image(str(yolo_path), caption="Annotated frame", width="stretch")
+                _render_fixed_width_image(yolo_path, "Annotated frame")
             else:
                 st.warning("Annotated frame not found.")
 
@@ -1675,17 +1688,17 @@ def _render_search_result(record: dict) -> None:
 
         with media_cols[0]:
             if media_exists(strip_path):
-                st.image(str(strip_path), caption="Incident image / temporal strip", width="stretch")
+                _render_fixed_width_image(strip_path, "Incident image / temporal strip")
             else:
                 st.warning("Object/incident image not found.")
         with media_cols[1]:
             if media_exists(yolo_path):
-                st.image(str(yolo_path), caption="YOLO annotated frame", width="stretch")
+                _render_fixed_width_image(yolo_path, "YOLO annotated frame")
             else:
                 st.warning("YOLO annotated frame not found.")
 
     if record.get("qwen_parsed_json"):
-        with st.expander("Qwen parsed JSON"):
+        with st.expander("VLM parsed JSON"):
             st.json(record.get("qwen_parsed_json"))
     with st.expander("Evidence file paths"):
         st.write(
@@ -1708,6 +1721,13 @@ def _render_json_details(label: str, payload: Any) -> None:
         return
     with st.expander(label):
         st.json(payload)
+
+
+FIXED_IMAGE_WIDTH = 320
+
+
+def _render_fixed_width_image(path: Path, caption: str) -> None:
+    st.image(str(path), caption=caption, width=FIXED_IMAGE_WIDTH)
 
 
 def _event_sort_key(event: dict) -> tuple[int, float, int, int, int, float]:
@@ -1802,22 +1822,22 @@ def render_event_card(event, qwen_by_clip_id, run_dir, show_raw_qwen=False):
     media_cols = st.columns(2)
     with media_cols[0]:
         if media_exists(strip_path):
-            st.image(str(strip_path), caption=f"{clip_id} temporal strip", width="stretch")
+            _render_fixed_width_image(strip_path, f"{clip_id} temporal strip")
         else:
             st.warning("Temporal strip media not found.")
     with media_cols[1]:
         if media_exists(yolo_path):
-            st.image(str(yolo_path), caption=f"{clip_id} annotated YOLO frame", width="stretch")
+            _render_fixed_width_image(yolo_path, f"{clip_id} annotated YOLO frame")
         else:
             st.warning("Annotated YOLO frame not found.")
 
     if qwen_item:
-        _render_json_details("Qwen Parsed Output", qwen_item.get("parsed_json"))
+        _render_json_details("VLM Parsed Output", qwen_item.get("parsed_json"))
         if show_raw_qwen:
-            with st.expander("Raw Qwen Output"):
+            with st.expander("Raw VLM Output"):
                 st.code(str(qwen_item.get("raw_vlm_output", "")), language="json")
         if qwen_item.get("parse_error"):
-            st.warning(f"Qwen parse error: {qwen_item.get('parse_error')}")
+            st.warning(f"VLM parse error: {qwen_item.get('parse_error')}")
 
 
 def _load_run_results(run_dir: Path) -> dict[str, Any]:
@@ -1868,107 +1888,6 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
     st.subheader("Final Summary")
     st.write(descriptive_summary)
     st.info("This summary is generated from selected Top-K clips. For richer summary, use the descriptive summary fields from Step 17.")
-    st.caption("Incident Recheck improves detection of subtle events like theft, shoplifting, fight, fall, and collision, but increases runtime.")
-
-    metric_cols = st.columns(4)
-    metric_cols[0].metric("Top-K Clips", processing_summary.get("topk_inputs", 0))
-    metric_cols[1].metric("Successful Parses", processing_summary.get("successful_parses", 0))
-    metric_cols[2].metric("Priority Events", priority_count)
-    metric_cols[3].metric("Review Clips", review_count)
-
-    st.subheader("Processing Performance")
-    engine_name = str(runtime_metrics.get("pipeline_name") or runtime_metrics.get("pipeline_mode") or "standard_demo")
-    if engine_name == "fast_parallel_topk":
-        st.caption("Fast Parallel Top-K Pipeline")
-    else:
-        st.caption("Standard Demo Pipeline")
-    perf_cols = st.columns(4)
-    perf_cols[0].write(f"Pipeline engine: `{engine_name}`")
-    perf_cols[1].write(f"Total runtime: `{runtime_metrics.get('total_runtime_seconds', 'unavailable')}`")
-    perf_cols[2].write(f"Video duration: `{runtime_metrics.get('video_duration_seconds', 'unavailable')}`")
-    perf_cols[3].write(f"Runtime/video ratio: `{runtime_metrics.get('runtime_ratio_to_video', 'unavailable')}`")
-    perf_cols_2 = st.columns(4)
-    perf_cols_2[0].write(f"Parallel branches enabled: `{runtime_metrics.get('parallel_branches_enabled', 'unavailable')}`")
-    perf_cols_2[1].write(f"Skipped steps: `{runtime_metrics.get('skipped_steps', [])}`")
-    slowest_steps = runtime_metrics.get("slowest_steps", []) if isinstance(runtime_metrics.get("slowest_steps"), list) else []
-    if slowest_steps:
-        perf_cols_2[2].write(
-            f"Slowest step: `{slowest_steps[0].get('step_name', 'unknown')} ({slowest_steps[0].get('duration_seconds', 0.0)}s)`"
-        )
-        perf_cols_2[3].write(
-            "Top 5 slowest steps: `"
-            + ", ".join(f"{item.get('step_name', 'unknown')} ({item.get('duration_seconds', 0.0)}s)" for item in slowest_steps[:5])
-            + "`"
-        )
-    else:
-        perf_cols_2[2].write("Slowest step: `unavailable`")
-        perf_cols_2[3].write("Top 5 slowest steps: `unavailable`")
-    st.write(f"Top-K clips sent to Qwen: `{processing_summary.get('topk_inputs', 'unavailable')}`")
-    runtime_ratio = runtime_metrics.get("runtime_ratio_to_video")
-    try:
-        runtime_ratio_value = float(runtime_ratio)
-    except (TypeError, ValueError):
-        runtime_ratio_value = None
-    if runtime_ratio_value is not None:
-        if runtime_ratio_value > 1.0:
-            st.warning("Processing took longer than video length. To improve speed, use Quick Result Mode, increase sample interval, reduce Top-K, reduce Qwen max tokens, or use a smaller/faster VLM.")
-        else:
-            st.success("Processing completed faster than real time.")
-
-    st.subheader("Incident Recheck")
-    incident_cols = st.columns(5)
-    incident_cols[0].write(f"Enabled: `{incident_recheck_summary.get('enabled', False)}`")
-    incident_cols[1].write(f"Rechecked clips: `{incident_recheck_summary.get('rechecked_clips', 0)}`")
-    incident_cols[2].write(f"Priority: `{incident_recheck_summary.get('priority_suspicious_events', 0)}`")
-    incident_cols[3].write(f"Review: `{incident_recheck_summary.get('possible_review_clips', 0)}`")
-    incident_cols[4].write(f"Normal: `{incident_recheck_summary.get('normal_activity', 0)}`")
-    incident_cols_2 = st.columns(5)
-    incident_cols_2[0].write(f"Uncertain: `{incident_recheck_summary.get('uncertain_activity', 0)}`")
-    incident_cols_2[1].write(f"Weapon-visible clips: `{incident_recheck_summary.get('weapon_visible_clips', 0)}`")
-    incident_cols_2[2].write(f"Grabbing/restraint clips: `{incident_recheck_summary.get('grabbing_or_restraint_clips', 0)}`")
-    incident_cols_2[3].write(f"Threat/control clips: `{incident_recheck_summary.get('threat_or_control_clips', 0)}`")
-    incident_cols_2[4].write(f"Taking-items clips: `{incident_recheck_summary.get('taking_items_clips', 0)}`")
-    st.write(f"Display-interaction clips: `{incident_recheck_summary.get('display_interaction_clips', 0)}`")
-
-    st.subheader("Analysis Settings")
-    analysis_cols = st.columns(3)
-    analysis_cols[0].write(f"Mode: `{analysis_settings.get('mode', 'unavailable')}`")
-    analysis_cols[1].write(f"Sample interval: `{analysis_settings.get('sample_every_seconds', 'unavailable')}`")
-    analysis_cols[2].write(f"Approx sampled FPS: `{analysis_settings.get('approx_sampled_fps', 'unavailable')}`")
-    analysis_cols_2 = st.columns(3)
-    analysis_cols_2[0].write(f"Top-K clips sent to Qwen: `{analysis_settings.get('top_k_clips', processing_summary.get('topk_inputs', 'unavailable'))}`")
-    analysis_cols_2[1].write(f"Top-K max cap: `{analysis_settings.get('top_k_max', 'unavailable')}`")
-    analysis_cols_2[2].write(f"Motion threshold: `{analysis_settings.get('motion_threshold', 'unavailable')}`")
-    analysis_cols_3 = st.columns(3)
-    analysis_cols_3[0].write(f"YOLO image size: `{analysis_settings.get('yolo_imgsz', 'unavailable')}`")
-    analysis_cols_3[1].write(f"YOLO confidence: `{analysis_settings.get('yolo_conf', 'unavailable')}`")
-    analysis_cols_3[2].write(f"Qwen max tokens: `{analysis_settings.get('qwen_max_new_tokens', 'unavailable')}`")
-    analysis_cols_4 = st.columns(3)
-    analysis_cols_4[0].write(f"Incident fallback pass enabled: `{analysis_settings.get('incident_fallback_pass_enabled', analysis_settings.get('incident_fallback_pass', 'unavailable'))}`")
-    analysis_cols_4[1].write(f"Incident fallback pass used: `{summary.get('incident_fallback_pass_used', analysis_settings.get('incident_fallback_pass_used', False))}`")
-    analysis_cols_4[2].write(f"Enable incident recheck: `{analysis_settings.get('enable_incident_recheck', 'unavailable')}`")
-    st.write(f"Incident focus: `{analysis_settings.get('incident_focus', 'general')}`")
-    analysis_cols_5 = st.columns(4)
-    analysis_cols_5[0].write(f"Adaptive sampling enabled: `{analysis_settings.get('adaptive_sampling_enabled', adaptive_sampling.get('enabled', False))}`")
-    analysis_cols_5[1].write(f"Coverage guardrails enabled: `{analysis_settings.get('coverage_guardrails_enabled', coverage_guardrails.get('enabled', False))}`")
-    analysis_cols_5[2].write(f"VLM input strategy: `{analysis_settings.get('vlm_input_strategy', 'unavailable')}`")
-    analysis_cols_5[3].write(f"Max VLM inputs: `{analysis_settings.get('max_vlm_inputs', 'unavailable')}`")
-
-    st.subheader("Adaptive Coverage")
-    st.write(f"Adaptive retained frames: `{adaptive_sampling.get('retained_frames', 0)}`")
-
-    if review_clusters:
-        st.subheader("Review Clusters")
-        for cluster in review_clusters:
-            st.markdown(f"**{cluster.get('cluster_id', 'review_cluster')}**")
-            st.write(f"Time range: `{cluster.get('display_time', 'unknown')}`")
-            st.write(f"Primary event label: `{cluster.get('primary_event_label', 'unknown')}`")
-            st.write(f"Secondary event labels: {', '.join(cluster.get('secondary_event_labels', [])) if isinstance(cluster.get('secondary_event_labels'), list) and cluster.get('secondary_event_labels') else 'n/a'}")
-            st.write(f"Risk level: `{cluster.get('risk_level', 'unknown')}`")
-            st.write(f"Max incident score: `{cluster.get('max_incident_score', 'n/a')}`")
-            st.write(f"Key evidence: {', '.join(cluster.get('key_evidence', [])) if isinstance(cluster.get('key_evidence'), list) and cluster.get('key_evidence') else 'n/a'}")
-            st.write(f"Review reason: {cluster.get('review_reason', 'n/a') or 'n/a'}")
-            st.caption(f"Clip IDs: {', '.join(cluster.get('clip_ids', [])) if isinstance(cluster.get('clip_ids'), list) else 'n/a'}")
 
     if scene_overview:
         st.subheader("Scene Overview")
@@ -1997,14 +1916,6 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
             )
     else:
         st.caption("No selected clips are available in the event timeline.")
-
-    st.subheader("Detection Outcome")
-    if priority_count > 0:
-        st.error("Priority suspicious activity detected.")
-    elif review_count > 0:
-        st.warning("No priority suspicious event confirmed. Some clips are marked for review.")
-    else:
-        st.success("No priority suspicious event detected in the selected clips. The video mainly shows routine activity.")
 
     compiled_info = results["compiled_video"] if isinstance(results["compiled_video"], dict) else {}
     export_info = results["exported_clips"].get("compiled_review_video", {}) if isinstance(results["exported_clips"], dict) else {}
@@ -2059,21 +1970,6 @@ def _render_results_summary(run_dir: Path, results: dict[str, Any]) -> None:
             else:
                 st.warning(message)
 
-    verification = compiled_info.get("playback_recommended_verification") or compiled_info.get("video_verification", {})
-    backend_value = compiled_info.get("compiled_video_backend") or export_info.get("backend") or "unavailable"
-    fps_value = verification.get("fps", "unavailable")
-    frame_count_value = verification.get("frame_count", "unavailable")
-    readable_value = "yes" if verification.get("readable_by_opencv") is True else "unavailable"
-    info_cols = st.columns(4)
-    info_cols[0].write(f"Backend: `{backend_value}`")
-    info_cols[1].write(f"FPS: `{fps_value}`")
-    info_cols[2].write(f"Frame count: `{frame_count_value}`")
-    info_cols[3].write(f"Readable: `{readable_value}`")
-    with st.expander("Compiled video manifest details"):
-        _render_json_details("Compiled Video Manifest", compiled_info or export_info)
-
-    report_path = run_dir / "19_demo_report.html"
-    st.write(f"19_demo_report.html path: `{report_path}`")
 
 
 def _render_success_panel(run_dir: Path) -> None:
@@ -2101,7 +1997,7 @@ def _render_events_tab(run_dir: Path, results: dict[str, Any]) -> None:
         for item in items
         if isinstance(item, dict) and str(item.get("source_clip_id", "")).strip()
     }
-    show_raw_qwen = st.checkbox("Show raw Qwen output", value=False)
+    show_raw_qwen = st.checkbox("Show raw VLM output", value=False)
     review_clusters = summary.get("review_clusters", []) if isinstance(summary.get("review_clusters"), list) else []
 
     if review_clusters:
@@ -2452,9 +2348,25 @@ def main() -> None:
         quick_result_mode = st.checkbox("Quick result mode", value=False)
         if robbery_demo_mode and quick_result_mode:
             st.warning("Quick result mode overrides this robbery-demo preset toward Quick scan behavior. Turn it OFF for jewelry robbery/theft analysis.")
-        st.caption("Quick result mode scans the video, selects the most important few clips, and sends only those clips to Qwen. This is faster but less exhaustive.")
+        st.caption("Quick result mode scans the video, selects the most important few clips, and sends only those clips to the selected VLM. This is faster but less exhaustive.")
+        clean_step16_step17_test_mode = st.checkbox(
+            "Clean Step 16/17 test mode",
+            value=False,
+            help="Forces the reliable prompt-summary test path: Qwen backend, Step 16 prompt override, and Step 16B incident recheck disabled.",
+        )
+        if clean_step16_step17_test_mode:
+            st.info(
+                "Clean Step 16/17 test mode is ON. This run will force Qwen, use the neutral temporal-strip prompt, "
+                "disable incident recheck/fallback pass, and avoid silent Step 16B override behavior."
+            )
+        step16_prompt_file = st.text_input(
+            "Step 16 prompt file",
+            value=DEFAULT_STEP16_TEST_PROMPT_PATH,
+            disabled=not clean_step16_step17_test_mode,
+            help="Used only when Clean Step 16/17 test mode is enabled.",
+        )
         st.subheader("Analysis sensitivity")
-        st.caption("Fast modes review fewer frames and fewer clips. They are good for normal traffic/road videos. Sensitive modes sample more frames and send more clips to Qwen. Use Jewelry shop robbery demo, Sensitive Incident Review, or High Accuracy Review for robbery, theft, fight, fall, collision, or other subtle incidents.")
+        st.caption("Fast modes review fewer frames and fewer clips. They are good for normal traffic/road videos. Sensitive modes sample more frames and send more clips to the selected VLM. Use Jewelry shop robbery demo, Sensitive Incident Review, or High Accuracy Review for robbery, theft, fight, fall, collision, or other subtle incidents.")
         is_custom_mode = processing_preset == "Custom"
         if is_custom_mode:
             sample_every_seconds = st.slider(
@@ -2469,12 +2381,12 @@ def main() -> None:
             st.caption(f"Equivalent analysis sampled FPS: `{sampled_fps:.3f}`")
             st.caption("This is analysis sampling FPS, not the original video FPS.")
             top_k = st.slider(
-                "Top-K clips sent to Qwen",
+                "Top-K clips sent to VLM",
                 min_value=3,
                 max_value=25,
                 value=int(preset_values["top_k"]),
                 step=1,
-                help="More clips means Qwen reviews more moments. Better for subtle incidents, but slower.",
+                help="More clips means the selected VLM reviews more moments. Better for subtle incidents, but slower.",
             )
             motion_threshold = st.slider(
                 "Motion threshold",
@@ -2484,7 +2396,7 @@ def main() -> None:
                 step=0.01,
                 help="Lower threshold catches smaller movement but may include more normal activity.",
             )
-            qwen_max_new_tokens = st.slider("Qwen max tokens", min_value=128, max_value=768, value=int(preset_values["qwen_max_new_tokens"]), step=64)
+            qwen_max_new_tokens = st.slider("VLM max tokens", min_value=128, max_value=768, value=int(preset_values["qwen_max_new_tokens"]), step=64)
         else:
             sample_every_seconds = float(preset_values["sample_every_seconds"])
             top_k = int(preset_values["top_k"])
@@ -2493,10 +2405,29 @@ def main() -> None:
             sampled_fps = 1.0 / sample_every_seconds if sample_every_seconds > 0 else 0.0
             st.write(f"Sample interval: `{sample_every_seconds}` sec")
             st.write(f"Equivalent analysis sampled FPS: `{sampled_fps:.3f}`")
-            st.write(f"Top-K clips sent to Qwen: `{top_k}`")
+            st.write(f"Top-K clips sent to VLM: `{top_k}`")
             st.write(f"Motion threshold: `{motion_threshold}`")
-        qwen_model_id = st.text_input("Qwen model id", value="qwen2.5vl:7b")
-        qwen_batch_size = st.number_input("Qwen batch size", min_value=1, value=int(preset_values["qwen_batch_size"]), step=1)
+        vlm_backend_label = st.selectbox(
+            "VLM backend",
+            list(VLM_BACKEND_OPTIONS.keys()),
+            index=list(VLM_BACKEND_OPTIONS.values()).index("qwen"),
+            help="Choose which vision-language model Step 16 should use on Top-K strip inputs.",
+            disabled=clean_step16_step17_test_mode,
+        )
+        vlm_backend = VLM_BACKEND_OPTIONS[vlm_backend_label]
+        if clean_step16_step17_test_mode:
+            vlm_backend = "qwen"
+        if vlm_backend == "qwen":
+            qwen_model_id = st.text_input(
+                "Qwen model id",
+                value=DEFAULT_QWEN_MODEL_ID,
+                disabled=clean_step16_step17_test_mode,
+            )
+            smolvlm_model_id = DEFAULT_SMOLVLM_MODEL_ID
+        else:
+            qwen_model_id = DEFAULT_QWEN_MODEL_ID
+            smolvlm_model_id = st.text_input("SmolVLM model id", value=DEFAULT_SMOLVLM_MODEL_ID)
+        qwen_batch_size = st.number_input("VLM batch size", min_value=1, value=int(preset_values["qwen_batch_size"]), step=1)
         st.caption("Batch size 4 may be slower or unstable depending on GPU memory. Start with 1 or 2.")
         run_yolo = st.checkbox("Run YOLO", value=True)
         yolo_model = st.text_input("YOLO model", value="yolov8n.pt")
@@ -2514,22 +2445,26 @@ def main() -> None:
             incident_fallback_pass = st.checkbox(
                 "Incident-sensitive fallback pass",
                 value=bool(preset_values.get("incident_fallback_pass", False)),
+                disabled=clean_step16_step17_test_mode,
                 help="If no priority/review clips are found, the pipeline may retry with more Top-K clips. This is useful for subtle incidents but slower.",
             )
             enable_incident_recheck = st.checkbox(
                 "Enable incident recheck",
                 value=bool(preset_values.get("enable_incident_recheck", False)),
+                disabled=clean_step16_step17_test_mode,
                 help="Reserved for Step 16B incident reasoning. If Step 16B is not implemented yet, this setting will be recorded but skipped safely.",
             )
             incident_recheck_all_topk = st.checkbox(
                 "Recheck all Top-K clips",
                 value=bool(preset_values.get("incident_recheck_all_topk", False)),
+                disabled=clean_step16_step17_test_mode,
                 help="Reserved for high-accuracy incident reasoning.",
             )
             incident_focus_label = st.selectbox(
                 "Incident focus",
                 list(INCIDENT_FOCUS_OPTIONS.keys()),
                 index=list(INCIDENT_FOCUS_OPTIONS.values()).index(str(preset_values.get("incident_focus", "general"))),
+                disabled=clean_step16_step17_test_mode,
                 help="Choose the main incident family the serious-incident recheck should prioritize.",
             )
             incident_focus = INCIDENT_FOCUS_OPTIONS[incident_focus_label]
@@ -2604,7 +2539,7 @@ def main() -> None:
             st.write(f"VLM input strategy: `{vlm_input_strategy}`")
             st.write(f"Max VLM inputs: `{max_vlm_inputs}`")
         if top_k >= 20 or sample_every_seconds <= 1.0:
-            st.warning("Sensitive settings may be slower because more frames are sampled and more clips are sent to Qwen.")
+            st.warning("Sensitive settings may be slower because more frames are sampled and more clips are sent to the selected VLM.")
         if sample_every_seconds >= 3.0:
             st.warning("Sparse sampling can miss short actions. For robbery/theft/fight videos, use 1.0 sec or 0.5 sec sampling.")
         create_compiled_review_video = st.checkbox("Create compiled review video", value=True)
@@ -2613,10 +2548,10 @@ def main() -> None:
         seconds_per_title_card = st.number_input("Seconds per title card", min_value=0.1, value=1.5, step=0.1)
         max_video_seconds = st.text_input("Process first N seconds only", value="", placeholder="Leave empty for full video")
         st.caption("For testing speed, process only the first N seconds. Leave empty to process full video.")
-        st.caption("Large videos are processed by sampling and Top-K selection. The full video is not sent to Qwen.")
+        st.caption("Large videos are processed by sampling and Top-K selection. The full video is not sent to the selected VLM.")
         st.caption("Speed recommendations:")
         st.caption("For 1-5 minute videos: Balanced or Fast demo")
-        st.caption("For 30-60 minute videos: Fast demo, sample every 4-5 seconds, Top-K 5, Qwen tokens 192-256")
+        st.caption("For 30-60 minute videos: Fast demo, sample every 4-5 seconds, Top-K 5, VLM tokens 192-256")
         st.caption("For multi-hour CCTV: Use existing file path/import folder, sample every 5-10 seconds, run quick result first")
 
         st.header("Existing Run Viewer")
@@ -2672,12 +2607,17 @@ def main() -> None:
         "pipeline_engine_id": PIPELINE_ENGINE_MAP[pipeline_engine]["engine_id"],
         "analysis_sensitivity_mode": processing_preset,
         "processing_preset": processing_preset,
+        "clean_step16_step17_test_mode": clean_step16_step17_test_mode,
         "quick_result_mode": quick_result_mode,
         "sample_every_seconds": sample_every_seconds,
         "top_k": int(top_k),
         "top_k_max": 25,
         "motion_threshold": motion_threshold,
+        "vlm_backend": vlm_backend,
         "qwen_model_id": qwen_model_id,
+        "smolvlm_model_id": smolvlm_model_id,
+        "step16_prompt_file": step16_prompt_file if clean_step16_step17_test_mode else "",
+        "qwen_local_files_only": bool(clean_step16_step17_test_mode),
         "qwen_max_new_tokens": int(qwen_max_new_tokens),
         "qwen_batch_size": int(qwen_batch_size),
         "run_yolo": run_yolo,
@@ -2704,6 +2644,15 @@ def main() -> None:
         "seconds_per_title_card": seconds_per_title_card,
         "max_video_seconds": max_video_seconds,
     }
+    if clean_step16_step17_test_mode:
+        settings["vlm_backend"] = "qwen"
+        settings["qwen_model_id"] = DEFAULT_QWEN_MODEL_ID
+        settings["smolvlm_model_id"] = DEFAULT_SMOLVLM_MODEL_ID
+        settings["incident_fallback_pass"] = False
+        settings["enable_incident_recheck"] = False
+        settings["incident_recheck_all_topk"] = False
+        settings["incident_focus"] = "general"
+        settings["quick_result_mode"] = False
     if robbery_demo_mode:
         settings["quick_result_mode"] = False
     if quick_result_mode:
@@ -2807,8 +2756,8 @@ def main() -> None:
                 else:
                     st.error("Failed to stop the running pipeline process.")
         st.write("Why this is faster than manual review")
-        st.caption("The fast pipeline does not try to watch every frame with Qwen. It scans the video using motion and YOLO, selects Top-K important clips, and sends only those clips to Qwen. This creates a searchable evidence report so reviewers do not need to watch the full video.")
-        st.caption("Large videos are handled by sampling and Top-K selection. Processing time depends mainly on video length, GPU speed, YOLO settings, and number of selected Qwen clips.")
+        st.caption("The fast pipeline does not try to watch every frame with the selected VLM. It scans the video using motion and YOLO, selects Top-K important clips, and sends only those clips to the selected VLM. This creates a searchable evidence report so reviewers do not need to watch the full video.")
+        st.caption("Large videos are handled by sampling and Top-K selection. Processing time depends mainly on video length, GPU speed, YOLO settings, and number of selected VLM clips.")
         if selected_video_path is not None:
             st.write(f"Selected video path: `{selected_video_path}`")
             duration_seconds = get_video_duration_seconds(selected_video_path)
@@ -2830,7 +2779,7 @@ def main() -> None:
             duration_seconds = None
         st.write(f"Expected pipeline mode: `{effective_pipeline_engine}`")
         if quick_result_mode:
-            st.info("Quick Result Mode is enabled. The UI will prioritize a fast first result using sparse sampling, small Top-K selection, and lower Qwen token limits.")
+            st.info("Quick Result Mode is enabled. The UI will prioritize a fast first result using sparse sampling, small Top-K selection, and lower VLM token limits.")
         st.write("Analysis settings to be passed:")
         st.json(
             {
@@ -2840,6 +2789,8 @@ def main() -> None:
                 "top_k_clips": settings["top_k"],
                 "top_k_max_clips": settings["top_k_max"],
                 "motion_threshold": settings["motion_threshold"],
+                "vlm_backend": settings["vlm_backend"],
+                "vlm_model_id": settings["qwen_model_id"] if settings["vlm_backend"] == "qwen" else settings["smolvlm_model_id"],
                 "qwen_max_new_tokens": settings["qwen_max_new_tokens"],
                 "yolo_imgsz": settings["yolo_imgsz"],
                 "yolo_conf": settings["yolo_conf"],
@@ -2906,7 +2857,7 @@ def main() -> None:
                 placeholders["progress_bar"].progress(1.0)
                 placeholders["eta_placeholder"].caption(
                     f"Elapsed: {format_duration(result.get('elapsed_seconds'))} | Estimated remaining: complete | Progress: 100%\n"
-                    "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and Qwen."
+                    "Estimated time is approximate and depends mainly on video length, GPU speed, YOLO, and the selected VLM."
                 )
                 detected_run_path = result.get("detected_run_dir", "not detected")
                 st.caption(

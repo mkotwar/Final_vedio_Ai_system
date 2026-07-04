@@ -227,10 +227,10 @@ def _event_card(
     qwen_block = ""
     if vlm_item:
         qwen_block = (
-            "<details><summary>Qwen Parsed JSON</summary>"
+            "<details><summary>VLM Parsed JSON</summary>"
             f"<pre>{_json_block(vlm_item.get('parsed_json'))}</pre>"
             "</details>"
-            "<details><summary>Raw Qwen Output</summary>"
+            "<details><summary>Raw VLM Output</summary>"
             f"<pre>{_escape(vlm_item.get('raw_vlm_output', ''))}</pre>"
             "</details>"
         )
@@ -283,7 +283,7 @@ def _compact_cards(
         qwen_block = ""
         if vlm_item:
             qwen_block = (
-                "<details><summary>Qwen Output</summary>"
+                "<details><summary>VLM Output</summary>"
                 f"<pre>{_json_block(vlm_item.get('parsed_json'))}</pre>"
                 "</details>"
             )

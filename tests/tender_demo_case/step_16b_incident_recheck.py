@@ -199,11 +199,10 @@ def _clean_text(text: Any) -> str:
     return cleaned
 
 
-def _load_tender_demo_qwen_vlm():
+def _load_tender_demo_vlm_factory():
     try:
-        from tests.tender_demo_case.tender_demo_vlm_adapter import TenderDemoQwenVLM
-
-        return TenderDemoQwenVLM
+        from tests.tender_demo_case.tender_demo_vlm_adapter import create_tender_demo_vlm
+        return create_tender_demo_vlm
     except ModuleNotFoundError:
         adapter_path = Path(__file__).resolve().parent / "tender_demo_vlm_adapter.py"
         spec = importlib.util.spec_from_file_location("tender_demo_vlm_adapter", adapter_path)
@@ -211,7 +210,7 @@ def _load_tender_demo_qwen_vlm():
             raise ImportError(f"Unable to load tender demo VLM adapter from: {adapter_path}")
         adapter_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(adapter_module)
-        return adapter_module.TenderDemoQwenVLM
+        return adapter_module.create_tender_demo_vlm
 
 
 def _extract_json_text(raw_output: str) -> str:
@@ -1012,7 +1011,7 @@ def _parse_incident_output(raw_text: str, item: dict[str, Any], incident_focus: 
             except json.JSONDecodeError as exc:
                 parse_errors.append(str(exc))
     else:
-        parse_errors.append("No JSON object found in Qwen output.")
+        parse_errors.append("No JSON object found in VLM output.")
 
     return False, _baseline_incident_recheck(item, incident_focus), " | ".join(parse_errors), True
 
@@ -1103,12 +1102,21 @@ def run_incident_recheck_reasoning(run_dir: Path) -> dict[str, Any]:
     existing_raw_outputs = _load_existing_raw_outputs(output_path)
     recheck_all = _safe_bool_env("TENDER_DEMO_INCIDENT_RECHECK_ALL_TOPK", DEFAULT_INCIDENT_RECHECK_ALL_TOPK)
     incident_focus = _read_incident_focus()
+    requested_backend = os.environ.get("TENDER_DEMO_VLM_BACKEND", "qwen").strip().lower() or "qwen"
 
     vlm = None
+    vlm_health: dict[str, Any] = {}
+    resolved_backend = requested_backend
     adapter_error: str | None = None
     try:
-        TenderDemoQwenVLM = _load_tender_demo_qwen_vlm()
-        vlm = TenderDemoQwenVLM()
+        create_tender_demo_vlm = _load_tender_demo_vlm_factory()
+        vlm = create_tender_demo_vlm()
+        if hasattr(vlm, "health_check"):
+            try:
+                vlm_health = vlm.health_check()
+            except Exception:
+                vlm_health = {}
+        resolved_backend = str(vlm_health.get("backend", requested_backend)).strip() or requested_backend
     except Exception as exc:
         adapter_error = str(exc)
         if existing_raw_outputs:
@@ -1219,6 +1227,9 @@ def run_incident_recheck_reasoning(run_dir: Path) -> dict[str, Any]:
     ]
 
     payload = {
+        "vlm_backend": resolved_backend,
+        "requested_vlm_backend": requested_backend,
+        "vlm_health": vlm_health,
         "total_inputs": len(results),
         "rechecked_clips": len(rechecked_items),
         "successful_outputs": successful_outputs,
@@ -1227,6 +1238,7 @@ def run_incident_recheck_reasoning(run_dir: Path) -> dict[str, Any]:
             "incident_recheck_enabled": True,
             "incident_recheck_all_topk": recheck_all,
             "incident_focus": incident_focus,
+            "vlm_backend": resolved_backend,
         },
         "inputs_summary": {
             "step15_items": len(step15_items),
@@ -1277,6 +1289,7 @@ def run_incident_recheck_reasoning(run_dir: Path) -> dict[str, Any]:
     report_path = run_dir / INCIDENT_RECHECK_REPORT_NAME
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
+    print(f"[tender-demo] Incident recheck VLM backend: {resolved_backend}")
     print(f"[tender-demo] Rechecked clips: {len(rechecked_items)}")
     print(f"[tender-demo] Incident recheck priority clips: {len(priority_items)}")
     print(f"[tender-demo] Incident recheck review clips: {len(review_items)}")

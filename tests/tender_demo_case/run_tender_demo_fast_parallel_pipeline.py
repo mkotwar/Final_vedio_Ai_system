@@ -60,6 +60,8 @@ except Exception:  # pragma: no cover - optional isolated step
 
 
 FAST_DEFAULTS = {
+    "TENDER_DEMO_VLM_BACKEND": "qwen",
+    "TENDER_DEMO_SMOLVLM_MODEL_ID": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
     "TENDER_DEMO_SAMPLE_EVERY_SECONDS": "3.0",
     "TENDER_DEMO_TOP_K_CLIPS": "5",
     "TENDER_DEMO_QWEN_BATCH_SIZE": "1",
@@ -153,6 +155,9 @@ def _apply_mode_defaults() -> None:
 def _runtime_settings_snapshot() -> dict[str, Any]:
     return {
         "sample_every_seconds": float(os.environ.get("TENDER_DEMO_SAMPLE_EVERY_SECONDS", FAST_DEFAULTS["TENDER_DEMO_SAMPLE_EVERY_SECONDS"])),
+        "vlm_backend": os.environ.get("TENDER_DEMO_VLM_BACKEND", FAST_DEFAULTS["TENDER_DEMO_VLM_BACKEND"]),
+        "qwen_model_id": os.environ.get("TENDER_DEMO_QWEN_MODEL_ID", ""),
+        "smolvlm_model_id": os.environ.get("TENDER_DEMO_SMOLVLM_MODEL_ID", FAST_DEFAULTS["TENDER_DEMO_SMOLVLM_MODEL_ID"]),
         "top_k_clips": int(os.environ.get("TENDER_DEMO_TOP_K_CLIPS", FAST_DEFAULTS["TENDER_DEMO_TOP_K_CLIPS"])),
         "top_k_max": int(os.environ.get("TENDER_DEMO_TOP_K_MAX_CLIPS", FAST_DEFAULTS["TENDER_DEMO_TOP_K_MAX_CLIPS"])),
         "motion_threshold": float(os.environ.get("TENDER_DEMO_MOTION_THRESHOLD", FAST_DEFAULTS["TENDER_DEMO_MOTION_THRESHOLD"])),
@@ -189,6 +194,9 @@ def _analysis_settings_snapshot() -> dict[str, Any]:
     )
     return {
         "mode": os.environ.get("TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE", FAST_DEFAULTS["TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE"]),
+        "vlm_backend": os.environ.get("TENDER_DEMO_VLM_BACKEND", FAST_DEFAULTS["TENDER_DEMO_VLM_BACKEND"]),
+        "qwen_model_id": os.environ.get("TENDER_DEMO_QWEN_MODEL_ID", ""),
+        "smolvlm_model_id": os.environ.get("TENDER_DEMO_SMOLVLM_MODEL_ID", FAST_DEFAULTS["TENDER_DEMO_SMOLVLM_MODEL_ID"]),
         "sample_every_seconds": sample_every_seconds,
         "approx_sampled_fps": round(1.0 / sample_every_seconds, 3) if sample_every_seconds > 0 else 0.0,
         "top_k_clips": int(os.environ.get("TENDER_DEMO_TOP_K_CLIPS", FAST_DEFAULTS["TENDER_DEMO_TOP_K_CLIPS"])),
@@ -388,7 +396,7 @@ def main() -> None:
     max_video_seconds = _read_env_float("TENDER_DEMO_MAX_VIDEO_SECONDS", 0.0)
 
     print("[tender-demo-fast] Fast mode enabled: skipping old all-clip VLM path.")
-    print("[tender-demo-fast] Qwen will run only on Top-K selected clips.")
+    print("[tender-demo-fast] Selected VLM will run only on Top-K selected clips.")
 
     video_path = _read_video_path()
     run_dir = _create_debug_run_dir(video_path)
@@ -469,7 +477,7 @@ def main() -> None:
             _run_step(15, "create Top-K VLM inputs", lambda: create_topk_vlm_inputs(run_dir), step_metrics)
             if (run_dir / "15_vlm_coverage_audit.json").exists():
                 _run_step("15B", "VLM coverage audit", lambda: (run_dir / "15_vlm_coverage_audit.json").read_text(encoding="utf-8"), step_metrics)
-            _run_step(16, "Qwen on Top-K only", lambda: run_qwen_on_topk_vlm_inputs(run_dir), step_metrics)
+            _run_step(16, "VLM on Top-K only", lambda: run_qwen_on_topk_vlm_inputs(run_dir), step_metrics)
             incident_recheck_enabled = _read_env_bool(
                 "TENDER_DEMO_ENABLE_INCIDENT_RECHECK",
                 FAST_DEFAULTS["TENDER_DEMO_ENABLE_INCIDENT_RECHECK"].strip().lower() == "true",

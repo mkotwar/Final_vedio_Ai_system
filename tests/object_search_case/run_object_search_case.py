@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -28,6 +29,19 @@ PERSON_CLASS_NAME = "person"
 BAG_CLASS_NAMES = {"backpack", "handbag", "suitcase"}
 VEHICLE_CLASS_NAMES = {"bicycle", "car", "motorcycle", "bus", "truck"}
 LICENSE_PLATE_CLASS_NAMES = {"car", "motorcycle", "bus", "truck"}
+OCR_MUKUL_DIR = Path(r"C:\Mukul K\OCR_MUKUL")
+OCR_MUKUL_PLATE_MODEL_PATH = OCR_MUKUL_DIR / "license_plate_weights.pt"
+OCR_MUKUL_FLORENCE_ADAPTER_PATH = OCR_MUKUL_DIR / "adaptor_florance_baseFT"
+OCR_MUKUL_BASE_MODEL_ID = "microsoft/Florence-2-base-ft"
+VALID_INDIAN_STATE_CODES = {
+    "AN", "AP", "AR", "AS", "BR", "CH", "DN", "DD", "DL", "GA", "GJ",
+    "HR", "HP", "JK", "KA", "KL", "LD", "MP", "MH", "MN", "ML", "MZ",
+    "NL", "OR", "PY", "PB", "RJ", "SK", "TN", "TR", "UP", "WB", "TS",
+    "UK", "LA", "CG", "JH",
+}
+_PLATE_DETECTOR_MODEL: Any | None = None
+_PLATE_DETECTOR_ATTEMPTED = False
+_FLORENCE_STATE: dict[str, Any] | None = None
 
 
 @dataclass
@@ -73,14 +87,6 @@ def _load_benchmark_tracker():
 BenchmarkBoTSORTTracker = _load_benchmark_tracker()
 
 
-def _load_ocr_service():
-    try:
-        from app.services.ocr import OCRService as ocr_service_class
-        return ocr_service_class
-    except Exception:
-        return None
-
-
 def _debug_root() -> Path:
     return Path(__file__).resolve().parent / "debug_runs"
 
@@ -116,6 +122,79 @@ def _load_yolo(model_name: str):
     except ImportError as exc:  # pragma: no cover
         raise ImportError("Ultralytics is required. Install it with: pip install ultralytics") from exc
     return YOLO(model_name)
+
+
+def _load_optional_plate_detector():
+    global _PLATE_DETECTOR_MODEL, _PLATE_DETECTOR_ATTEMPTED
+    if _PLATE_DETECTOR_MODEL is not None:
+        return _PLATE_DETECTOR_MODEL
+    if _PLATE_DETECTOR_ATTEMPTED:
+        return None
+    _PLATE_DETECTOR_ATTEMPTED = True
+    if not OCR_MUKUL_PLATE_MODEL_PATH.exists():
+        return None
+    try:
+        _PLATE_DETECTOR_MODEL = _load_yolo(str(OCR_MUKUL_PLATE_MODEL_PATH))
+    except Exception:
+        _PLATE_DETECTOR_MODEL = None
+    return _PLATE_DETECTOR_MODEL
+
+
+def _load_optional_florence_bundle() -> dict[str, Any]:
+    global _FLORENCE_STATE
+    if _FLORENCE_STATE is not None:
+        return _FLORENCE_STATE
+
+    state: dict[str, Any] = {
+        "available": False,
+        "status": "unavailable",
+        "device": "cpu",
+        "model": None,
+        "processor": None,
+        "using_adapter": False,
+    }
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM, AutoProcessor
+    except Exception:
+        _FLORENCE_STATE = state
+        return state
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    state["device"] = device
+
+    try:
+        processor_source = str(OCR_MUKUL_FLORENCE_ADAPTER_PATH) if OCR_MUKUL_FLORENCE_ADAPTER_PATH.exists() else OCR_MUKUL_BASE_MODEL_ID
+        processor = AutoProcessor.from_pretrained(processor_source, trust_remote_code=True, local_files_only=False)
+        model = AutoModelForCausalLM.from_pretrained(
+            OCR_MUKUL_BASE_MODEL_ID,
+            trust_remote_code=True,
+            attn_implementation="eager",
+            local_files_only=False,
+        ).to(device)
+        using_adapter = False
+        if OCR_MUKUL_FLORENCE_ADAPTER_PATH.exists():
+            try:
+                from peft import PeftModel
+
+                model = PeftModel.from_pretrained(model, str(OCR_MUKUL_FLORENCE_ADAPTER_PATH))
+                using_adapter = True
+            except Exception:
+                using_adapter = False
+        model.eval()
+        state.update(
+            {
+                "available": True,
+                "status": "ready" if using_adapter else "ready_base_only",
+                "model": model,
+                "processor": processor,
+                "using_adapter": using_adapter,
+            }
+        )
+    except Exception as exc:
+        state["status"] = f"load_failed:{exc.__class__.__name__}"
+    _FLORENCE_STATE = state
+    return state
 
 
 def _sample_video_frames(
@@ -334,25 +413,96 @@ def _object_appearance_terms(class_name: str, crop: np.ndarray) -> list[str]:
     return terms
 
 
-def _extract_plate_region(vehicle_crop: np.ndarray) -> np.ndarray | None:
+def _resize_proportionally_if_needed(image: np.ndarray, target_width: int = 200, target_height: int = 150) -> np.ndarray:
+    h, w = image.shape[:2]
+    if h == 0 or w == 0:
+        return image
+    if w < target_width or h < target_height:
+        scale_factor = max(target_width / w, target_height / h)
+        return cv2.resize(image, (int(w * scale_factor), int(h * scale_factor)), interpolation=cv2.INTER_LINEAR)
+    return image
+
+
+def _is_valid_indian_plate(text: str) -> bool:
+    clean_text = re.sub(r"[^A-Z0-9]", "", str(text).upper())
+    if len(clean_text) > 10:
+        return False
+    if re.match(r"^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$", clean_text):
+        return clean_text[:2] in VALID_INDIAN_STATE_CODES
+    return bool(re.match(r"^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$", clean_text))
+
+
+def _prepare_plate_crop(plate_crop_raw: np.ndarray) -> np.ndarray | None:
+    if plate_crop_raw.size == 0:
+        return None
+    plate_crop = _resize_proportionally_if_needed(plate_crop_raw)
+    ycrcb = cv2.cvtColor(plate_crop, cv2.COLOR_BGR2YCrCb)
+    y_channel, cr_channel, cb_channel = cv2.split(ycrcb)
+    y_eq = cv2.equalizeHist(y_channel)
+    plate_crop = cv2.cvtColor(cv2.merge([y_eq, cr_channel, cb_channel]), cv2.COLOR_YCrCb2BGR)
+    return cv2.GaussianBlur(plate_crop, (3, 3), 0)
+
+
+def _detect_plate_crop_from_vehicle(vehicle_crop: np.ndarray) -> tuple[np.ndarray | None, float | None, str]:
     if vehicle_crop.size == 0:
+        return None, None, "vehicle_crop_unavailable"
+    plate_model = _load_optional_plate_detector()
+    if plate_model is None:
+        return None, None, "plate_detector_unavailable"
+    try:
+        plate_results = plate_model(vehicle_crop, conf=0.5, verbose=False)
+        if not plate_results or len(plate_results[0].boxes) == 0:
+            return None, None, "no_plate_detection"
+        best_plate = max(plate_results[0].boxes, key=lambda box: float(box.conf[0]))
+        px1, py1, px2, py2 = map(int, best_plate.xyxy[0])
+        px1 = max(0, px1)
+        py1 = max(0, py1)
+        px2 = min(vehicle_crop.shape[1], px2)
+        py2 = min(vehicle_crop.shape[0], py2)
+        plate_crop_raw = vehicle_crop[py1:py2, px1:px2]
+        prepared_crop = _prepare_plate_crop(plate_crop_raw)
+        if prepared_crop is None:
+            return None, None, "plate_crop_invalid"
+        return prepared_crop, float(best_plate.conf[0]), "detected"
+    except Exception:
+        return None, None, "plate_detection_failed"
+
+
+def _run_florence_inference(image_cv: np.ndarray, task_prompt: str, text_input: str | None = None, use_adapter: bool = True) -> str | None:
+    florence_state = _load_optional_florence_bundle()
+    if not florence_state.get("available"):
         return None
-    height, width = vehicle_crop.shape[:2]
-    if height < 24 or width < 40:
+    try:
+        import torch
+        from PIL import Image
+    except Exception:
         return None
-    x1 = int(width * 0.18)
-    x2 = int(width * 0.82)
-    y1 = int(height * 0.45)
-    y2 = int(height * 0.88)
-    if x2 <= x1 or y2 <= y1:
-        return None
-    plate_region = vehicle_crop[y1:y2, x1:x2]
-    if plate_region.size == 0:
-        return None
-    enlarged = cv2.resize(plate_region, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
-    gray = cv2.cvtColor(enlarged, cv2.COLOR_BGR2GRAY)
-    normalized = cv2.equalizeHist(gray)
-    return cv2.cvtColor(normalized, cv2.COLOR_GRAY2BGR)
+
+    model = florence_state["model"]
+    processor = florence_state["processor"]
+    device = str(florence_state.get("device", "cpu"))
+    prompt = task_prompt + (text_input or "")
+    image_pil = Image.fromarray(cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB))
+    inputs = processor(text=prompt, images=image_pil, return_tensors="pt").to(device)
+
+    context = torch.no_grad()
+    with context:
+        generated_ids = model.generate(
+            input_ids=inputs["input_ids"],
+            pixel_values=inputs["pixel_values"],
+            max_new_tokens=256,
+            do_sample=False,
+            num_beams=3,
+            use_cache=False,
+        )
+    generated_text = processor.batch_decode(generated_ids, skip_special_tokens=False)[0]
+    parsed = processor.post_process_generation(
+        generated_text,
+        task=task_prompt,
+        image_size=(image_pil.width, image_pil.height),
+    )
+    value = parsed.get(task_prompt)
+    return str(value).strip() if value is not None else None
 
 
 def _extract_vehicle_plate_metadata(
@@ -367,36 +517,49 @@ def _extract_vehicle_plate_metadata(
     base_result = {
         "plate_ocr_status": "not_applicable",
         "plate_crop_path": None,
+        "plate_detection_status": "not_applicable",
+        "license_plate_confidence": None,
         "plate_detected_text": [],
         "license_plates": [],
         "best_license_plate": None,
+        "vehicle_color_florence": None,
+        "vehicle_color_status": "not_applicable",
         "best_plate_timestamp_seconds": round(float(timestamp_seconds), 3),
         "best_plate_timestamp_text": _format_seconds(float(timestamp_seconds)),
     }
     if class_name not in LICENSE_PLATE_CLASS_NAMES:
         return base_result
 
-    plate_region = _extract_plate_region(crop)
+    vehicle_color = _run_florence_inference(crop, "<VQA>", "What is the primary color of the vehicle?", use_adapter=False)
+    if vehicle_color:
+        normalized_color = vehicle_color.strip().lower()
+        base_result["vehicle_color_florence"] = normalized_color
+        base_result["vehicle_color_status"] = "success"
+    else:
+        base_result["vehicle_color_status"] = "florence_unavailable_or_failed"
+
+    plate_region, plate_confidence, plate_detection_status = _detect_plate_crop_from_vehicle(crop)
+    base_result["plate_detection_status"] = plate_detection_status
+    base_result["license_plate_confidence"] = round(float(plate_confidence), 4) if plate_confidence is not None else None
     if plate_region is None:
-        base_result["plate_ocr_status"] = "plate_region_unavailable"
+        base_result["plate_ocr_status"] = plate_detection_status
         return base_result
 
     plate_crop_path = plate_crops_dir / f"{object_id}_{frame_id}_plate.jpg"
     cv2.imwrite(str(plate_crop_path), plate_region)
     base_result["plate_crop_path"] = _to_repo_relative(plate_crop_path)
-
-    ocr_service = _load_ocr_service()
-    if ocr_service is None:
-        base_result["plate_ocr_status"] = "ocr_service_unavailable"
+    extracted_text = _run_florence_inference(plate_region, "<OCR>", use_adapter=True)
+    if not extracted_text:
+        base_result["plate_ocr_status"] = "florence_ocr_unavailable_or_failed"
         return base_result
 
-    ocr_result = ocr_service.extract_text(plate_crop_path)
-    detected_text = [str(text).strip() for text in ocr_result.get("detected_text", []) if str(text).strip()]
-    license_plates = [str(text).strip().upper() for text in ocr_result.get("license_plates", []) if str(text).strip()]
-    base_result["plate_detected_text"] = list(dict.fromkeys(detected_text))
+    normalized_text = re.sub(r"[^A-Z0-9]", "", extracted_text.upper())
+    detected_text = [str(extracted_text).strip()] if str(extracted_text).strip() else []
+    license_plates = [normalized_text] if normalized_text and _is_valid_indian_plate(normalized_text) else []
+    base_result["plate_detected_text"] = list(dict.fromkeys(detected_text + ([normalized_text] if normalized_text else [])))
     base_result["license_plates"] = list(dict.fromkeys(license_plates))
     base_result["best_license_plate"] = base_result["license_plates"][0] if base_result["license_plates"] else None
-    base_result["plate_ocr_status"] = "success" if base_result["license_plates"] else "no_plate_match"
+    base_result["plate_ocr_status"] = "success" if base_result["license_plates"] else "ocr_attempted_no_match"
     return base_result
 
 
@@ -464,6 +627,9 @@ def _build_track_summaries(
                         f"plate {plate_metadata['best_license_plate']}",
                     ]
                 )
+            if plate_metadata.get("vehicle_color_florence"):
+                vehicle_color_term = str(plate_metadata["vehicle_color_florence"]).strip().lower()
+                appearance_terms.extend([vehicle_color_term, f"{vehicle_color_term} {class_name}"])
             crop_name = f"{object_id}_{frame_id}.jpg"
             crop_path = crops_dir / crop_name
             cv2.imwrite(str(crop_path), crop)
@@ -490,9 +656,13 @@ def _build_track_summaries(
                     "best_license_plate_frame_path": None,
                     "best_license_plate_crop_path": None,
                     "best_license_plate_timestamp_seconds": None,
+                    "best_license_plate_confidence": None,
                     "plate_detected_text": set(),
                     "license_plates": set(),
                     "plate_ocr_statuses": set(),
+                    "plate_detection_statuses": set(),
+                    "vehicle_color_florence": None,
+                    "vehicle_color_statuses": set(),
                     "plate_candidates": [],
                 },
             )
@@ -509,18 +679,26 @@ def _build_track_summaries(
                     "confidence": round(confidence, 4),
                     "plate_crop_path": plate_metadata.get("plate_crop_path"),
                     "plate_ocr_status": plate_metadata.get("plate_ocr_status"),
+                    "plate_detection_status": plate_metadata.get("plate_detection_status"),
+                    "license_plate_confidence": plate_metadata.get("license_plate_confidence"),
                     "plate_detected_text": plate_metadata.get("plate_detected_text", []),
                     "license_plates": plate_metadata.get("license_plates", []),
+                    "vehicle_color_florence": plate_metadata.get("vehicle_color_florence"),
+                    "vehicle_color_status": plate_metadata.get("vehicle_color_status"),
                 }
             )
             track["appearance_terms"].update(str(term).strip().lower() for term in appearance_terms if str(term).strip())
             track["plate_ocr_statuses"].add(str(plate_metadata.get("plate_ocr_status", "not_applicable")))
+            track.setdefault("plate_detection_statuses", set()).add(str(plate_metadata.get("plate_detection_status", "not_applicable")))
+            track.setdefault("vehicle_color_statuses", set()).add(str(plate_metadata.get("vehicle_color_status", "not_applicable")))
             track["plate_detected_text"].update(
                 str(term).strip() for term in plate_metadata.get("plate_detected_text", []) if str(term).strip()
             )
             track["license_plates"].update(
                 str(term).strip().upper() for term in plate_metadata.get("license_plates", []) if str(term).strip()
             )
+            if plate_metadata.get("vehicle_color_florence") and not track.get("vehicle_color_florence"):
+                track["vehicle_color_florence"] = str(plate_metadata.get("vehicle_color_florence")).strip().lower()
             if plate_metadata.get("best_license_plate"):
                 plate_candidate = {
                     "license_plate": plate_metadata["best_license_plate"],
@@ -530,6 +708,7 @@ def _build_track_summaries(
                     "frame_path": _to_repo_relative(frame_path) if frame_path else None,
                     "crop_path": _to_repo_relative(crop_path),
                     "plate_crop_path": plate_metadata.get("plate_crop_path"),
+                    "license_plate_confidence": plate_metadata.get("license_plate_confidence"),
                 }
                 track["plate_candidates"].append(plate_candidate)
                 if score > float(track["best_plate_score"]):
@@ -538,6 +717,7 @@ def _build_track_summaries(
                     track["best_license_plate_frame_path"] = _to_repo_relative(frame_path) if frame_path else None
                     track["best_license_plate_crop_path"] = plate_metadata.get("plate_crop_path")
                     track["best_license_plate_timestamp_seconds"] = round(timestamp_seconds, 3)
+                    track["best_license_plate_confidence"] = plate_metadata.get("license_plate_confidence")
             if score > float(track["best_score"]):
                 track["best_score"] = score
                 track["best_frame_path"] = _to_repo_relative(frame_path) if frame_path else None
@@ -590,15 +770,19 @@ def _build_track_summaries(
                 else "ocr_attempted_no_match"
             ),
             "plate_ocr_statuses": sorted(set(track["plate_ocr_statuses"])),
+            "plate_detection_statuses": sorted(set(track.get("plate_detection_statuses", set()))),
             "plate_detected_text": plate_detected_text,
             "license_plates": license_plates,
             "best_license_plate": track["best_license_plate"],
             "best_license_plate_frame_path": track["best_license_plate_frame_path"],
             "best_license_plate_crop_path": track["best_license_plate_crop_path"],
             "best_license_plate_timestamp_seconds": track["best_license_plate_timestamp_seconds"],
+            "best_license_plate_confidence": track.get("best_license_plate_confidence"),
             "best_license_plate_timestamp_text": _format_seconds(track["best_license_plate_timestamp_seconds"])
             if track["best_license_plate_timestamp_seconds"] is not None
             else None,
+            "vehicle_color_florence": track.get("vehicle_color_florence"),
+            "vehicle_color_statuses": sorted(set(track.get("vehicle_color_statuses", set()))),
             "plate_candidates": unique_plate_candidates[:10],
             "search_text": search_text,
             "frame_hits": sorted(track["frame_hits"], key=lambda item: float(item["timestamp_seconds"])),
@@ -738,6 +922,7 @@ def main() -> None:
         "sampled_frame_count": video_info["sampled_frame_count"],
         "tracked_object_count": len(search_index),
         "tracks_with_license_plate": sum(1 for item in search_index if item.get("best_license_plate")),
+        "tracks_with_florence_vehicle_color": sum(1 for item in search_index if item.get("vehicle_color_florence")),
         "tracked_by_class": {
             class_name: sum(1 for item in search_index if item["class_name"] == class_name)
             for class_name in sorted({item["class_name"] for item in search_index})

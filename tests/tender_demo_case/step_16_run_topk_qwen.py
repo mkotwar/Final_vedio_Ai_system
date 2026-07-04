@@ -30,10 +30,10 @@ def _load_required_manifest(path: Path) -> list[dict[str, Any]]:
     raise ValueError("15_topk_vlm_inputs.json must contain either a list or an object with an 'items' list.")
 
 
-def _load_tender_demo_qwen_vlm():
+def _load_tender_demo_vlm_factory():
     try:
-        from tests.tender_demo_case.tender_demo_vlm_adapter import TenderDemoQwenVLM
-        return TenderDemoQwenVLM
+        from tests.tender_demo_case.tender_demo_vlm_adapter import create_tender_demo_vlm
+        return create_tender_demo_vlm
     except ModuleNotFoundError:
         adapter_path = Path(__file__).resolve().parent / "tender_demo_vlm_adapter.py"
         spec = importlib.util.spec_from_file_location("tender_demo_vlm_adapter", adapter_path)
@@ -41,7 +41,7 @@ def _load_tender_demo_qwen_vlm():
             raise ImportError(f"Unable to load tender demo VLM adapter from: {adapter_path}")
         adapter_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(adapter_module)
-        return adapter_module.TenderDemoQwenVLM
+        return adapter_module.create_tender_demo_vlm
 
 
 def _record_identity(item: dict[str, Any]) -> str:
@@ -104,6 +104,24 @@ def _safe_bool_env(name: str, default: bool) -> bool:
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
     return default
+
+
+def _read_prompt_override_text() -> str | None:
+    raw_value = os.environ.get("TENDER_DEMO_STEP16_PROMPT_FILE", "").strip()
+    if not raw_value:
+        return None
+
+    candidate = Path(raw_value).expanduser()
+    if not candidate.is_absolute():
+        candidate = (_repo_root() / candidate).resolve()
+
+    if not candidate.exists() or not candidate.is_file():
+        raise FileNotFoundError(f"Step 16 prompt override file does not exist: {candidate}")
+
+    prompt_text = candidate.read_text(encoding="utf-8").strip()
+    if not prompt_text:
+        raise ValueError(f"Step 16 prompt override file is empty: {candidate}")
+    return prompt_text
 
 
 def _compact_step16_prompt() -> str:
@@ -264,6 +282,9 @@ def _build_prompt_for_item(item: dict[str, Any]) -> str:
 
 
 def get_tender_demo_step16_prompt() -> str:
+    prompt_override = _read_prompt_override_text()
+    if prompt_override:
+        return prompt_override
     if _safe_bool_env("TENDER_DEMO_FAST_COMPACT_QWEN_SCHEMA", DEFAULT_FAST_COMPACT_QWEN_SCHEMA):
         return _compact_step16_prompt()
     return _legacy_step16_prompt()
@@ -313,7 +334,7 @@ def _build_fallback_parsed_json(raw_text: str) -> dict[str, Any]:
     sentence = _first_useful_sentence(raw_text)
     description = re.sub(r"\s+", " ", str(raw_text or "")).strip()[:250]
     if not description:
-        description = sentence or "No usable Qwen text was returned."
+        description = sentence or "No usable VLM text was returned."
     return {
         "scene_type": "unknown",
         "caption": sentence or description,
@@ -393,7 +414,8 @@ def parse_qwen_json_output(raw_text: str) -> tuple[bool, dict[str, Any] | None, 
 
 
 def run_qwen_on_topk_vlm_inputs(run_dir: Path) -> list[dict[str, Any]]:
-    print("[tender-demo] Starting Step 16: run Qwen on Top-K VLM inputs")
+    requested_backend = os.environ.get("TENDER_DEMO_VLM_BACKEND", "qwen").strip().lower() or "qwen"
+    print(f"[tender-demo] Starting Step 16: run {requested_backend} on Top-K VLM inputs")
 
     manifest_path = run_dir / "15_topk_vlm_inputs.json"
     items = _load_required_manifest(manifest_path)
@@ -406,14 +428,22 @@ def run_qwen_on_topk_vlm_inputs(run_dir: Path) -> list[dict[str, Any]]:
     existing_raw_outputs = _load_existing_raw_outputs(output_path)
 
     vlm = None
+    vlm_health: dict[str, Any] = {}
+    resolved_backend = requested_backend
     adapter_error: str | None = None
     try:
-        TenderDemoQwenVLM = _load_tender_demo_qwen_vlm()
-        vlm = TenderDemoQwenVLM()
+        create_tender_demo_vlm = _load_tender_demo_vlm_factory()
+        vlm = create_tender_demo_vlm()
+        if hasattr(vlm, "health_check"):
+            try:
+                vlm_health = vlm.health_check()
+            except Exception:
+                vlm_health = {}
+        resolved_backend = str(vlm_health.get("backend", requested_backend)).strip() or requested_backend
     except Exception as exc:
         adapter_error = str(exc)
         if existing_raw_outputs:
-            print("[tender-demo] Qwen adapter unavailable. Reusing existing raw outputs for reparsing.")
+            print("[tender-demo] Selected VLM adapter unavailable. Reusing existing raw outputs for reparsing.")
         else:
             raise
 
@@ -448,7 +478,7 @@ def run_qwen_on_topk_vlm_inputs(run_dir: Path) -> list[dict[str, Any]]:
             raw_outputs = vlm.generate_batch(image_paths=image_paths, prompts=prompts)
         except Exception as exc:
             raw_outputs = []
-            error_message = f"Qwen batch generation failed: {exc}"
+            error_message = f"VLM batch generation failed: {exc}"
             for record, _ in valid_requests:
                 record["parse_error"] = error_message
                 record["parsed_json"] = _build_fallback_parsed_json("")
@@ -492,6 +522,9 @@ def run_qwen_on_topk_vlm_inputs(run_dir: Path) -> list[dict[str, Any]]:
     empty_outputs = sum(1 for item in results if not str(item.get("raw_vlm_output", "")).strip())
 
     payload = {
+        "vlm_backend": resolved_backend,
+        "requested_vlm_backend": requested_backend,
+        "vlm_health": vlm_health,
         "total_inputs": len(items),
         "successful_outputs": successful_outputs,
         "failed_outputs": failed_outputs,
@@ -501,6 +534,7 @@ def run_qwen_on_topk_vlm_inputs(run_dir: Path) -> list[dict[str, Any]]:
     }
     output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    print(f"[tender-demo] Selected VLM backend: {resolved_backend}")
     print(f"[tender-demo] Successful strict parses: {successful_outputs}")
     print(f"[tender-demo] Failed strict parses: {failed_outputs}")
     print(f"[tender-demo] Fallback parses used: {fallback_outputs}")

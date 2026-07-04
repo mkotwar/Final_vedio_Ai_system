@@ -154,6 +154,8 @@ def _render_overview(summary: dict[str, Any], video_info: dict[str, Any], items:
         st.metric("Classes found", len(tracked_by_class))
     if summary.get("tracks_with_license_plate") is not None:
         st.caption(f"Tracks with readable plate text: {summary.get('tracks_with_license_plate')}")
+    if summary.get("tracks_with_florence_vehicle_color") is not None:
+        st.caption(f"Tracks with Florence vehicle color: {summary.get('tracks_with_florence_vehicle_color')}")
 
     detail_cols = st.columns([1, 1])
     with detail_cols[0]:
@@ -214,6 +216,8 @@ def _render_result(item: dict[str, Any]) -> None:
             "frame_hits": item.get("frame_hit_count"),
             "search_score": item.get("search_score", 0),
             "best_license_plate": item.get("best_license_plate") or "n/a",
+            "best_license_plate_confidence": item.get("best_license_plate_confidence") or "n/a",
+            "vehicle_color_florence": item.get("vehicle_color_florence") or "n/a",
             "plate_ocr_status": item.get("plate_ocr_status", "n/a"),
         }
     )
@@ -253,7 +257,10 @@ def _render_result(item: dict[str, Any]) -> None:
             "frame_id": hit.get("frame_id"),
             "confidence": hit.get("confidence"),
             "plate_text": ", ".join(hit.get("license_plates", []) or []),
+            "plate_confidence": hit.get("license_plate_confidence"),
+            "vehicle_color_florence": hit.get("vehicle_color_florence"),
             "plate_status": hit.get("plate_ocr_status"),
+            "plate_detection_status": hit.get("plate_detection_status"),
         }
         for hit in item.get("frame_hits", [])[:20]
     ]
@@ -344,6 +351,7 @@ def main() -> None:
             "best_timestamp": item.get("best_timestamp_text"),
             "frame_hits": item.get("frame_hit_count"),
             "license_plate": item.get("best_license_plate") or "",
+            "vehicle_color_florence": item.get("vehicle_color_florence") or "",
             "appearance_terms": ", ".join(item.get("appearance_terms", [])[:4]),
         }
         for item in results[: min(limit, 10)]

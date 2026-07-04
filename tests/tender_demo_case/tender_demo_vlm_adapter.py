@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import time
@@ -7,8 +8,9 @@ from pathlib import Path
 from typing import Any
 
 import torch
+from PIL import Image
 from qwen_vl_utils import process_vision_info
-from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+from transformers import AutoModelForImageTextToText, AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 try:
     from transformers import BitsAndBytesConfig
@@ -17,10 +19,14 @@ except ImportError:  # pragma: no cover - depends on installed transformers vers
 
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
+DEFAULT_SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 DEFAULT_BATCH_SIZE = 1
 DEFAULT_MAX_NEW_TOKENS = 512
 DEFAULT_MIN_PIXELS = 256 * 28 * 28
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
+DEFAULT_VLM_BACKEND = "qwen"
+SUPPORTED_VLM_BACKENDS = {"qwen", "smolvlm"}
+SMOLVLM_REQUIRED_PACKAGES = ("num2words",)
 
 MODEL_ID_ALIASES = {
     "qwen2.5vl:7b": DEFAULT_MODEL_ID,
@@ -58,6 +64,22 @@ def _read_env_bool(name: str, default: bool) -> bool:
     raise ValueError(f"Environment variable {name} must be a boolean-like value. Received: {raw_value!r}")
 
 
+def _read_selected_vlm_backend() -> str:
+    raw_value = os.environ.get("TENDER_DEMO_VLM_BACKEND", DEFAULT_VLM_BACKEND).strip().lower()
+    if raw_value in SUPPORTED_VLM_BACKENDS:
+        return raw_value
+    print(f"[tender-demo-vlm] Unsupported TENDER_DEMO_VLM_BACKEND={raw_value!r}; falling back to {DEFAULT_VLM_BACKEND}")
+    return DEFAULT_VLM_BACKEND
+
+
+def _generic_vlm_device() -> str | None:
+    raw_value = os.environ.get("TENDER_DEMO_VLM_DEVICE")
+    if raw_value is None:
+        return None
+    normalized = raw_value.strip().lower()
+    return normalized or None
+
+
 def _resolve_model_id(model_id: str) -> str:
     normalized = (model_id or "").strip()
     if not normalized:
@@ -82,6 +104,16 @@ def _resolve_local_snapshot(model_id: str) -> Path | None:
     if snapshot_path.exists():
         return snapshot_path
     return None
+
+
+def _missing_python_packages(package_names: tuple[str, ...]) -> list[str]:
+    missing: list[str] = []
+    for package_name in package_names:
+        try:
+            importlib.import_module(package_name)
+        except Exception:
+            missing.append(package_name)
+    return missing
 
 
 def get_strict_json_smoke_prompt() -> str:
@@ -155,9 +187,9 @@ class TenderDemoQwenVLM:
         requested_model_id = _read_env_str("TENDER_DEMO_QWEN_MODEL_ID", DEFAULT_MODEL_ID)
         self.model_id = _resolve_model_id(requested_model_id)
 
-        requested_device = os.environ.get("TENDER_DEMO_QWEN_DEVICE")
+        requested_device = _generic_vlm_device() or os.environ.get("TENDER_DEMO_QWEN_DEVICE")
         default_device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.device = (requested_device.strip() if requested_device else default_device).lower()
+        self.device = (requested_device.strip() if isinstance(requested_device, str) and requested_device else default_device).lower()
         if self.device.startswith("cuda") and not torch.cuda.is_available():
             print("[tender-demo-vlm] CUDA requested but not available; falling back to cpu")
             self.device = "cpu"
@@ -341,6 +373,7 @@ class TenderDemoQwenVLM:
 
     def health_check(self) -> dict[str, Any]:
         return {
+            "backend": "qwen",
             "model_loaded": self.model is not None and self.processor is not None,
             "model_id": self.model_id,
             "resolved_model_source": self.resolved_model_source,
@@ -351,6 +384,158 @@ class TenderDemoQwenVLM:
             "cuda_available": torch.cuda.is_available(),
             "quantization_enabled": self.quantization_enabled,
         }
+
+
+class TenderDemoSmolVLM:
+    def __init__(self) -> None:
+        self.model_id = _read_env_str("TENDER_DEMO_SMOLVLM_MODEL_ID", DEFAULT_SMOLVLM_MODEL_ID)
+        requested_device = _generic_vlm_device() or os.environ.get("TENDER_DEMO_SMOLVLM_DEVICE")
+        default_device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = (requested_device.strip() if isinstance(requested_device, str) and requested_device else default_device).lower()
+        if self.device.startswith("cuda") and not torch.cuda.is_available():
+            print("[tender-demo-vlm] CUDA requested but not available; falling back to cpu")
+            self.device = "cpu"
+
+        self.batch_size = _read_env_int("TENDER_DEMO_QWEN_BATCH_SIZE", DEFAULT_BATCH_SIZE)
+        self.max_new_tokens = _read_env_int("TENDER_DEMO_QWEN_MAX_NEW_TOKENS", DEFAULT_MAX_NEW_TOKENS)
+        self.local_files_only = _read_env_bool("TENDER_DEMO_QWEN_LOCAL_FILES_ONLY", False)
+
+        self.model: Any | None = None
+        self.processor: Any | None = None
+        self.resolved_model_source: str | None = None
+
+    def load_model(self) -> None:
+        if self.model is not None and self.processor is not None:
+            print("[tender-demo-vlm] Reusing already loaded SmolVLM model")
+            return
+
+        missing_packages = _missing_python_packages(SMOLVLM_REQUIRED_PACKAGES)
+        if missing_packages:
+            raise ImportError(
+                "SmolVLM requires missing package(s): "
+                + ", ".join(missing_packages)
+                + ". Install them in video-search-engine/.venv before running tender demo."
+            )
+
+        self.resolved_model_source = self.model_id
+        print(f"[tender-demo-vlm] Resolved SmolVLM model id: {self.model_id}")
+        print(f"[tender-demo-vlm] Device: {self.device}")
+        print(f"[tender-demo-vlm] Local files only: {self.local_files_only}")
+        print(f"[tender-demo-vlm] Batch size: {self.batch_size}")
+        print(f"[tender-demo-vlm] Max new tokens: {self.max_new_tokens}")
+
+        self.processor = AutoProcessor.from_pretrained(
+            self.model_id,
+            local_files_only=self.local_files_only,
+        )
+
+        model_kwargs: dict[str, Any] = {
+            "local_files_only": self.local_files_only,
+        }
+        if self.device.startswith("cuda"):
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                self.model_id,
+                torch_dtype=torch.bfloat16,
+                device_map={"": "cuda:0"},
+                **model_kwargs,
+            )
+        else:
+            self.model = AutoModelForImageTextToText.from_pretrained(
+                self.model_id,
+                **model_kwargs,
+            )
+            self.model.to(self.device)
+
+    def generate_batch(
+        self,
+        image_paths: list[Path],
+        prompts: list[str],
+        max_new_tokens: int | None = None,
+    ) -> list[str]:
+        if len(image_paths) != len(prompts):
+            raise ValueError("image_paths and prompts must have the same length.")
+        if not image_paths:
+            return []
+
+        self.load_model()
+        assert self.model is not None
+        assert self.processor is not None
+
+        effective_max_new_tokens = max_new_tokens or self.max_new_tokens
+        resolved_paths = [Path(path).expanduser().resolve() for path in image_paths]
+        outputs: list[str] = []
+
+        for image_path, prompt in zip(resolved_paths, prompts):
+            if not image_path.exists():
+                raise FileNotFoundError(f"Image path does not exist: {image_path}")
+            if not image_path.is_file():
+                raise FileNotFoundError(f"Image path is not a file: {image_path}")
+
+            image = Image.open(image_path).convert("RGB")
+            message = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ]
+
+            start_time = time.perf_counter()
+            model_inputs = self.processor.apply_chat_template(
+                message,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+            ).to(self.device)
+
+            with torch.inference_mode():
+                generated_ids = self.model.generate(
+                    **model_inputs,
+                    max_new_tokens=effective_max_new_tokens,
+                )
+
+            prompt_length = model_inputs["input_ids"].shape[1]
+            output_text = self.processor.batch_decode(
+                generated_ids[:, prompt_length:],
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )[0]
+            elapsed_seconds = time.perf_counter() - start_time
+            print(
+                f"[tender-demo-vlm] SmolVLM generation time: {elapsed_seconds:.2f}s | "
+                f"Output length: {len(output_text)} chars"
+            )
+            outputs.append(output_text)
+
+        return outputs
+
+    def generate_one(self, image_path: Path, prompt: str) -> str:
+        outputs = self.generate_batch([image_path], [prompt])
+        return outputs[0]
+
+    def health_check(self) -> dict[str, Any]:
+        return {
+            "backend": "smolvlm",
+            "model_loaded": self.model is not None and self.processor is not None,
+            "model_id": self.model_id,
+            "resolved_model_source": self.resolved_model_source,
+            "device": self.device,
+            "batch_size": self.batch_size,
+            "max_new_tokens": self.max_new_tokens,
+            "local_files_only": self.local_files_only,
+            "cuda_available": torch.cuda.is_available(),
+            "quantization_enabled": False,
+        }
+
+
+def create_tender_demo_vlm():
+    backend = _read_selected_vlm_backend()
+    if backend == "smolvlm":
+        return TenderDemoSmolVLM()
+    return TenderDemoQwenVLM()
 
 
 if __name__ == "__main__":
