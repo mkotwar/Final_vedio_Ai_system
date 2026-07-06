@@ -33,6 +33,7 @@ STANDARD_STAGE_WEIGHTS = {
     10: 15,
     11: 8,
     "11B": 4,
+    "11C": 4,
     12: 4,
     13: 4,
     14: 3,
@@ -58,6 +59,7 @@ STANDARD_STAGE_LABELS = {
     10: "Running YOLO detection",
     11: "Scoring YOLO object evidence",
     "11B": "Estimating object motion state",
+    "11C": "Plate OCR + vehicle color enrichment",
     12: "Fusing motion + YOLO + VLM evidence",
     13: "Ranking candidate clips",
     14: "Selecting Top-K + guardrail clips",
@@ -83,6 +85,7 @@ STANDARD_STAGE_PROGRESS_PERCENT = {
     10: 45,
     11: 55,
     "11B": 58,
+    "11C": 60,
     12: 60,
     13: 66,
     14: 70,
@@ -335,9 +338,12 @@ QUICK_RESULT_SETTINGS = {
 }
 VLM_BACKEND_OPTIONS = {
     "Qwen 2.5 VL": "qwen",
+    "Qwen API (OpenRouter)": "qwen_api",
     "SmolVLM2 500M": "smolvlm",
 }
+VALID_VLM_BACKENDS = set(VLM_BACKEND_OPTIONS.values())
 DEFAULT_QWEN_MODEL_ID = "qwen2.5vl:7b"
+DEFAULT_QWEN_API_MODEL_ID = "qwen/qwen3-vl-8b-instruct"
 DEFAULT_SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 DEFAULT_STEP16_TEST_PROMPT_PATH = "tests/tender_demo_case/prompts/temporal_strip_observation_prompt.txt"
 
@@ -533,8 +539,20 @@ def list_import_folder_videos() -> list[Path]:
     )
 
 
+def normalize_vlm_backend(raw_value: str | None) -> str:
+    normalized = str(raw_value or "").strip().lower()
+    if normalized in VALID_VLM_BACKENDS:
+        return normalized
+    if normalized.startswith("sk-or-v1-"):
+        return "qwen_api"
+    return "qwen"
+
+
 def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, str]:
     env = os.environ.copy()
+    vlm_backend = normalize_vlm_backend(settings.get("vlm_backend"))
+    qwen_model_id = str(settings.get("qwen_model_id", DEFAULT_QWEN_MODEL_ID))
+    smolvlm_model_id = str(settings.get("smolvlm_model_id", DEFAULT_SMOLVLM_MODEL_ID))
     env_updates = {
         "TENDER_DEMO_INPUT_VIDEO": str(selected_video_path),
         "TENDER_DEMO_PIPELINE_ENGINE": str(settings["pipeline_engine_id"]),
@@ -543,9 +561,10 @@ def build_pipeline_env(settings: dict, selected_video_path: Path) -> dict[str, s
         "TENDER_DEMO_TOP_K_CLIPS": str(settings["top_k"]),
         "TENDER_DEMO_TOP_K_MAX_CLIPS": str(settings["top_k_max"]),
         "TENDER_DEMO_MOTION_THRESHOLD": str(settings["motion_threshold"]),
-        "TENDER_DEMO_VLM_BACKEND": str(settings["vlm_backend"]),
-        "TENDER_DEMO_QWEN_MODEL_ID": str(settings["qwen_model_id"]),
-        "TENDER_DEMO_SMOLVLM_MODEL_ID": str(settings["smolvlm_model_id"]),
+        "TENDER_DEMO_VLM_BACKEND": vlm_backend,
+        "TENDER_DEMO_QWEN_MODEL_ID": qwen_model_id,
+        "TENDER_DEMO_QWEN_MODEL": qwen_model_id,
+        "TENDER_DEMO_SMOLVLM_MODEL_ID": smolvlm_model_id,
         "TENDER_DEMO_QWEN_BATCH_SIZE": str(settings["qwen_batch_size"]),
         "TENDER_DEMO_QWEN_MAX_NEW_TOKENS": str(settings["qwen_max_new_tokens"]),
         "TENDER_DEMO_RUN_YOLO": "true" if settings["run_yolo"] else "false",
@@ -612,6 +631,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
         (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
         (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
+        (["Starting Step 11C", "11c_plate_ocr_color_enrichment.json"], "Plate OCR + vehicle color enrichment", 60),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
         (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
@@ -636,6 +656,7 @@ def detect_stage_from_line(line: str, pipeline_engine: str) -> tuple[str | None,
         (["Starting Step 10", "10_yolo_detections.json"], "Running YOLO object detection", 45),
         (["Starting Step 11", "11_yolo_object_scores.json"], "Scoring YOLO evidence", 55),
         (["Starting Step 11B", "11b_object_motion_states.json"], "Estimating object motion state", 58),
+        (["Starting Step 11C", "11c_plate_ocr_color_enrichment.json"], "Plate OCR + vehicle color enrichment", 60),
         (["Starting Step 13", "13_ranked_clips.json"], "Ranking candidate clips", 62),
         (["Starting Step 14", "14_selected_top_clips.json"], "Selecting Top-K + guardrail clips", 68),
         (["Starting Step 14B", "14b_coverage_selected_clips.json"], "Applying incident coverage guardrails", 71),
@@ -668,6 +689,7 @@ def filter_user_friendly_log_line(line: str) -> str | None:
         "Starting Step 10": "Running YOLO object detection...",
         "Starting Step 11": "Scoring YOLO object evidence...",
         "Starting Step 11B": "Estimating object motion state...",
+        "Starting Step 11C": "Running plate OCR and vehicle color enrichment...",
         "Starting Step 12": "Fusing motion + YOLO + VLM evidence...",
         "Starting Step 13": "Ranking candidate clips...",
         "Starting Step 14": "Selecting Top-K + guardrail clips...",
@@ -890,6 +912,7 @@ def _compute_search_cache_buster(debug_runs_dir: Path, scope: str, current_run_d
             current_run_dir / "17_topk_final_summary.json",
             current_run_dir / "16_topk_vlm_outputs.json",
             current_run_dir / "11_yolo_object_scores.json",
+            current_run_dir / "11c_plate_ocr_color_enrichment.json",
         ]
         mtimes = [f"{path.name}:{path.stat().st_mtime_ns}" for path in candidates if path.exists()]
         return "|".join(mtimes) or current_run_dir.name
@@ -911,6 +934,7 @@ def build_or_load_search_index_for_run(run_dir: Path, force_rebuild=False) -> li
     summary_path = run_dir / "17_topk_final_summary.json"
     vlm_path = run_dir / "16_topk_vlm_outputs.json"
     yolo_scores_path = run_dir / "11_yolo_object_scores.json"
+    plate_color_path = run_dir / "11c_plate_ocr_color_enrichment.json"
     if not summary_path.exists():
         return []
 
@@ -919,7 +943,8 @@ def build_or_load_search_index_for_run(run_dir: Path, force_rebuild=False) -> li
         summary_mtime = summary_path.stat().st_mtime
         vlm_mtime = vlm_path.stat().st_mtime if vlm_path.exists() else 0.0
         yolo_mtime = yolo_scores_path.stat().st_mtime if yolo_scores_path.exists() else 0.0
-        if cache_mtime >= max(summary_mtime, vlm_mtime, yolo_mtime):
+        plate_color_mtime = plate_color_path.stat().st_mtime if plate_color_path.exists() else 0.0
+        if cache_mtime >= max(summary_mtime, vlm_mtime, yolo_mtime, plate_color_mtime):
             cached = load_json(cache_path, default=[])
             if isinstance(cached, list):
                 return cached
@@ -934,8 +959,10 @@ def _build_object_search_records_for_run(
     video_info: dict[str, Any],
     yolo_scores: list[dict[str, Any]],
     compiled_video_path: str | None,
+    plate_color_lookup: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict]:
     records: list[dict] = []
+    plate_color_lookup = plate_color_lookup or {}
     for score_item in yolo_scores if isinstance(yolo_scores, list) else []:
         if not isinstance(score_item, dict):
             continue
@@ -951,7 +978,17 @@ def _build_object_search_records_for_run(
             class_name = str(detection.get("class_name", "")).strip().lower()
             if not class_name:
                 continue
+            detection_key = f"frame_{frame_idx:06d}_{detection_index:02d}_{class_name}"
+            plate_color = plate_color_lookup.get(detection_key, {})
             appearance_terms = [str(term).strip().lower() for term in detection.get("appearance_terms", []) if str(term).strip()]
+            vehicle_color = str(plate_color.get("vehicle_color_florence", "")).strip().lower()
+            best_license_plate = str(plate_color.get("best_license_plate", "")).strip().upper()
+            plate_detected_text = [str(term).strip() for term in plate_color.get("plate_detected_text", []) if str(term).strip()]
+            if vehicle_color:
+                appearance_terms.extend([vehicle_color, f"{vehicle_color} {class_name}"])
+            if best_license_plate:
+                appearance_terms.extend([best_license_plate.lower(), f"plate {best_license_plate.lower()}"])
+            appearance_terms = list(dict.fromkeys(appearance_terms))
             crop_path = detection.get("crop_path")
             description = " ".join(
                 part
@@ -961,6 +998,8 @@ def _build_object_search_records_for_run(
                     "at",
                     f"{timestamp_seconds:.1f}s.",
                     f"Appearance: {', '.join(appearance_terms[:4])}." if appearance_terms else "",
+                    f"Vehicle color: {vehicle_color}." if vehicle_color else "",
+                    f"License plate: {best_license_plate}." if best_license_plate else "",
                 ]
                 if part
             ).strip()
@@ -969,6 +1008,9 @@ def _build_object_search_records_for_run(
                     str(video_info.get("video_name", run_dir.name)),
                     f"object {class_name}",
                     " ".join(appearance_terms),
+                    vehicle_color,
+                    best_license_plate,
+                    " ".join(plate_detected_text),
                     str(score_item.get("motion_level", "")),
                     str(score_item.get("selection_reason", "")),
                     str(score_item.get("motion_score_norm", "")),
@@ -1038,6 +1080,14 @@ def _build_object_search_records_for_run(
                     "object_confidence": float(detection.get("confidence", 0.0) or 0.0),
                     "object_class_name": class_name,
                     "appearance_terms": appearance_terms,
+                    "plate_ocr_status": plate_color.get("plate_ocr_status"),
+                    "plate_detection_status": plate_color.get("plate_detection_status"),
+                    "vehicle_color_florence": vehicle_color or None,
+                    "license_plate_confidence": plate_color.get("license_plate_confidence"),
+                    "plate_detected_text": plate_detected_text,
+                    "license_plates": [best_license_plate] if best_license_plate else [],
+                    "best_license_plate": best_license_plate or None,
+                    "plate_crop_path": plate_color.get("plate_crop_path"),
                     "raw_search_text": raw_search_text,
                 }
             )
@@ -1052,6 +1102,7 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
     vlm_outputs = load_json(run_dir / "16_topk_vlm_outputs.json", default={}) or {}
     video_info = load_json(run_dir / "01_video_info.json", default={}) or {}
     yolo_scores = load_json(run_dir / "11_yolo_object_scores.json", default=[]) or []
+    plate_color_items = load_json(run_dir / "11c_plate_ocr_color_enrichment.json", default=[]) or []
     export_manifest = load_json(run_dir / "18_exported_clips.json", default={}) or {}
     compiled_manifest = (
         load_json(run_dir / "18_compiled_review_video.json", default=None)
@@ -1072,6 +1123,20 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
             clip_id = str(item.get("clip_id", "")).strip()
             if clip_id:
                 export_by_clip_id[clip_id] = item
+
+    plate_color_lookup: dict[str, dict[str, Any]] = {}
+    for frame_item in plate_color_items if isinstance(plate_color_items, list) else []:
+        if not isinstance(frame_item, dict):
+            continue
+        detections = frame_item.get("detections", [])
+        if not isinstance(detections, list):
+            continue
+        for detection_item in detections:
+            if not isinstance(detection_item, dict):
+                continue
+            detection_key = str(detection_item.get("detection_key", "")).strip()
+            if detection_key:
+                plate_color_lookup[detection_key] = detection_item
 
     records: list[dict] = []
     for event in summary.get("event_timeline", []) if isinstance(summary.get("event_timeline"), list) else []:
@@ -1300,7 +1365,7 @@ def build_search_records_for_run(run_dir: Path) -> list[dict]:
         }
         resolved_compiled = _extract_compiled_video_path(run_dir, compiled_results)
         compiled_video_path = str(resolved_compiled) if resolved_compiled else None
-    records.extend(_build_object_search_records_for_run(run_dir, video_info, yolo_scores, compiled_video_path))
+    records.extend(_build_object_search_records_for_run(run_dir, video_info, yolo_scores, compiled_video_path, plate_color_lookup))
     return records
 
 
@@ -1603,6 +1668,7 @@ def _render_search_result(record: dict) -> None:
     media_cols = st.columns(2)
     strip_path = resolve_media_path(run_dir, record.get("object_crop_path") or record.get("strip_path"))
     yolo_path = resolve_media_path(run_dir, record.get("top_annotated_frame_path"))
+    plate_crop_path = resolve_media_path(run_dir, record.get("plate_crop_path"))
     if record_type == "object_evidence":
         metric_cols = st.columns(5)
         metric_cols[0].metric("Class", str(record.get("object_class_name", "unknown")))
@@ -1620,6 +1686,14 @@ def _render_search_result(record: dict) -> None:
         if description:
             st.write(description)
 
+        detail_bits = []
+        if str(record.get("vehicle_color_florence", "")).strip():
+            detail_bits.append(f"Vehicle color: `{record.get('vehicle_color_florence')}`")
+        if str(record.get("best_license_plate", "")).strip():
+            detail_bits.append(f"License plate: `{record.get('best_license_plate')}`")
+        if detail_bits:
+            st.write(" | ".join(detail_bits))
+
         with media_cols[0]:
             if media_exists(strip_path):
                 _render_fixed_width_image(strip_path, "Object crop")
@@ -1630,6 +1704,8 @@ def _render_search_result(record: dict) -> None:
                 _render_fixed_width_image(yolo_path, "Annotated frame")
             else:
                 st.warning("Annotated frame not found.")
+        if media_exists(plate_crop_path):
+            _render_fixed_width_image(plate_crop_path, "Detected plate crop")
 
         with st.expander("Object metadata", expanded=False):
             st.write(
@@ -1641,6 +1717,11 @@ def _render_search_result(record: dict) -> None:
                     "time_range": record.get("time_range"),
                     "confidence": record.get("confidence"),
                     "appearance_terms": record.get("appearance_terms", []),
+                    "vehicle_color_florence": record.get("vehicle_color_florence"),
+                    "best_license_plate": record.get("best_license_plate"),
+                    "license_plate_confidence": record.get("license_plate_confidence"),
+                    "plate_ocr_status": record.get("plate_ocr_status"),
+                    "plate_detection_status": record.get("plate_detection_status"),
                     "motion_summary": record.get("motion_summary"),
                     "matched_terms": record.get("matched_terms", []),
                 }
@@ -1706,6 +1787,7 @@ def _render_search_result(record: dict) -> None:
                 "run_dir": record.get("run_dir"),
                 "strip_path": record.get("strip_path"),
                 "object_crop_path": record.get("object_crop_path"),
+                "plate_crop_path": record.get("plate_crop_path"),
                 "top_annotated_frame_path": record.get("top_annotated_frame_path"),
                 "compiled_video_path": record.get("compiled_video_path"),
             }
@@ -2352,11 +2434,11 @@ def main() -> None:
         clean_step16_step17_test_mode = st.checkbox(
             "Clean Step 16/17 test mode",
             value=False,
-            help="Forces the reliable prompt-summary test path: Qwen backend, Step 16 prompt override, and Step 16B incident recheck disabled.",
+            help="Forces the reliable prompt-summary test path: Step 16 prompt override on, and Step 16B incident recheck disabled, while still letting you choose the VLM backend.",
         )
         if clean_step16_step17_test_mode:
             st.info(
-                "Clean Step 16/17 test mode is ON. This run will force Qwen, use the neutral temporal-strip prompt, "
+                "Clean Step 16/17 test mode is ON. This run will use the neutral temporal-strip prompt, "
                 "disable incident recheck/fallback pass, and avoid silent Step 16B override behavior."
             )
         step16_prompt_file = st.text_input(
@@ -2410,18 +2492,23 @@ def main() -> None:
         vlm_backend_label = st.selectbox(
             "VLM backend",
             list(VLM_BACKEND_OPTIONS.keys()),
-            index=list(VLM_BACKEND_OPTIONS.values()).index("qwen"),
+            index=list(VLM_BACKEND_OPTIONS.values()).index(
+                normalize_vlm_backend(st.session_state.get("vlm_backend", "qwen"))
+            ),
             help="Choose which vision-language model Step 16 should use on Top-K strip inputs.",
-            disabled=clean_step16_step17_test_mode,
         )
-        vlm_backend = VLM_BACKEND_OPTIONS[vlm_backend_label]
-        if clean_step16_step17_test_mode:
-            vlm_backend = "qwen"
+        vlm_backend = normalize_vlm_backend(VLM_BACKEND_OPTIONS[vlm_backend_label])
         if vlm_backend == "qwen":
             qwen_model_id = st.text_input(
                 "Qwen model id",
                 value=DEFAULT_QWEN_MODEL_ID,
-                disabled=clean_step16_step17_test_mode,
+            )
+            smolvlm_model_id = DEFAULT_SMOLVLM_MODEL_ID
+        elif vlm_backend == "qwen_api":
+            qwen_model_id = st.text_input(
+                "Qwen API model id",
+                value=DEFAULT_QWEN_API_MODEL_ID,
+                help="OpenRouter model id, for example qwen/qwen3-vl-8b-instruct. Set API key/base URL in the terminal before launching Streamlit.",
             )
             smolvlm_model_id = DEFAULT_SMOLVLM_MODEL_ID
         else:
@@ -2617,7 +2704,7 @@ def main() -> None:
         "qwen_model_id": qwen_model_id,
         "smolvlm_model_id": smolvlm_model_id,
         "step16_prompt_file": step16_prompt_file if clean_step16_step17_test_mode else "",
-        "qwen_local_files_only": bool(clean_step16_step17_test_mode),
+        "qwen_local_files_only": bool(clean_step16_step17_test_mode and vlm_backend == "qwen"),
         "qwen_max_new_tokens": int(qwen_max_new_tokens),
         "qwen_batch_size": int(qwen_batch_size),
         "run_yolo": run_yolo,
@@ -2645,9 +2732,6 @@ def main() -> None:
         "max_video_seconds": max_video_seconds,
     }
     if clean_step16_step17_test_mode:
-        settings["vlm_backend"] = "qwen"
-        settings["qwen_model_id"] = DEFAULT_QWEN_MODEL_ID
-        settings["smolvlm_model_id"] = DEFAULT_SMOLVLM_MODEL_ID
         settings["incident_fallback_pass"] = False
         settings["enable_incident_recheck"] = False
         settings["incident_recheck_all_topk"] = False
@@ -2790,7 +2874,7 @@ def main() -> None:
                 "top_k_max_clips": settings["top_k_max"],
                 "motion_threshold": settings["motion_threshold"],
                 "vlm_backend": settings["vlm_backend"],
-                "vlm_model_id": settings["qwen_model_id"] if settings["vlm_backend"] == "qwen" else settings["smolvlm_model_id"],
+                "vlm_model_id": settings["qwen_model_id"] if settings["vlm_backend"] in {"qwen", "qwen_api"} else settings["smolvlm_model_id"],
                 "qwen_max_new_tokens": settings["qwen_max_new_tokens"],
                 "yolo_imgsz": settings["yolo_imgsz"],
                 "yolo_conf": settings["yolo_conf"],

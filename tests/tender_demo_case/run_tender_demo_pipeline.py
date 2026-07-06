@@ -3,8 +3,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import queue
+import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import cv2
 
@@ -18,6 +21,8 @@ ENV_CLIP_OVERLAP_SECONDS = "TENDER_DEMO_CLIP_OVERLAP_SECONDS"
 ENV_CONTEXT_BEFORE_SECONDS = "TENDER_DEMO_CONTEXT_BEFORE_SECONDS"
 ENV_CONTEXT_AFTER_SECONDS = "TENDER_DEMO_CONTEXT_AFTER_SECONDS"
 ENV_MIN_EXPANDED_CLIP_SECONDS = "TENDER_DEMO_MIN_EXPANDED_CLIP_SECONDS"
+ENV_ENABLE_PRE_CANDIDATE_QUEUE = "TENDER_DEMO_ENABLE_PRE_CANDIDATE_QUEUE"
+ENV_PRE_CANDIDATE_QUEUE_SIZE = "TENDER_DEMO_PRE_CANDIDATE_QUEUE_SIZE"
 DEFAULT_SAMPLE_EVERY_SECONDS = 1.0
 DEFAULT_MOTION_THRESHOLD = 0.20
 DEFAULT_MAX_GAP_SECONDS = 2.0
@@ -26,6 +31,8 @@ DEFAULT_CLIP_OVERLAP_SECONDS = 2.0
 DEFAULT_CONTEXT_BEFORE_SECONDS = 2.0
 DEFAULT_CONTEXT_AFTER_SECONDS = 2.0
 DEFAULT_MIN_EXPANDED_CLIP_SECONDS = 4.0
+DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE = True
+DEFAULT_PRE_CANDIDATE_QUEUE_SIZE = 32
 
 
 def _get_repo_root() -> Path:
@@ -124,6 +131,38 @@ def _read_sample_every_seconds() -> float:
 
     print(f"[tender-demo] Using sample interval: {sample_every_seconds} seconds")
     return sample_every_seconds
+
+
+def _read_bool_env(env_name: str, default_value: bool) -> bool:
+    raw_value = os.environ.get(env_name)
+    if raw_value is None:
+        return default_value
+    normalized = raw_value.strip().lower()
+    if normalized in {"true", "1", "yes", "y", "on"}:
+        return True
+    if normalized in {"false", "0", "no", "n", "off"}:
+        return False
+    raise ValueError(
+        f"Environment variable {env_name} must be a boolean string. "
+        f"Received: {raw_value!r}"
+    )
+
+
+def _read_positive_int_env(env_name: str, default_value: int, label: str) -> int:
+    raw_value = os.environ.get(env_name, str(default_value))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Environment variable {env_name} must be a valid integer for {label}. "
+            f"Received: {raw_value!r}"
+        ) from exc
+    if value <= 0:
+        raise ValueError(
+            f"Environment variable {env_name} must be greater than 0 for {label}. "
+            f"Received: {value}"
+        )
+    return value
 
 
 def _read_motion_threshold() -> float:
@@ -341,6 +380,205 @@ def _score_motion_on_sampled_frames(
     print(f"[tender-demo] High motion frames: {high_count}")
     print(f"[tender-demo] Motion scores output path: {motion_scores_path}")
     return motion_scores_path, motion_entries
+
+
+def _finalize_motion_entries(
+    *,
+    raw_scores: list[float],
+    motion_entries: list[dict[str, object]],
+    run_dir: Path,
+) -> tuple[Path, list[dict[str, object]]]:
+    motion_scores_path = run_dir / "03_motion_scores.json"
+    min_raw_score = min(raw_scores)
+    max_raw_score = max(raw_scores)
+    score_range = max_raw_score - min_raw_score
+
+    low_count = 0
+    medium_count = 0
+    high_count = 0
+
+    for entry in motion_entries:
+        raw_motion_score = float(entry["raw_motion_score"])
+        if score_range == 0:
+            motion_score_norm = 0.0
+        else:
+            motion_score_norm = round((raw_motion_score - min_raw_score) / score_range, 6)
+
+        motion_level = _get_motion_level(motion_score_norm)
+        entry["motion_score_norm"] = motion_score_norm
+        entry["motion_level"] = motion_level
+
+        if motion_level == "low":
+            low_count += 1
+        elif motion_level == "medium":
+            medium_count += 1
+        else:
+            high_count += 1
+
+    motion_scores_path.write_text(json.dumps(motion_entries, indent=2), encoding="utf-8")
+
+    print(f"[tender-demo] Total frames scored: {len(motion_entries)}")
+    print(f"[tender-demo] Min raw motion score: {round(min_raw_score, 6)}")
+    print(f"[tender-demo] Max raw motion score: {round(max_raw_score, 6)}")
+    print(f"[tender-demo] Low motion frames: {low_count}")
+    print(f"[tender-demo] Medium motion frames: {medium_count}")
+    print(f"[tender-demo] High motion frames: {high_count}")
+    print(f"[tender-demo] Motion scores output path: {motion_scores_path}")
+    return motion_scores_path, motion_entries
+
+
+def _sample_and_score_motion_with_queue(
+    video_path: Path,
+    run_dir: Path,
+    fps: float,
+    total_frames: int,
+    sample_every_seconds: float,
+    queue_size: int,
+) -> tuple[Path, Path, list[dict[str, object]], Path, list[dict[str, object]]]:
+    if fps <= 0:
+        raise ValueError("Cannot sample frames because video FPS is 0 or invalid.")
+
+    sample_every_frames = max(1, int(round(fps * sample_every_seconds)))
+    frames_dir = run_dir / "02_sampled_frames"
+    frames_dir.mkdir(parents=True, exist_ok=False)
+    manifest_path = run_dir / "02_sampled_frames.json"
+
+    print(f"[tender-demo] Creating sampled frames folder: {frames_dir}")
+    print(
+        f"[tender-demo] Queue-enabled pre-candidate flow active. "
+        f"Sampling every {sample_every_seconds} seconds with queue size {queue_size}."
+    )
+
+    work_queue: queue.Queue[dict[str, object] | object] = queue.Queue(maxsize=max(1, queue_size))
+    sentinel = object()
+    stop_event = threading.Event()
+    errors: list[BaseException] = []
+    manifest_entries: list[dict[str, object]] = []
+    raw_scores: list[float] = []
+    motion_entries: list[dict[str, object]] = []
+
+    def _queue_put(item: dict[str, object] | object) -> None:
+        while not stop_event.is_set():
+            try:
+                work_queue.put(item, block=True, timeout=0.25)
+                return
+            except queue.Full:
+                continue
+        raise RuntimeError("Pre-candidate queue stopped before handoff completed.")
+
+    def producer() -> None:
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            errors.append(RuntimeError(f"OpenCV could not open video for frame sampling: {video_path}"))
+            try:
+                _queue_put(sentinel)
+            except Exception:
+                pass
+            return
+        try:
+            sample_index = 0
+            for frame_idx in range(0, total_frames, sample_every_frames):
+                if stop_event.is_set():
+                    break
+                capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                success, frame = capture.read()
+                if not success or frame is None:
+                    print(
+                        f"[tender-demo] Warning: failed to read frame {frame_idx}; "
+                        "skipping this sample"
+                    )
+                    continue
+
+                frame_filename = f"frame_{frame_idx:06d}.jpg"
+                frame_output_path = frames_dir / frame_filename
+                write_success = cv2.imwrite(str(frame_output_path), frame)
+                if not write_success:
+                    print(
+                        f"[tender-demo] Warning: failed to write sampled frame {frame_idx}; "
+                        "skipping this sample"
+                    )
+                    continue
+
+                sample_index += 1
+                sample_entry = {
+                    "sample_id": f"sample_{sample_index:06d}",
+                    "frame_idx": frame_idx,
+                    "timestamp_seconds": round(frame_idx / fps, 3),
+                    "frame_path": _to_repo_relative_path(frame_output_path),
+                    "sample_reason": "base_interval",
+                }
+                manifest_entries.append(sample_entry)
+                _queue_put(sample_entry)
+        except BaseException as exc:
+            stop_event.set()
+            errors.append(exc)
+        finally:
+            capture.release()
+            try:
+                _queue_put(sentinel)
+            except Exception:
+                pass
+
+    def consumer() -> None:
+        previous_processed_frame = None
+        repo_root = _get_repo_root()
+        try:
+            while True:
+                try:
+                    item = work_queue.get(block=True, timeout=0.25)
+                except queue.Empty:
+                    if stop_event.is_set():
+                        break
+                    continue
+                if item is sentinel:
+                    break
+
+                frame_path = repo_root / str(item["frame_path"])
+                processed_frame = _preprocess_frame_for_motion(frame_path)
+                if previous_processed_frame is None:
+                    raw_motion_score = 0.0
+                else:
+                    diff = cv2.absdiff(previous_processed_frame, processed_frame)
+                    raw_motion_score = round(float(diff.mean()), 6)
+
+                previous_processed_frame = processed_frame
+                raw_scores.append(raw_motion_score)
+                motion_entries.append(
+                    {
+                        "sample_id": item["sample_id"],
+                        "frame_idx": item["frame_idx"],
+                        "timestamp_seconds": item["timestamp_seconds"],
+                        "frame_path": item["frame_path"],
+                        "raw_motion_score": raw_motion_score,
+                    }
+                )
+        except BaseException as exc:
+            stop_event.set()
+            errors.append(exc)
+
+    producer_thread = threading.Thread(target=producer, name="tender-demo-sample-producer", daemon=True)
+    consumer_thread = threading.Thread(target=consumer, name="tender-demo-motion-consumer", daemon=True)
+    producer_thread.start()
+    consumer_thread.start()
+    producer_thread.join()
+    consumer_thread.join()
+
+    if errors:
+        raise RuntimeError(f"Queue-enabled pre-candidate flow failed: {errors[0]}") from errors[0]
+    if not manifest_entries:
+        raise ValueError("Cannot compute motion scores because no sampled frames were created.")
+
+    print(f"[tender-demo] Total sampled frames: {len(manifest_entries)}")
+    print(f"[tender-demo] Sampled frames output folder: {frames_dir}")
+    manifest_path.write_text(json.dumps(manifest_entries, indent=2), encoding="utf-8")
+    print(f"[tender-demo] Sample manifest written to: {manifest_path}")
+
+    motion_scores_path, motion_entries = _finalize_motion_entries(
+        raw_scores=raw_scores,
+        motion_entries=motion_entries,
+        run_dir=run_dir,
+    )
+    return frames_dir, manifest_path, manifest_entries, motion_scores_path, motion_entries
 
 
 def _select_motion_candidates(
@@ -1020,6 +1258,20 @@ def _load_step_11_run_yolo_object_scoring():
         return step_11_module.run_yolo_object_scoring
 
 
+def _load_step_11c_run_plate_ocr_color_enrichment():
+    try:
+        from tests.tender_demo_case.step_11c_plate_ocr_color_enrichment import run_plate_ocr_color_enrichment
+        return run_plate_ocr_color_enrichment
+    except ModuleNotFoundError:
+        step_11c_path = Path(__file__).resolve().parent / "step_11c_plate_ocr_color_enrichment.py"
+        spec = importlib.util.spec_from_file_location("step_11c_plate_ocr_color_enrichment", step_11c_path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load Step 11C plate/color enrichment module from: {step_11c_path}")
+        step_11c_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(step_11c_module)
+        return step_11c_module.run_plate_ocr_color_enrichment
+
+
 def _load_step_12_run_fused_clip_evidence():
     try:
         from tests.tender_demo_case.step_12_fused_clip_evidence import run_fused_clip_evidence
@@ -1141,20 +1393,38 @@ def main() -> None:
     print("[tender-demo] Step 1 complete: video info captured")
 
     sample_every_seconds = _read_sample_every_seconds()
-    _, _, sampled_frames = _sample_base_frames(
-        video_path=video_path,
-        run_dir=run_dir,
-        fps=float(video_info["fps"]),
-        total_frames=int(video_info["total_frames"]),
-        sample_every_seconds=sample_every_seconds,
+    queue_enabled = _read_bool_env(ENV_ENABLE_PRE_CANDIDATE_QUEUE, DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE)
+    queue_size = _read_positive_int_env(
+        ENV_PRE_CANDIDATE_QUEUE_SIZE,
+        DEFAULT_PRE_CANDIDATE_QUEUE_SIZE,
+        "pre-candidate queue size",
     )
-    print("[tender-demo] Step 2 complete: base frame sampling finished")
+    if queue_enabled:
+        _, _, sampled_frames, _, motion_scores = _sample_and_score_motion_with_queue(
+            video_path=video_path,
+            run_dir=run_dir,
+            fps=float(video_info["fps"]),
+            total_frames=int(video_info["total_frames"]),
+            sample_every_seconds=sample_every_seconds,
+            queue_size=queue_size,
+        )
+        print("[tender-demo] Step 2 complete: base frame sampling finished")
+        print("[tender-demo] Step 3 complete: motion scoring finished")
+    else:
+        _, _, sampled_frames = _sample_base_frames(
+            video_path=video_path,
+            run_dir=run_dir,
+            fps=float(video_info["fps"]),
+            total_frames=int(video_info["total_frames"]),
+            sample_every_seconds=sample_every_seconds,
+        )
+        print("[tender-demo] Step 2 complete: base frame sampling finished")
 
-    _, motion_scores = _score_motion_on_sampled_frames(
-        sampled_frames=sampled_frames,
-        run_dir=run_dir,
-    )
-    print("[tender-demo] Step 3 complete: motion scoring finished")
+        _, motion_scores = _score_motion_on_sampled_frames(
+            sampled_frames=sampled_frames,
+            run_dir=run_dir,
+        )
+        print("[tender-demo] Step 3 complete: motion scoring finished")
 
     motion_threshold = _read_motion_threshold()
     _, motion_candidates = _select_motion_candidates(
@@ -1237,6 +1507,11 @@ def main() -> None:
     yolo_object_report = run_yolo_object_scoring(run_dir)
     scored_count = len(yolo_object_report.get("scored_items", []))
     print(f"[tender-demo] Step 11 complete: YOLO object scoring captured ({scored_count} items)")
+
+    run_plate_ocr_color_enrichment = _load_step_11c_run_plate_ocr_color_enrichment()
+    plate_color_report = run_plate_ocr_color_enrichment(run_dir)
+    enriched_count = int(plate_color_report.get("enriched_vehicle_detections", 0) or 0)
+    print(f"[tender-demo] Step 11C complete: plate/color enrichment captured ({enriched_count} vehicle detections)")
 
     rank_candidate_clips = _load_step_13_rank_candidate_clips()
     ranked_clip_report = rank_candidate_clips(run_dir)

@@ -9,23 +9,30 @@ from run_tender_demo_pipeline import (
     DEFAULT_CLIP_OVERLAP_SECONDS,
     DEFAULT_CONTEXT_AFTER_SECONDS,
     DEFAULT_CONTEXT_BEFORE_SECONDS,
+    DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE,
     DEFAULT_MAX_CLIP_SECONDS,
     DEFAULT_MAX_GAP_SECONDS,
+    DEFAULT_PRE_CANDIDATE_QUEUE_SIZE,
     DEFAULT_MIN_EXPANDED_CLIP_SECONDS,
     ENV_CLIP_OVERLAP_SECONDS,
     ENV_CONTEXT_AFTER_SECONDS,
     ENV_CONTEXT_BEFORE_SECONDS,
+    ENV_ENABLE_PRE_CANDIDATE_QUEUE,
     ENV_MAX_CLIP_SECONDS,
     ENV_MAX_GAP_SECONDS,
     ENV_MIN_EXPANDED_CLIP_SECONDS,
+    ENV_PRE_CANDIDATE_QUEUE_SIZE,
     _create_candidate_clips,
     _create_debug_run_dir,
     _expand_candidate_clips,
     _extract_video_info,
+    _read_bool_env,
     _read_motion_threshold,
+    _read_positive_int_env,
     _read_positive_float_env,
     _read_sample_every_seconds,
     _read_video_path,
+    _sample_and_score_motion_with_queue,
     _sample_base_frames,
     _score_motion_on_sampled_frames,
     _select_motion_candidates,
@@ -42,6 +49,7 @@ from step_00_runtime_metrics import (
 from step_10_yolo_detection import run_yolo_detection_on_selected_frames
 from step_11_yolo_object_scoring import run_yolo_object_scoring
 from step_11b_object_motion_state import estimate_object_motion_states
+from step_11c_plate_ocr_color_enrichment import run_plate_ocr_color_enrichment
 from step_02b_adaptive_sampling import run_adaptive_sampling
 from step_02c_frame_candidate_pool import create_frame_candidate_pool
 from step_13_rank_candidate_clips import rank_candidate_clips
@@ -73,6 +81,8 @@ FAST_DEFAULTS = {
     "TENDER_DEMO_CREATE_COMPILED_REVIEW_VIDEO": "true",
     "TENDER_DEMO_COMPILE_NORMAL_IF_NO_EVENTS": "true",
     "TENDER_DEMO_FAST_PARALLEL_BRANCHES": "true",
+    "TENDER_DEMO_ENABLE_PRE_CANDIDATE_QUEUE": "true",
+    "TENDER_DEMO_PRE_CANDIDATE_QUEUE_SIZE": "32",
     "TENDER_DEMO_ANALYSIS_SENSITIVITY_MODE": "Fast demo",
     "TENDER_DEMO_ENABLE_INCIDENT_RECHECK": "false",
     "TENDER_DEMO_INCIDENT_RECHECK_ALL_TOPK": "false",
@@ -184,6 +194,12 @@ def _runtime_settings_snapshot() -> dict[str, Any]:
         "max_vlm_inputs": int(os.environ.get("TENDER_DEMO_MAX_VLM_INPUTS", "25")),
         "critical_timestamps": [part.strip() for part in os.environ.get("TENDER_DEMO_CRITICAL_TIMESTAMPS", "").split(",") if part.strip()],
         "yolo_input_scope": os.environ.get("TENDER_DEMO_YOLO_INPUT_SCOPE", "motion_candidates"),
+        "pre_candidate_queue_enabled": _read_bool_env(ENV_ENABLE_PRE_CANDIDATE_QUEUE, DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE),
+        "pre_candidate_queue_size": _read_positive_int_env(
+            ENV_PRE_CANDIDATE_QUEUE_SIZE,
+            DEFAULT_PRE_CANDIDATE_QUEUE_SIZE,
+            "pre-candidate queue size",
+        ),
     }
 
 
@@ -226,6 +242,12 @@ def _analysis_settings_snapshot() -> dict[str, Any]:
         "max_vlm_inputs": int(os.environ.get("TENDER_DEMO_MAX_VLM_INPUTS", "25")),
         "critical_timestamps": [part.strip() for part in os.environ.get("TENDER_DEMO_CRITICAL_TIMESTAMPS", "").split(",") if part.strip()],
         "yolo_input_scope": os.environ.get("TENDER_DEMO_YOLO_INPUT_SCOPE", "motion_candidates"),
+        "pre_candidate_queue_enabled": _read_bool_env(ENV_ENABLE_PRE_CANDIDATE_QUEUE, DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE),
+        "pre_candidate_queue_size": _read_positive_int_env(
+            ENV_PRE_CANDIDATE_QUEUE_SIZE,
+            DEFAULT_PRE_CANDIDATE_QUEUE_SIZE,
+            "pre-candidate queue size",
+        ),
     }
 
 
@@ -294,7 +316,7 @@ def _run_clip_branch(
 def _run_yolo_branch(run_dir: Path) -> dict[str, Any]:
     branch_started = now_seconds()
     branch_steps: list[dict[str, Any]] = []
-    print("[tender-demo-fast] Starting YOLO branch: Steps 10-11-11B")
+    print("[tender-demo-fast] Starting YOLO branch: Steps 10-11-11B-11C")
     step_10_started = now_seconds()
     run_yolo_detection_on_selected_frames(run_dir)
     branch_steps.append(build_step_result(10, "YOLO detection", step_10_started, status="success"))
@@ -304,8 +326,11 @@ def _run_yolo_branch(run_dir: Path) -> dict[str, Any]:
     step_11b_started = now_seconds()
     estimate_object_motion_states(run_dir)
     branch_steps.append(build_step_result("11B", "object motion state estimation", step_11b_started, status="success"))
+    step_11c_started = now_seconds()
+    run_plate_ocr_color_enrichment(run_dir)
+    branch_steps.append(build_step_result("11C", "plate OCR + Florence color enrichment", step_11c_started, status="success"))
     return {
-        "branch_metrics": build_parallel_branch_result("yolo_branch", [10, 11, "11B"], branch_started, status="success"),
+        "branch_metrics": build_parallel_branch_result("yolo_branch", [10, 11, "11B", "11C"], branch_started, status="success"),
         "step_metrics": branch_steps,
     }
 
@@ -423,30 +448,55 @@ def main() -> None:
         video_info = _run_step(1, "video info", _step_1_video_info, step_metrics)
 
         sample_every_seconds = _read_sample_every_seconds()
-        _, _, sampled_frames = _run_step(
-            2,
-            "frame sampling",
-            lambda: _sample_base_frames(
-                video_path=video_path,
-                run_dir=run_dir,
-                fps=float(video_info["fps"]),
-                total_frames=int(video_info["total_frames"]),
-                sample_every_seconds=sample_every_seconds,
-            ),
-            step_metrics,
+        pre_candidate_queue_enabled = _read_bool_env(
+            ENV_ENABLE_PRE_CANDIDATE_QUEUE,
+            DEFAULT_ENABLE_PRE_CANDIDATE_QUEUE,
         )
+        pre_candidate_queue_size = _read_positive_int_env(
+            ENV_PRE_CANDIDATE_QUEUE_SIZE,
+            DEFAULT_PRE_CANDIDATE_QUEUE_SIZE,
+            "pre-candidate queue size",
+        )
+        if pre_candidate_queue_enabled:
+            _, _, sampled_frames, _, motion_scores = _run_step(
+                "2-3",
+                "queue-backed sampling + motion scoring",
+                lambda: _sample_and_score_motion_with_queue(
+                    video_path=video_path,
+                    run_dir=run_dir,
+                    fps=float(video_info["fps"]),
+                    total_frames=int(video_info["total_frames"]),
+                    sample_every_seconds=sample_every_seconds,
+                    queue_size=pre_candidate_queue_size,
+                ),
+                step_metrics,
+            )
+        else:
+            _, _, sampled_frames = _run_step(
+                2,
+                "frame sampling",
+                lambda: _sample_base_frames(
+                    video_path=video_path,
+                    run_dir=run_dir,
+                    fps=float(video_info["fps"]),
+                    total_frames=int(video_info["total_frames"]),
+                    sample_every_seconds=sample_every_seconds,
+                ),
+                step_metrics,
+            )
 
         adaptive_sampling_enabled = _read_env_bool("TENDER_DEMO_ENABLE_ADAPTIVE_SAMPLING", False)
         if adaptive_sampling_enabled:
             _run_step("02B", "adaptive sampling", lambda: run_adaptive_sampling(run_dir), step_metrics)
             _run_step("02C", "frame candidate pool", lambda: create_frame_candidate_pool(run_dir), step_metrics)
 
-        _, motion_scores = _run_step(
-            3,
-            "motion scoring",
-            lambda: _score_motion_on_sampled_frames(sampled_frames=sampled_frames, run_dir=run_dir),
-            step_metrics,
-        )
+        if not pre_candidate_queue_enabled:
+            _, motion_scores = _run_step(
+                3,
+                "motion scoring",
+                lambda: _score_motion_on_sampled_frames(sampled_frames=sampled_frames, run_dir=run_dir),
+                step_metrics,
+            )
         motion_threshold = _read_motion_threshold()
         _, motion_candidates = _run_step(
             4,

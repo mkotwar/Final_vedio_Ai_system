@@ -7,11 +7,11 @@
 - VLM engine: `native_hf`
 - Configured batch size: `4`
 - Source video duration: `138.57s`
-- Wall-clock latency: `194.57s`
-- Realtime ratio: `1.404x`
+- Wall-clock latency: `309.73s`
+- Realtime ratio: `2.235x`
 - Faster than video length: `False`
 - Total frames extracted: `139`
 - Frames retained for coverage: `73`
 - Frames sent to Qwen: `46`
 - Frames filtered before VLM: `27`
-- Events generated: `4`
+- Events generated: `6`

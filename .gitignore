@@ -113,3 +113,14 @@ ADAPTIVE_SAMPLING_DIAGNOSTIC_REPORT.md
 ADAPTIVE_SAMPLING_REPORT.md
 EVENT_AGGREGATION_REPORT.md
 PERFORMANCE_REPORT.md
+# Model weights
+weights/
+*.pt
+*.pth
+*.onnx
+
+# Large ML model files
+*.pt
+*.pth
+*.onnx
+*.safetensors

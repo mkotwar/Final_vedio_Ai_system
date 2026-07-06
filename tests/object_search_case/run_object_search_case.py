@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import queue
 import re
 import sys
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,10 +31,7 @@ PERSON_CLASS_NAME = "person"
 BAG_CLASS_NAMES = {"backpack", "handbag", "suitcase"}
 VEHICLE_CLASS_NAMES = {"bicycle", "car", "motorcycle", "bus", "truck"}
 LICENSE_PLATE_CLASS_NAMES = {"car", "motorcycle", "bus", "truck"}
-OCR_MUKUL_DIR = Path(r"C:\Mukul K\OCR_MUKUL")
-OCR_MUKUL_PLATE_MODEL_PATH = OCR_MUKUL_DIR / "license_plate_weights.pt"
-OCR_MUKUL_FLORENCE_ADAPTER_PATH = OCR_MUKUL_DIR / "adaptor_florance_baseFT"
-OCR_MUKUL_BASE_MODEL_ID = "microsoft/Florence-2-base-ft"
+PERSON_CLASS_FILTER_IDS = [0]
 VALID_INDIAN_STATE_CODES = {
     "AN", "AP", "AR", "AS", "BR", "CH", "DN", "DD", "DL", "GA", "GJ",
     "HR", "HP", "JK", "KA", "KL", "LD", "MP", "MH", "MN", "ML", "MZ",
@@ -64,6 +63,24 @@ class FrameDetection:
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
+
+
+DEFAULT_LOCAL_PERSON_MODEL = _repo_root() / "Person_detection" / "Person_detection.pt"
+DEFAULT_LOCAL_VEHICLE_MODEL = _repo_root() / "object_yolo" / "best_old.pt"
+DEFAULT_LOCAL_OCR_MUKUL_DIR = _repo_root() / "object_yolo" / "OCR_MUKUL"
+LEGACY_OCR_MUKUL_DIR = Path(r"C:\Mukul K\OCR_MUKUL")
+OCR_MUKUL_BASE_MODEL_ID = "microsoft/Florence-2-base-ft"
+
+
+def _resolve_ocr_mukul_dir() -> Path:
+    if DEFAULT_LOCAL_OCR_MUKUL_DIR.exists() and DEFAULT_LOCAL_OCR_MUKUL_DIR.is_dir():
+        return DEFAULT_LOCAL_OCR_MUKUL_DIR
+    return LEGACY_OCR_MUKUL_DIR
+
+
+OCR_MUKUL_DIR = _resolve_ocr_mukul_dir()
+OCR_MUKUL_PLATE_MODEL_PATH = OCR_MUKUL_DIR / "license_plate_weights.pt"
+OCR_MUKUL_FLORENCE_ADAPTER_PATH = OCR_MUKUL_DIR / "adaptor_florance_baseFT"
 
 
 if str(_repo_root()) not in sys.path:
@@ -270,41 +287,351 @@ def _detect_frames(
     yolo_model_name: str,
     yolo_conf: float,
     yolo_imgsz: int,
+    class_filter_ids: list[int] | None = None,
+    allowed_class_names: set[str] | None = None,
 ) -> list[FrameDetection]:
     model = _load_yolo(yolo_model_name)
+    allowed_names = allowed_class_names or ALLOWED_CLASS_NAMES
     frame_detections: list[FrameDetection] = []
     for frame_id, video_id, timestamp_seconds, frame_path in sampled_frames:
         image = cv2.imread(str(frame_path))
         if image is None:
             continue
-        predictions = model.predict(source=image, conf=yolo_conf, imgsz=yolo_imgsz, verbose=False)
-        names = predictions[0].names if predictions else {}
-        detections: list[Detection] = []
-        if predictions:
-            for box in predictions[0].boxes:
-                class_id = int(box.cls[0].item())
-                class_name = str(names.get(class_id, class_id)).strip().lower()
-                if class_name not in ALLOWED_CLASS_NAMES:
-                    continue
-                detections.append(
-                    Detection(
-                        class_id=class_id,
-                        class_name=class_name,
-                        confidence=float(box.conf[0].item()),
-                        bbox=[float(value) for value in box.xyxy[0].tolist()],
-                    )
-                )
         frame_detections.append(
-            FrameDetection(
+            _run_detection_on_image(
+                image=image,
+                model=model,
                 frame_id=frame_id,
                 video_id=video_id,
-                timestamp_seconds=float(timestamp_seconds),
-                frame_width=int(image.shape[1]),
-                frame_height=int(image.shape[0]),
-                detections=detections,
+                timestamp_seconds=timestamp_seconds,
+                yolo_conf=yolo_conf,
+                yolo_imgsz=yolo_imgsz,
+                class_filter_ids=class_filter_ids,
+                allowed_names=allowed_names,
             )
         )
     return frame_detections
+
+
+def _predict_detections_for_image(
+    *,
+    image: np.ndarray,
+    model: Any,
+    yolo_conf: float,
+    yolo_imgsz: int,
+    class_filter_ids: list[int] | None,
+    allowed_names: set[str],
+) -> list[Detection]:
+    predict_kwargs: dict[str, Any] = {
+        "source": image,
+        "conf": yolo_conf,
+        "imgsz": yolo_imgsz,
+        "verbose": False,
+    }
+    if class_filter_ids:
+        predict_kwargs["classes"] = class_filter_ids
+    predictions = model.predict(**predict_kwargs)
+    names = predictions[0].names if predictions else {}
+    detections: list[Detection] = []
+    if predictions:
+        for box in predictions[0].boxes:
+            class_id = int(box.cls[0].item())
+            class_name = str(names.get(class_id, class_id)).strip().lower()
+            if class_name not in allowed_names:
+                continue
+            detections.append(
+                Detection(
+                    class_id=class_id,
+                    class_name=class_name,
+                    confidence=float(box.conf[0].item()),
+                    bbox=[float(value) for value in box.xyxy[0].tolist()],
+                )
+            )
+    return detections
+
+
+def _run_detection_on_image(
+    *,
+    image: np.ndarray,
+    model: Any,
+    frame_id: str,
+    video_id: str,
+    timestamp_seconds: float,
+    yolo_conf: float,
+    yolo_imgsz: int,
+    class_filter_ids: list[int] | None,
+    allowed_names: set[str],
+) -> FrameDetection:
+    detections = _predict_detections_for_image(
+        image=image,
+        model=model,
+        yolo_conf=yolo_conf,
+        yolo_imgsz=yolo_imgsz,
+        class_filter_ids=class_filter_ids,
+        allowed_names=allowed_names,
+    )
+    return FrameDetection(
+        frame_id=frame_id,
+        video_id=video_id,
+        timestamp_seconds=float(timestamp_seconds),
+        frame_width=int(image.shape[1]),
+        frame_height=int(image.shape[0]),
+        detections=detections,
+    )
+
+
+def _sample_video_frames_with_detection_queue(
+    video_path: Path,
+    output_dir: Path,
+    sample_every_seconds: float,
+    max_frames: int | None,
+    *,
+    queue_size: int,
+    unified_detector: dict[str, Any] | None = None,
+    person_detector: dict[str, Any] | None = None,
+    vehicle_detector: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[tuple[str, str, float, Path]], list[FrameDetection]]:
+    frame_queue: queue.Queue[tuple[str, str, float, Path] | object] = queue.Queue(maxsize=max(1, queue_size))
+    sentinel = object()
+    stop_event = threading.Event()
+    sampled: list[tuple[str, str, float, Path]] = []
+    frame_detections: list[FrameDetection] = []
+    errors: list[BaseException] = []
+    frames_dir = _ensure_dir(output_dir / "01_sampled_frames")
+
+    metadata_capture = cv2.VideoCapture(str(video_path))
+    if not metadata_capture.isOpened():
+        metadata_capture.release()
+        raise RuntimeError(f"Could not open video: {video_path}")
+    fps = float(metadata_capture.get(cv2.CAP_PROP_FPS) or 0.0)
+    frame_count = int(metadata_capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    duration_seconds = (frame_count / fps) if fps > 0 and frame_count > 0 else 0.0
+    width = int(metadata_capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+    height = int(metadata_capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+    metadata_capture.release()
+
+    if unified_detector:
+        unified_model = _load_yolo(str(unified_detector["model"]))
+        allowed_names = set(unified_detector.get("allowed_names") or ALLOWED_CLASS_NAMES)
+    else:
+        unified_model = None
+        allowed_names = set()
+
+    if person_detector:
+        person_model = _load_yolo(str(person_detector["model"]))
+    else:
+        person_model = None
+
+    if vehicle_detector:
+        vehicle_model = _load_yolo(str(vehicle_detector["model"]))
+    else:
+        vehicle_model = None
+
+    def _queue_put(item: tuple[str, str, float, Path] | object) -> None:
+        while not stop_event.is_set():
+            try:
+                frame_queue.put(item, block=True, timeout=0.25)
+                return
+            except queue.Full:
+                continue
+        raise RuntimeError("Queue pipeline stopped before frame handoff completed.")
+
+    def producer() -> None:
+        capture = cv2.VideoCapture(str(video_path))
+        if not capture.isOpened():
+            errors.append(RuntimeError(f"Could not open video: {video_path}"))
+            try:
+                _queue_put(sentinel)
+            except Exception:
+                pass
+            return
+
+        seen_indices: set[int] = set()
+        time_value = 0.0
+        index = 0
+        try:
+            while not stop_event.is_set():
+                if max_frames is not None and len(sampled) >= max_frames:
+                    break
+                if duration_seconds > 0 and time_value > duration_seconds + 1e-6:
+                    break
+                frame_idx = int(round(time_value * fps)) if fps > 0 else index
+                if frame_count > 0:
+                    frame_idx = max(0, min(frame_count - 1, frame_idx))
+                if frame_idx in seen_indices:
+                    time_value += sample_every_seconds
+                    if sample_every_seconds <= 0:
+                        break
+                    continue
+                seen_indices.add(frame_idx)
+                capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                success, frame = capture.read()
+                if not success or frame is None:
+                    break
+                timestamp_seconds = (frame_idx / fps) if fps > 0 else time_value
+                frame_id = f"frame_{index:06d}"
+                frame_path = frames_dir / f"{frame_id}.jpg"
+                if not cv2.imwrite(str(frame_path), frame):
+                    raise RuntimeError(f"Failed to write sampled frame: {frame_path}")
+                frame_tuple = (frame_id, video_path.name, round(timestamp_seconds, 3), frame_path)
+                sampled.append(frame_tuple)
+                _queue_put(frame_tuple)
+                index += 1
+                time_value += sample_every_seconds
+                if sample_every_seconds <= 0:
+                    break
+        except BaseException as exc:
+            stop_event.set()
+            errors.append(exc)
+        finally:
+            capture.release()
+            try:
+                _queue_put(sentinel)
+            except Exception:
+                pass
+
+    def consumer() -> None:
+        try:
+            while True:
+                try:
+                    queued_item = frame_queue.get(block=True, timeout=0.25)
+                except queue.Empty:
+                    if stop_event.is_set():
+                        break
+                    continue
+                if queued_item is sentinel:
+                    break
+                frame_id, video_id, timestamp_seconds, frame_path = queued_item
+                image = cv2.imread(str(frame_path))
+                if image is None:
+                    continue
+                if unified_model is not None:
+                    frame_detections.append(
+                        _run_detection_on_image(
+                            image=image,
+                            model=unified_model,
+                            frame_id=frame_id,
+                            video_id=video_id,
+                            timestamp_seconds=timestamp_seconds,
+                            yolo_conf=float(unified_detector["conf"]),
+                            yolo_imgsz=int(unified_detector["imgsz"]),
+                            class_filter_ids=unified_detector.get("class_filter_ids"),
+                            allowed_names=allowed_names,
+                        )
+                    )
+                    continue
+
+                if person_model is None or vehicle_model is None:
+                    raise RuntimeError("Queue consumer requires either a unified detector or both split detectors.")
+
+                person_frame = _run_detection_on_image(
+                    image=image,
+                    model=person_model,
+                    frame_id=frame_id,
+                    video_id=video_id,
+                    timestamp_seconds=timestamp_seconds,
+                    yolo_conf=float(person_detector["conf"]),
+                    yolo_imgsz=int(person_detector["imgsz"]),
+                    class_filter_ids=list(person_detector.get("class_filter_ids") or []),
+                    allowed_names=set(person_detector.get("allowed_names") or {PERSON_CLASS_NAME}),
+                )
+                vehicle_frame = _run_detection_on_image(
+                    image=image,
+                    model=vehicle_model,
+                    frame_id=frame_id,
+                    video_id=video_id,
+                    timestamp_seconds=timestamp_seconds,
+                    yolo_conf=float(vehicle_detector["conf"]),
+                    yolo_imgsz=int(vehicle_detector["imgsz"]),
+                    class_filter_ids=vehicle_detector.get("class_filter_ids"),
+                    allowed_names=set(vehicle_detector.get("allowed_names") or VEHICLE_CLASS_NAMES),
+                )
+                frame_detections.extend(_merge_frame_detections([[person_frame], [vehicle_frame]]))
+        except BaseException as exc:
+            stop_event.set()
+            errors.append(exc)
+
+    producer_thread = threading.Thread(target=producer, name="object-search-frame-producer", daemon=True)
+    consumer_thread = threading.Thread(target=consumer, name="object-search-frame-consumer", daemon=True)
+    producer_thread.start()
+    consumer_thread.start()
+    producer_thread.join()
+    consumer_thread.join()
+
+    if errors:
+        raise RuntimeError(f"Queue pipeline failed: {errors[0]}") from errors[0]
+
+    video_info = {
+        "video_name": video_path.name,
+        "video_path": str(video_path),
+        "fps": round(fps, 3),
+        "total_frames": frame_count,
+        "duration_seconds": round(duration_seconds, 3),
+        "width": width,
+        "height": height,
+        "sample_every_seconds": sample_every_seconds,
+        "sampled_frame_count": len(sampled),
+        "queue_pipeline_enabled": True,
+        "queue_size": int(queue_size),
+    }
+    return video_info, sampled, frame_detections
+
+
+def _merge_frame_detections(
+    detection_groups: list[list[FrameDetection]],
+    *,
+    dedupe_iou_threshold: float = 0.7,
+) -> list[FrameDetection]:
+    if not detection_groups:
+        return []
+
+    merged: list[FrameDetection] = []
+    frame_count = len(detection_groups[0])
+    for group in detection_groups[1:]:
+        if len(group) != frame_count:
+            raise ValueError("All detection groups must have the same frame count.")
+
+    for frame_index in range(frame_count):
+        base_item = detection_groups[0][frame_index]
+        merged_detections: list[Detection] = []
+
+        for group in detection_groups:
+            frame_item = group[frame_index]
+            for detection in frame_item.detections:
+                duplicate = False
+                for existing in merged_detections:
+                    if (
+                        existing.class_name == detection.class_name
+                        and _bbox_iou(existing.bbox, detection.bbox) >= dedupe_iou_threshold
+                    ):
+                        duplicate = True
+                        if detection.confidence > existing.confidence:
+                            existing.class_id = detection.class_id
+                            existing.class_name = detection.class_name
+                            existing.confidence = detection.confidence
+                            existing.bbox = detection.bbox
+                        break
+                if not duplicate:
+                    merged_detections.append(
+                        Detection(
+                            class_id=detection.class_id,
+                            class_name=detection.class_name,
+                            confidence=detection.confidence,
+                            bbox=list(detection.bbox),
+                        )
+                    )
+
+        merged.append(
+            FrameDetection(
+                frame_id=base_item.frame_id,
+                video_id=base_item.video_id,
+                timestamp_seconds=base_item.timestamp_seconds,
+                frame_width=base_item.frame_width,
+                frame_height=base_item.frame_height,
+                detections=merged_detections,
+            )
+        )
+    return merged
 
 
 def _bbox_iou(box_a: list[float], box_b: list[float]) -> float:
@@ -803,9 +1130,18 @@ def main() -> None:
     parser.add_argument("--output-dir", default="", help="Optional output directory")
     parser.add_argument("--sample-every-seconds", type=float, default=1.0)
     parser.add_argument("--yolo-model", default="yolov8n.pt")
+    parser.add_argument("--use-local-split-models", action="store_true", help="Use Person_detection/Person_detection.pt + object_yolo/best_old.pt together.")
+    parser.add_argument("--person-model", default="", help="Optional person detector .pt path. When set with --vehicle-model, detections are merged.")
+    parser.add_argument("--vehicle-model", default="", help="Optional vehicle detector model path. When set with --person-model, detections are merged.")
     parser.add_argument("--yolo-conf", type=float, default=0.25)
+    parser.add_argument("--person-conf", type=float, default=0.25)
+    parser.add_argument("--vehicle-conf", type=float, default=0.25)
     parser.add_argument("--yolo-imgsz", type=int, default=640)
+    parser.add_argument("--person-imgsz", type=int, default=640)
+    parser.add_argument("--vehicle-imgsz", type=int, default=640)
     parser.add_argument("--max-frames", type=int, default=0)
+    parser.add_argument("--use-frame-queue", action="store_true", help="Overlap frame sampling and detection with a producer-consumer queue.")
+    parser.add_argument("--queue-size", type=int, default=16, help="Maximum sampled frames buffered between producer and detector.")
     args = parser.parse_args()
 
     video_path = Path(args.video).expanduser()
@@ -813,6 +1149,12 @@ def main() -> None:
         video_path = (_repo_root() / video_path).resolve()
     if not video_path.exists():
         raise FileNotFoundError(f"Video not found: {video_path}")
+
+    person_model_value = str(args.person_model).strip()
+    vehicle_model_value = str(args.vehicle_model).strip()
+    if args.use_local_split_models:
+        person_model_value = str(DEFAULT_LOCAL_PERSON_MODEL)
+        vehicle_model_value = str(DEFAULT_LOCAL_VEHICLE_MODEL)
 
     if args.output_dir:
         output_dir = Path(args.output_dir).expanduser()
@@ -826,12 +1168,122 @@ def main() -> None:
     print(f"[object-search-case] Video: {video_path}")
     print(f"[object-search-case] Output dir: {output_dir}")
 
-    video_info, sampled_frames = _sample_video_frames(
-        video_path=video_path,
-        output_dir=output_dir,
-        sample_every_seconds=max(0.1, float(args.sample_every_seconds)),
-        max_frames=int(args.max_frames) if int(args.max_frames) > 0 else None,
-    )
+    using_split_detectors = bool(person_model_value) and bool(vehicle_model_value)
+    detection_metadata: dict[str, Any]
+    frame_detections: list[FrameDetection]
+    sample_every_seconds = max(0.1, float(args.sample_every_seconds))
+    max_frames = int(args.max_frames) if int(args.max_frames) > 0 else None
+    if using_split_detectors:
+        person_model_path = Path(person_model_value).expanduser()
+        vehicle_model_path = Path(vehicle_model_value).expanduser()
+        if not person_model_path.is_absolute():
+            person_model_path = (_repo_root() / person_model_path).resolve()
+        if not vehicle_model_path.is_absolute():
+            vehicle_model_path = (_repo_root() / vehicle_model_path).resolve()
+        if not person_model_path.exists():
+            raise FileNotFoundError(f"Person model not found: {person_model_path}")
+        if not vehicle_model_path.exists():
+            raise FileNotFoundError(f"Vehicle model not found: {vehicle_model_path}")
+
+        print(f"[object-search-case] Person detector: {person_model_path}")
+        print(f"[object-search-case] Vehicle detector: {vehicle_model_path}")
+        detection_metadata = {
+            "mode": "split_person_vehicle_models",
+            "person_model": str(person_model_path),
+            "person_conf": float(args.person_conf),
+            "person_imgsz": int(args.person_imgsz),
+            "person_classes": PERSON_CLASS_FILTER_IDS,
+            "vehicle_model": str(vehicle_model_path),
+            "vehicle_conf": float(args.vehicle_conf),
+            "vehicle_imgsz": int(args.vehicle_imgsz),
+            "vehicle_allowed_classes": sorted(VEHICLE_CLASS_NAMES),
+            "queue_pipeline_enabled": bool(args.use_frame_queue),
+            "queue_size": int(args.queue_size),
+        }
+        if args.use_frame_queue:
+            print(f"[object-search-case] Queue pipeline enabled (size={int(args.queue_size)})")
+            video_info, sampled_frames, frame_detections = _sample_video_frames_with_detection_queue(
+                video_path=video_path,
+                output_dir=output_dir,
+                sample_every_seconds=sample_every_seconds,
+                max_frames=max_frames,
+                queue_size=int(args.queue_size),
+                person_detector={
+                    "model": str(person_model_path),
+                    "conf": float(args.person_conf),
+                    "imgsz": int(args.person_imgsz),
+                    "class_filter_ids": PERSON_CLASS_FILTER_IDS,
+                    "allowed_names": {PERSON_CLASS_NAME},
+                },
+                vehicle_detector={
+                    "model": str(vehicle_model_path),
+                    "conf": float(args.vehicle_conf),
+                    "imgsz": int(args.vehicle_imgsz),
+                    "allowed_names": VEHICLE_CLASS_NAMES,
+                },
+            )
+        else:
+            video_info, sampled_frames = _sample_video_frames(
+                video_path=video_path,
+                output_dir=output_dir,
+                sample_every_seconds=sample_every_seconds,
+                max_frames=max_frames,
+            )
+            person_detections = _detect_frames(
+                sampled_frames,
+                yolo_model_name=str(person_model_path),
+                yolo_conf=float(args.person_conf),
+                yolo_imgsz=int(args.person_imgsz),
+                class_filter_ids=PERSON_CLASS_FILTER_IDS,
+                allowed_class_names={PERSON_CLASS_NAME},
+            )
+            vehicle_detections = _detect_frames(
+                sampled_frames,
+                yolo_model_name=str(vehicle_model_path),
+                yolo_conf=float(args.vehicle_conf),
+                yolo_imgsz=int(args.vehicle_imgsz),
+                allowed_class_names=VEHICLE_CLASS_NAMES,
+            )
+            frame_detections = _merge_frame_detections([person_detections, vehicle_detections])
+    else:
+        print(f"[object-search-case] Unified detector: {args.yolo_model}")
+        detection_metadata = {
+            "mode": "single_model",
+            "yolo_model": str(args.yolo_model),
+            "yolo_conf": float(args.yolo_conf),
+            "yolo_imgsz": int(args.yolo_imgsz),
+            "queue_pipeline_enabled": bool(args.use_frame_queue),
+            "queue_size": int(args.queue_size),
+        }
+        if args.use_frame_queue:
+            print(f"[object-search-case] Queue pipeline enabled (size={int(args.queue_size)})")
+            video_info, sampled_frames, frame_detections = _sample_video_frames_with_detection_queue(
+                video_path=video_path,
+                output_dir=output_dir,
+                sample_every_seconds=sample_every_seconds,
+                max_frames=max_frames,
+                queue_size=int(args.queue_size),
+                unified_detector={
+                    "model": str(args.yolo_model),
+                    "conf": float(args.yolo_conf),
+                    "imgsz": int(args.yolo_imgsz),
+                    "allowed_names": ALLOWED_CLASS_NAMES,
+                },
+            )
+        else:
+            video_info, sampled_frames = _sample_video_frames(
+                video_path=video_path,
+                output_dir=output_dir,
+                sample_every_seconds=sample_every_seconds,
+                max_frames=max_frames,
+            )
+            frame_detections = _detect_frames(
+                sampled_frames,
+                yolo_model_name=str(args.yolo_model),
+                yolo_conf=float(args.yolo_conf),
+                yolo_imgsz=int(args.yolo_imgsz),
+            )
+
     _write_json(output_dir / "01_video_info.json", video_info)
     _write_json(
         output_dir / "02_sampled_frames.json",
@@ -848,16 +1300,10 @@ def main() -> None:
             ]
         },
     )
-
-    frame_detections = _detect_frames(
-        sampled_frames,
-        yolo_model_name=str(args.yolo_model),
-        yolo_conf=float(args.yolo_conf),
-        yolo_imgsz=int(args.yolo_imgsz),
-    )
     _write_json(
         output_dir / "03_detections.json",
         {
+            "detection_setup": detection_metadata,
             "items": [
                 {
                     "frame_id": item.frame_id,
@@ -920,6 +1366,10 @@ def main() -> None:
         "duration_seconds": video_info["duration_seconds"],
         "sample_every_seconds": video_info["sample_every_seconds"],
         "sampled_frame_count": video_info["sampled_frame_count"],
+        "detection_setup": detection_metadata,
+        "ocr_assets_dir": str(OCR_MUKUL_DIR),
+        "plate_detector_path": str(OCR_MUKUL_PLATE_MODEL_PATH),
+        "florence_adapter_path": str(OCR_MUKUL_FLORENCE_ADAPTER_PATH),
         "tracked_object_count": len(search_index),
         "tracks_with_license_plate": sum(1 for item in search_index if item.get("best_license_plate")),
         "tracks_with_florence_vehicle_color": sum(1 for item in search_index if item.get("vehicle_color_florence")),

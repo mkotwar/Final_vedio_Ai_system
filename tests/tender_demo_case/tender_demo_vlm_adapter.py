@@ -1,5 +1,24 @@
 from __future__ import annotations
 
+import base64
+
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
+try:
+    from openai import OpenAI, AuthenticationError, PermissionDeniedError, RateLimitError, APIStatusError
+except Exception:
+    OpenAI = None
+    AuthenticationError = Exception
+    PermissionDeniedError = Exception
+    RateLimitError = Exception
+    APIStatusError = Exception
+
+
 import importlib
 import json
 import os
@@ -17,6 +36,11 @@ try:
 except ImportError:  # pragma: no cover - depends on installed transformers version
     BitsAndBytesConfig = None
 
+try:
+    from openai import OpenAI
+except ImportError:  # pragma: no cover - optional dependency for qwen_api backend
+    OpenAI = None
+
 
 DEFAULT_MODEL_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 DEFAULT_SMOLVLM_MODEL_ID = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
@@ -25,8 +49,11 @@ DEFAULT_MAX_NEW_TOKENS = 512
 DEFAULT_MIN_PIXELS = 256 * 28 * 28
 DEFAULT_MAX_PIXELS = 512 * 28 * 28
 DEFAULT_VLM_BACKEND = "qwen"
-SUPPORTED_VLM_BACKENDS = {"qwen", "smolvlm"}
+SUPPORTED_VLM_BACKENDS = {"qwen", "smolvlm", "qwen_api", "openrouter"}
 SMOLVLM_REQUIRED_PACKAGES = ("num2words",)
+DEFAULT_QWEN_API_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_QWEN_API_MODEL = "qwen/qwen3-vl-8b-instruct"
+DEFAULT_QWEN_API_TEMPERATURE = 0.0
 
 MODEL_ID_ALIASES = {
     "qwen2.5vl:7b": DEFAULT_MODEL_ID,
@@ -62,6 +89,14 @@ def _read_env_bool(name: str, default: bool) -> bool:
     if normalized in {"0", "false", "no", "n", "off"}:
         return False
     raise ValueError(f"Environment variable {name} must be a boolean-like value. Received: {raw_value!r}")
+
+
+def _read_env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name, str(default)).strip()
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Environment variable {name} must be a number. Received: {raw_value!r}") from exc
 
 
 def _read_selected_vlm_backend() -> str:
@@ -180,6 +215,23 @@ def _clean_json_output(raw_output: str) -> str:
         if cleaned_output.endswith("```"):
             cleaned_output = cleaned_output[:-3].strip()
     return cleaned_output
+
+
+def _mask_api_key(api_key: str) -> str:
+    normalized = str(api_key or "").strip()
+    if not normalized:
+        return "missing"
+    if len(normalized) <= 4:
+        return normalized
+    return f"{normalized[:-4]}...{normalized[-4:]}"
+
+
+def _encode_image_to_data_url(image_path: Path) -> str:
+    suffix = image_path.suffix.lower()
+    mime_type = "image/png" if suffix == ".png" else "image/jpeg"
+    image_bytes = image_path.read_bytes()
+    encoded = base64.b64encode(image_bytes).decode("ascii")
+    return f"data:{mime_type};base64,{encoded}"
 
 
 class TenderDemoQwenVLM:
@@ -386,6 +438,135 @@ class TenderDemoQwenVLM:
         }
 
 
+class TenderDemoQwenAPIVLM:
+    def __init__(self) -> None:
+        self.api_key = os.environ.get("TENDER_DEMO_QWEN_API_KEY", "").strip()
+        self.base_url = _read_env_str("TENDER_DEMO_QWEN_BASE_URL", DEFAULT_QWEN_API_BASE_URL)
+        self.model_id = _read_env_str("TENDER_DEMO_QWEN_MODEL", DEFAULT_QWEN_API_MODEL)
+        self.max_new_tokens = _read_env_int("TENDER_DEMO_QWEN_MAX_NEW_TOKENS", DEFAULT_MAX_NEW_TOKENS)
+        self.temperature = _read_env_float("TENDER_DEMO_QWEN_TEMPERATURE", DEFAULT_QWEN_API_TEMPERATURE)
+        self.batch_size = 1
+        self.client: Any | None = None
+
+    def load_client(self) -> None:
+        if self.client is not None:
+            return
+        if OpenAI is None:
+            raise ImportError(
+                "qwen_api backend requires the 'openai' package. "
+                "Install it in video-search-engine/.venv before using TENDER_DEMO_VLM_BACKEND=qwen_api."
+            )
+        if not self.api_key:
+            raise ValueError(
+                "Missing TENDER_DEMO_QWEN_API_KEY. "
+                "Set TENDER_DEMO_QWEN_API_KEY before using TENDER_DEMO_VLM_BACKEND=qwen_api."
+            )
+
+        print("[tender-demo-vlm] backend: qwen_api")
+        print(f"[qwen-api] base_url: {self.base_url}")
+        print(f"[qwen-api] model: {self.model_id}")
+        print(f"[qwen-api] api_key: {_mask_api_key(self.api_key)}")
+
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            default_headers={
+                "HTTP-Referer": "http://localhost",
+                "X-Title": "Tender Demo Qwen API",
+            },
+        )
+
+    def _raise_api_error(self, exc: Exception) -> None:
+        status_code = getattr(exc, "status_code", None)
+        message = str(exc)
+        if status_code == 401:
+            raise RuntimeError(
+                "OpenRouter authentication failed for qwen_api backend (401). "
+                "Check TENDER_DEMO_QWEN_API_KEY."
+            ) from exc
+        if status_code == 402:
+            raise RuntimeError(
+                "OpenRouter credit/quota error for qwen_api backend (402). "
+                "Check your OpenRouter balance or model access."
+            ) from exc
+        raise RuntimeError(f"OpenRouter qwen_api request failed: {message}") from exc
+
+    def generate_batch(
+        self,
+        image_paths: list[Path],
+        prompts: list[str],
+        max_new_tokens: int | None = None,
+    ) -> list[str]:
+        if len(image_paths) != len(prompts):
+            raise ValueError("image_paths and prompts must have the same length.")
+        if not image_paths:
+            return []
+
+        self.load_client()
+        assert self.client is not None
+
+        resolved_paths = [Path(path).expanduser().resolve() for path in image_paths]
+        for image_path in resolved_paths:
+            if not image_path.exists():
+                raise FileNotFoundError(f"Image path does not exist: {image_path}")
+            if not image_path.is_file():
+                raise FileNotFoundError(f"Image path is not a file: {image_path}")
+
+        effective_max_new_tokens = max_new_tokens or self.max_new_tokens
+        outputs: list[str] = []
+
+        for image_path, prompt in zip(resolved_paths, prompts):
+            image_data_url = _encode_image_to_data_url(image_path)
+            start_time = time.perf_counter()
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model_id,
+                    temperature=self.temperature,
+                    max_tokens=effective_max_new_tokens,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": image_data_url}},
+                            ],
+                        }
+                    ],
+                )
+            except Exception as exc:
+                self._raise_api_error(exc)
+
+            elapsed_seconds = time.perf_counter() - start_time
+            output_text = ""
+            choices = getattr(response, "choices", None) or []
+            if choices:
+                message = getattr(choices[0], "message", None)
+                output_text = str(getattr(message, "content", "") or "")
+            print(
+                f"[tender-demo-vlm] Generation time: {elapsed_seconds:.2f}s | "
+                f"Output length: {len(output_text)} chars"
+            )
+            outputs.append(output_text)
+
+        return outputs
+
+    def generate_one(self, image_path: Path, prompt: str) -> str:
+        outputs = self.generate_batch([image_path], [prompt])
+        return outputs[0]
+
+    def health_check(self) -> dict[str, Any]:
+        return {
+            "backend": "qwen_api",
+            "client_loaded": self.client is not None,
+            "model_id": self.model_id,
+            "base_url": self.base_url,
+            "api_key_configured": bool(self.api_key),
+            "batch_size": self.batch_size,
+            "max_new_tokens": self.max_new_tokens,
+            "temperature": self.temperature,
+        }
+
+
 class TenderDemoSmolVLM:
     def __init__(self) -> None:
         self.model_id = _read_env_str("TENDER_DEMO_SMOLVLM_MODEL_ID", DEFAULT_SMOLVLM_MODEL_ID)
@@ -531,12 +712,237 @@ class TenderDemoSmolVLM:
         }
 
 
+
+
+
+
+
+
+class TenderDemoQwenAPIVLM:
+    """OpenAI-compatible Qwen API backend for tender demo Step 16."""
+
+    def __init__(self):
+        if OpenAI is None:
+            raise RuntimeError(
+                "The openai package is required for TENDER_DEMO_VLM_BACKEND=qwen_api. "
+                "Install it with: pip install openai"
+            )
+
+        self.backend = "qwen_api"
+        self.api_key = (
+            os.environ.get("TENDER_DEMO_QWEN_API_KEY")
+            or os.environ.get("OPENROUTER_API_KEY")
+        )
+        self.base_url = os.environ.get(
+            "TENDER_DEMO_QWEN_BASE_URL",
+            "https://openrouter.ai/api/v1",
+        )
+        self.model = os.environ.get(
+            "TENDER_DEMO_QWEN_MODEL",
+            "qwen/qwen3-vl-8b-instruct",
+        )
+        self.model_id = self.model
+        self.max_new_tokens = int(os.environ.get("TENDER_DEMO_QWEN_MAX_NEW_TOKENS", "512"))
+        self.temperature = float(os.environ.get("TENDER_DEMO_QWEN_TEMPERATURE", "0"))
+        self.batch_size = 1
+
+        if not self.api_key:
+            raise RuntimeError(
+                "Missing API key for qwen_api backend. Set TENDER_DEMO_QWEN_API_KEY "
+                "or OPENROUTER_API_KEY."
+            )
+
+        masked_key = self.api_key[:8] + "..." + self.api_key[-4:]
+
+        print("[tender-demo-vlm] backend: qwen_api")
+        print("[qwen-api] base_url:", self.base_url)
+        print("[qwen-api] model:", self.model)
+        print("[qwen-api] api_key:", masked_key)
+
+        self.client = OpenAI(
+            api_key=self.api_key.strip(),
+            base_url=self.base_url.strip(),
+            default_headers={
+                "HTTP-Referer": "http://localhost",
+                "X-Title": "Tender Demo Qwen API",
+            },
+        )
+
+    def _image_to_data_url(self, image_path):
+        image_path = Path(image_path)
+
+        if not image_path.exists():
+            raise FileNotFoundError(f"VLM image not found: {image_path}")
+
+        suffix = image_path.suffix.lower()
+        mime_type = "image/jpeg"
+        if suffix == ".png":
+            mime_type = "image/png"
+        elif suffix == ".webp":
+            mime_type = "image/webp"
+
+        image_b64 = base64.b64encode(image_path.read_bytes()).decode("utf-8")
+        return f"data:{mime_type};base64,{image_b64}"
+
+    def _call_api(self, image_path, prompt):
+        image_url = self._image_to_data_url(image_path)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": prompt,
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": image_url,
+                                },
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=self.max_new_tokens,
+                temperature=self.temperature,
+            )
+
+            raw_text = response.choices[0].message.content or ""
+            raw_text = str(raw_text).strip()
+            return raw_text
+
+        except AuthenticationError as exc:
+            raise RuntimeError(
+                "Qwen API authentication failed. Check TENDER_DEMO_QWEN_API_KEY. "
+                "For OpenRouter, the key should normally start with sk-or- and "
+                "TENDER_DEMO_QWEN_BASE_URL should be https://openrouter.ai/api/v1"
+            ) from exc
+
+        except PermissionDeniedError as exc:
+            raise RuntimeError(
+                "Qwen API permission denied. Check model access, credits, and provider permissions."
+            ) from exc
+
+        except RateLimitError as exc:
+            raise RuntimeError(
+                "Qwen API rate limit or quota issue. Check OpenRouter credits/rate limits."
+            ) from exc
+
+        except APIStatusError as exc:
+            status_code = getattr(exc, "status_code", "unknown")
+            raise RuntimeError(
+                f"Qwen API failed with status {status_code}: {exc}"
+            ) from exc
+
+    def analyze_image(self, image_path, prompt):
+        return self._call_api(image_path=image_path, prompt=prompt)
+
+    def generate(self, image_path, prompt):
+        return self._call_api(image_path=image_path, prompt=prompt)
+
+    def generate_one(self, image_path, prompt):
+        return self._call_api(image_path=image_path, prompt=prompt)
+
+    def generate_batch(self, image_paths=None, prompts=None, jobs=None):
+        """
+        API backend compatibility method.
+
+        Step 16 calls:
+            generate_batch(image_paths=image_paths, prompts=prompts)
+
+        This method must return:
+            list[str]
+
+        because step_16_run_topk_qwen.py expects raw text strings.
+        """
+        outputs = []
+
+        # Main Step 16 path
+        if image_paths is not None and prompts is not None:
+            if len(image_paths) != len(prompts):
+                raise ValueError(
+                    f"image_paths/prompts length mismatch: "
+                    f"{len(image_paths)} image_paths vs {len(prompts)} prompts"
+                )
+
+            for index, (image_path, prompt) in enumerate(zip(image_paths, prompts), start=1):
+                print(f"[qwen-api] Calling OpenRouter VLM item {index}/{len(image_paths)}")
+                raw_text = self._call_api(image_path=image_path, prompt=prompt)
+                raw_text = str(raw_text or "").strip()
+
+                print("[qwen-api] response chars:", len(raw_text))
+                print("[qwen-api] response preview:", raw_text[:160].replace("\n", " "))
+
+                outputs.append(raw_text)
+
+            return outputs
+
+        # Optional compatibility path if some other caller passes jobs
+        if jobs is not None:
+            for index, job in enumerate(jobs, start=1):
+                if isinstance(job, dict):
+                    image_path = (
+                        job.get("image_path")
+                        or job.get("input_image_path")
+                        or job.get("vlm_input_path")
+                        or job.get("strip_path")
+                        or job.get("path")
+                    )
+                    prompt = (
+                        job.get("prompt")
+                        or job.get("text_prompt")
+                        or job.get("instruction")
+                        or ""
+                    )
+                elif isinstance(job, (tuple, list)) and len(job) >= 2:
+                    image_path = job[0]
+                    prompt = job[1]
+                else:
+                    raise ValueError(f"Unsupported VLM job format: {type(job)}")
+
+                print(f"[qwen-api] Calling OpenRouter VLM job {index}/{len(jobs)}")
+                raw_text = self._call_api(image_path=image_path, prompt=prompt)
+                raw_text = str(raw_text or "").strip()
+
+                print("[qwen-api] response chars:", len(raw_text))
+                print("[qwen-api] response preview:", raw_text[:160].replace("\n", " "))
+
+                outputs.append(raw_text)
+
+            return outputs
+
+        raise ValueError(
+            "generate_batch requires either image_paths+prompts or jobs"
+        )
+
+    def health_check(self) -> dict[str, Any]:
+        return {
+            "backend": "qwen_api",
+            "client_loaded": self.client is not None,
+            "model_id": self.model_id,
+            "base_url": self.base_url,
+            "api_key_configured": bool(self.api_key),
+            "batch_size": self.batch_size,
+            "max_new_tokens": self.max_new_tokens,
+            "temperature": self.temperature,
+        }
+
+
+
 def create_tender_demo_vlm():
     backend = _read_selected_vlm_backend()
+
+    if backend in {"qwen_api", "openrouter"}:
+        return TenderDemoQwenAPIVLM()
+
     if backend == "smolvlm":
         return TenderDemoSmolVLM()
-    return TenderDemoQwenVLM()
 
+    return TenderDemoQwenVLM()
 
 if __name__ == "__main__":
     image_path_raw = os.environ.get("TENDER_DEMO_TEST_IMAGE", "").strip()
