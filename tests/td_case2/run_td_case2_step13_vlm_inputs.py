@@ -102,13 +102,16 @@ def read_config() -> Step13Config:
         run_dir / "12_selected_top_event_candidates.json",
         run_dir / "12_selected_event_candidates_flat.json",
         run_dir / "12_event_candidate_ranking_report.json",
-        run_dir / "11_full_scene_event_candidates.json",
         run_dir / "01_video_info.json",
         run_dir / "02_sampled_frames",
     ]
     for required_path in required_inputs:
         if not required_path.exists():
             raise FileNotFoundError(f"Required Step 13 input is missing: {required_path}")
+    if not (run_dir / "11_5_vlm_filtered_event_candidates.json").exists() and not (
+        run_dir / "11_full_scene_event_candidates.json"
+    ).exists():
+        raise FileNotFoundError("Required Step 13 candidate input is missing: Step 11 or Step 11.5 candidate file.")
 
     strip_mode = os.environ.get(ENV_STEP13_STRIP_MODE, DEFAULT_STEP13_STRIP_MODE).strip().lower() or DEFAULT_STEP13_STRIP_MODE
     if strip_mode not in ALLOWED_STRIP_MODES:

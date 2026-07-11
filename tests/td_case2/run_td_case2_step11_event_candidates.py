@@ -178,9 +178,23 @@ def _write_failed_reports(run_dir: Path, event_config: dict[str, Any], error_mes
         "missing_files": error_message,
         "error_message": error_message,
     }
+    diagnostics_payload = {
+        "raw_trigger_type_counts": {},
+        "raw_trigger_reason_counts": {},
+        "candidate_reason_counts": {},
+        "candidate_confidence_breakdown_by_event_type": {},
+        "involved_track_quality_counts": {},
+        "event_type_track_quality_breakdown": {},
+        "collision_candidate_diagnostics": {},
+        "rejected_reason_counts": {},
+        "rejected_event_type_counts": {},
+        "top_noisy_candidate_examples": [],
+        "error_message": error_message,
+    }
     write_json(run_dir / "11_full_scene_event_candidates.json", output_payload)
     write_json_any(run_dir / "11_full_scene_event_candidates_flat.json", [])
     write_json(run_dir / "11_full_scene_event_candidate_report.json", report_payload)
+    write_json(run_dir / "11_full_scene_event_candidate_diagnostics.json", diagnostics_payload)
 
 
 def main() -> None:
@@ -190,7 +204,7 @@ def main() -> None:
     log(f"Run directory: {config.run_dir}")
 
     try:
-        output_payload, _flat_payload, report_payload = run_full_scene_event_candidate_generation(
+        output_payload, _flat_payload, report_payload, _diagnostics_payload = run_full_scene_event_candidate_generation(
             run_dir=config.run_dir,
             event_config=config.event_config,
         )
@@ -219,7 +233,8 @@ def main() -> None:
             "Output paths: "
             f"{config.run_dir / '11_full_scene_event_candidates.json'} | "
             f"{config.run_dir / '11_full_scene_event_candidates_flat.json'} | "
-            f"{config.run_dir / '11_full_scene_event_candidate_report.json'}"
+            f"{config.run_dir / '11_full_scene_event_candidate_report.json'} | "
+            f"{config.run_dir / '11_full_scene_event_candidate_diagnostics.json'}"
         )
     except Exception as exc:
         _write_failed_reports(config.run_dir, config.event_config, str(exc))

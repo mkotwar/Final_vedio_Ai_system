@@ -14,6 +14,8 @@ from step_09_search_result_packaging import write_json_any
 
 ALLOWED_STRIP_MODES = {"three_panel", "five_panel"}
 PRIORITY_ORDER = {"high": 3, "medium": 2, "low": 1, None: 0}
+FILTERED_SOURCE_FILE = "11_5_vlm_filtered_event_candidates.json"
+STEP11_SOURCE_FILE = "11_full_scene_event_candidates.json"
 
 
 def _normalize_rel_path(path_value: str | None) -> str | None:
@@ -450,7 +452,22 @@ def run_vlm_input_generation(
 
     selected_payload = read_json(run_dir / "12_selected_top_event_candidates.json")
     ranking_report_payload = read_json(run_dir / "12_event_candidate_ranking_report.json")
-    step11_payload = read_json(run_dir / "11_full_scene_event_candidates.json")
+    selected_source_file = str(selected_payload.get("source_file", "") or "")
+    preferred_source_path = run_dir / FILTERED_SOURCE_FILE
+    if selected_source_file == FILTERED_SOURCE_FILE and preferred_source_path.exists():
+        step11_payload = read_json(preferred_source_path)
+        candidate_source_file = FILTERED_SOURCE_FILE
+    elif preferred_source_path.exists():
+        filtered_payload = read_json(preferred_source_path)
+        if filtered_payload.get("status") == "success" and list(filtered_payload.get("candidate_events", [])):
+            step11_payload = filtered_payload
+            candidate_source_file = FILTERED_SOURCE_FILE
+        else:
+            step11_payload = read_json(run_dir / STEP11_SOURCE_FILE)
+            candidate_source_file = STEP11_SOURCE_FILE
+    else:
+        step11_payload = read_json(run_dir / STEP11_SOURCE_FILE)
+        candidate_source_file = STEP11_SOURCE_FILE
     video_info_payload = read_json(run_dir / "01_video_info.json")
     ranked_payload = read_json(run_dir / "12_ranked_event_candidates.json") if (run_dir / "12_ranked_event_candidates.json").exists() else {}
 
@@ -481,6 +498,7 @@ def run_vlm_input_generation(
         }
         report_payload = {
             "status": "success",
+            "candidate_source_file": candidate_source_file,
             "selected_candidates_loaded": 0,
             "merged_groups_created": 0,
             "vlm_inputs_created": 0,
@@ -651,6 +669,7 @@ def run_vlm_input_generation(
     ]
     report_payload = {
         "status": "success",
+        "candidate_source_file": candidate_source_file,
         "selected_candidates_loaded": len(selected_candidates[: int(vlm_config["max_inputs"])]),
         "merged_groups_created": len(merged_groups),
         "vlm_inputs_created": len(vlm_inputs),

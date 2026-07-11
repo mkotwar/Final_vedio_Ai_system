@@ -92,14 +92,17 @@ def read_config() -> Step12Config:
     if not run_dir.exists() or not run_dir.is_dir():
         raise FileNotFoundError(f"TD_CASE2_RUN_DIR does not point to an existing directory: {run_dir}")
 
-    required_inputs = [
-        run_dir / "11_full_scene_event_candidates.json",
-        run_dir / "11_full_scene_event_candidates_flat.json",
-        run_dir / "11_full_scene_event_candidate_report.json",
-    ]
+    required_inputs = [run_dir / "11_full_scene_event_candidate_report.json"]
     for required_path in required_inputs:
         if not required_path.exists():
             raise FileNotFoundError(f"Required Step 12 input is missing: {required_path}")
+    if not (run_dir / "11_5_vlm_filtered_event_candidates.json").exists():
+        for required_path in [
+            run_dir / "11_full_scene_event_candidates.json",
+            run_dir / "11_full_scene_event_candidates_flat.json",
+        ]:
+            if not required_path.exists():
+                raise FileNotFoundError(f"Required Step 12 input is missing: {required_path}")
 
     return Step12Config(
         run_dir=run_dir.resolve(),
@@ -140,7 +143,7 @@ def _write_failed_reports(run_dir: Path, ranking_config: dict[str, Any], error_m
 
     ranked_payload = {
         "status": "failed",
-        "source_file": "11_full_scene_event_candidates.json",
+        "source_file": "11_5_vlm_filtered_event_candidates.json",
         "config": ranking_config,
         "summary": {
             "input_candidate_count": 0,
@@ -155,7 +158,7 @@ def _write_failed_reports(run_dir: Path, ranking_config: dict[str, Any], error_m
     }
     selected_payload = {
         "status": "failed",
-        "source_file": "11_full_scene_event_candidates.json",
+        "source_file": "11_5_vlm_filtered_event_candidates.json",
         "top_k": int(ranking_config.get("top_k", 0) or 0),
         "selected_count": 0,
         "selected_candidates": [],
@@ -163,6 +166,7 @@ def _write_failed_reports(run_dir: Path, ranking_config: dict[str, Any], error_m
     }
     report_payload = {
         "status": "failed",
+        "source_file": "11_5_vlm_filtered_event_candidates.json",
         "input_candidate_count": 0,
         "ranked_candidate_count": 0,
         "selected_top_k_count": 0,

@@ -8,6 +8,8 @@ from stage_checks import read_json, write_json
 from step_09_search_result_packaging import write_json_any
 
 
+FILTERED_SOURCE_FILE = "11_5_vlm_filtered_event_candidates.json"
+STEP11_SOURCE_FILE = "11_full_scene_event_candidates.json"
 EVENT_TYPE_PRIORITY = {
     "possible_collision_or_near_miss": 1.00,
     "sudden_stop": 0.90,
@@ -100,7 +102,10 @@ def _validate_candidate(candidate: dict[str, Any]) -> dict[str, bool]:
         "has_involved_tracks": bool(involved_track_ids),
         "has_trigger_reasons": bool(trigger_reasons),
         "needs_vlm_review_true": bool(candidate.get("needs_vlm_review")) is True,
-        "final_event_truth_unknown": str(candidate.get("final_event_truth", "")) == "unknown_candidate_only",
+        "final_event_truth_candidate_only": str(candidate.get("final_event_truth", "")) in {
+            "unknown_candidate_only",
+            "normal_context_or_uncertain_candidate",
+        },
     }
 
 
@@ -230,7 +235,7 @@ def _ranking_fields(
             validation["has_best_timestamp_seconds"],
             validation["has_candidate_score"],
             validation["needs_vlm_review_true"],
-            validation["final_event_truth_unknown"],
+            validation["final_event_truth_candidate_only"],
         ]
     )
     validation["valid_for_ranking"] = valid_for_ranking
@@ -295,12 +300,23 @@ def run_event_candidate_ranking(
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
     """Rank Step 11 event candidates and select Top-K for later VLM review."""
 
-    candidates_payload = read_json(run_dir / "11_full_scene_event_candidates.json")
+    source_path = run_dir / FILTERED_SOURCE_FILE
+    if source_path.exists():
+        filtered_payload = read_json(source_path)
+        if filtered_payload.get("status") == "success" and list(filtered_payload.get("candidate_events", [])):
+            candidates_payload = filtered_payload
+            source_file = FILTERED_SOURCE_FILE
+        else:
+            candidates_payload = read_json(run_dir / STEP11_SOURCE_FILE)
+            source_file = STEP11_SOURCE_FILE
+    else:
+        candidates_payload = read_json(run_dir / STEP11_SOURCE_FILE)
+        source_file = STEP11_SOURCE_FILE
     source_candidates = list(candidates_payload.get("candidate_events", []))
     if not source_candidates:
         ranked_payload = {
             "status": "success",
-            "source_file": "11_full_scene_event_candidates.json",
+            "source_file": source_file,
             "config": ranking_config,
             "summary": {
                 "input_candidate_count": 0,
@@ -314,13 +330,14 @@ def run_event_candidate_ranking(
         }
         selected_payload = {
             "status": "success",
-            "source_file": "11_full_scene_event_candidates.json",
+            "source_file": source_file,
             "top_k": int(ranking_config["top_k"]),
             "selected_count": 0,
             "selected_candidates": [],
         }
         report_payload = {
             "status": "success",
+            "source_file": source_file,
             "input_candidate_count": 0,
             "ranked_candidate_count": 0,
             "selected_top_k_count": 0,
@@ -432,7 +449,7 @@ def run_event_candidate_ranking(
 
     ranked_payload = {
         "status": "success",
-        "source_file": "11_full_scene_event_candidates.json",
+        "source_file": source_file,
         "config": ranking_config,
         "summary": {
             "input_candidate_count": len(source_candidates),
@@ -446,7 +463,7 @@ def run_event_candidate_ranking(
     }
     selected_payload = {
         "status": "success",
-        "source_file": "11_full_scene_event_candidates.json",
+        "source_file": source_file,
         "top_k": top_k,
         "selected_count": len(selected_candidates),
         "selected_candidates": [
@@ -473,6 +490,7 @@ def run_event_candidate_ranking(
         recommendation = "Lower threshold or inspect Step 11 candidate generation."
     report_payload = {
         "status": "success",
+        "source_file": source_file,
         "input_candidate_count": len(source_candidates),
         "ranked_candidate_count": len(ranked_candidates),
         "selected_top_k_count": len(selected_candidates),

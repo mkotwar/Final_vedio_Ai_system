@@ -49,6 +49,8 @@ STEP02A_CANDIDATE_FILES = [
     "02A_adaptive_frames.json",
     "02A_adaptive_sampling_report.json",
 ]
+TRACK_QUALITY_ORDER = {"good": 3, "fragmented": 2, "single_frame": 1, "weak": 0}
+KNOWN_TRACK_QUALITIES = {"good", "fragmented", "single_frame", "weak"}
 
 
 def _safe_divide(numerator: float, denominator: float) -> float:
@@ -332,6 +334,35 @@ def _candidate_score_label(score: float) -> str:
     return "low"
 
 
+def _track_quality(track: dict[str, Any] | None) -> str:
+    """Return one normalized track quality label."""
+
+    if track is None:
+        return "unknown"
+    quality = str(track.get("track_quality", "") or "").strip().lower()
+    if quality in KNOWN_TRACK_QUALITIES:
+        return quality
+    return "unknown"
+
+
+def _track_quality_counts(track_ids: list[str], track_by_id: dict[str, dict[str, Any]]) -> dict[str, int]:
+    """Count normalized track qualities for one track id list."""
+
+    counts = {quality: 0 for quality in ["good", "fragmented", "single_frame", "weak", "unknown"]}
+    for track_id in track_ids:
+        counts[_track_quality(track_by_id.get(track_id))] += 1
+    return counts
+
+
+def _has_strong_motion_evidence(reasons_base: list[str]) -> bool:
+    """Return whether the window contains stronger motion/activity evidence."""
+
+    strong_motion_markers = {"motion_spike", "object_density_high", "vehicle_density_high"}
+    if any(reason in strong_motion_markers for reason in reasons_base):
+        return True
+    return "motion_pixels_high" in reasons_base and "histogram_change_high" in reasons_base
+
+
 def _severity_label(event_type: str, score: float) -> str:
     """Map event type and score to a rough severity label."""
 
@@ -404,6 +435,30 @@ def _raw_trigger(
     }
 
 
+def _rejected_trigger_decision(
+    *,
+    event_type: str,
+    window_id: str,
+    timestamp_seconds: float,
+    rejection_reasons: list[str],
+    involved_track_ids: list[str],
+    involved_track_qualities: list[str],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Build one rejected raw-trigger decision record for diagnostics."""
+
+    return {
+        "event_type": event_type,
+        "window_id": window_id,
+        "timestamp_seconds": round(timestamp_seconds, 6),
+        "timestamp_text": format_seconds_text(timestamp_seconds),
+        "rejection_reasons": sorted(set(rejection_reasons)),
+        "involved_track_ids": sorted(set(involved_track_ids)),
+        "involved_track_qualities": sorted(involved_track_qualities),
+        "evidence": evidence,
+    }
+
+
 def _build_raw_triggers(
     *,
     windows: list[dict[str, Any]],
@@ -412,10 +467,11 @@ def _build_raw_triggers(
     track_features: dict[str, dict[str, Any]],
     record_by_track_id: dict[str, dict[str, Any]],
     min_candidate_score: float,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Create raw event triggers from windows, tracks, and interactions."""
 
     triggers: list[dict[str, Any]] = []
+    rejected_trigger_decisions: list[dict[str, Any]] = []
     trigger_index = 1
     track_by_id = {str(track.get("track_id", "") or ""): track for track in tracks}
     motion_scores = [float(window.get("motion_score_max", 0.0) or 0.0) for window in windows]
@@ -442,6 +498,9 @@ def _build_raw_triggers(
 
         active_vehicle_ids = list(window["active_vehicle_track_ids"])
         active_person_ids = list(window["active_person_track_ids"])
+        active_track_ids = active_vehicle_ids + active_person_ids
+        active_track_quality_counts = _track_quality_counts(active_track_ids, track_by_id)
+        strong_motion_evidence = _has_strong_motion_evidence(reasons_base)
         stationary_vehicle_count = sum(1 for track_id in active_vehicle_ids if track_features.get(track_id, {}).get("stationary_candidate"))
         sudden_stop_tracks = [
             track_id for track_id in active_vehicle_ids if float(track_features.get(track_id, {}).get("sudden_stop_score", 0.0) or 0.0) >= 0.55
@@ -488,8 +547,33 @@ def _build_raw_triggers(
                 )
                 trigger_index += 1
 
-        if len(active_vehicle_ids) + len(active_person_ids) >= 4:
+        if len(active_track_ids) >= 4:
+            enough_good_tracks = active_track_quality_counts["good"] >= 2
+            has_supporting_reason = strong_motion_evidence or bool(sudden_stop_tracks) or enough_good_tracks
             score = 0.15 + 0.10 + (0.10 if reasons_base else 0.0)
+            track_start_reasons = ["multiple_active_tracks"] + reasons_base
+            if enough_good_tracks:
+                track_start_reasons.append("enough_good_quality_tracks")
+            if sudden_stop_tracks:
+                track_start_reasons.append("sudden_stop_track_present")
+            if not has_supporting_reason:
+                rejected_trigger_decisions.append(
+                    _rejected_trigger_decision(
+                        event_type="track_start_stop_activity",
+                        window_id=str(window["window_id"]),
+                        timestamp_seconds=float(window["center_timestamp_seconds"]),
+                        rejection_reasons=["insufficient_supporting_evidence_for_active_tracks"],
+                        involved_track_ids=active_track_ids,
+                        involved_track_qualities=[
+                            _track_quality(track_by_id.get(track_id)) for track_id in active_track_ids
+                        ],
+                        evidence={
+                            "window": window,
+                            "active_track_quality_counts": active_track_quality_counts,
+                        },
+                    )
+                )
+                continue
             if score >= min_candidate_score:
                 triggers.append(
                     _raw_trigger(
@@ -498,11 +582,11 @@ def _build_raw_triggers(
                         timestamp_seconds=float(window["center_timestamp_seconds"]),
                         window_id=str(window["window_id"]),
                         score=score,
-                        trigger_reasons=["multiple_active_tracks"] + reasons_base,
-                        involved_track_ids=active_vehicle_ids + active_person_ids,
-                        involved_classes=[track_by_id[track_id]["dominant_class_name"] for track_id in active_vehicle_ids + active_person_ids if track_id in track_by_id],
+                        trigger_reasons=track_start_reasons,
+                        involved_track_ids=active_track_ids,
+                        involved_classes=[track_by_id[track_id]["dominant_class_name"] for track_id in active_track_ids if track_id in track_by_id],
                         representative_frame_path=window.get("representative_frame_path"),
-                        evidence={"window": window},
+                        evidence={"window": window, "active_track_quality_counts": active_track_quality_counts},
                     )
                 )
                 trigger_index += 1
@@ -579,17 +663,82 @@ def _build_raw_triggers(
                 iou = _bbox_iou(list(left_detection.get("bbox_xyxy", [])), list(right_detection.get("bbox_xyxy", [])))
                 if center_distance_ratio > 0.12 and iou <= 0.02:
                     continue
+                left_track_id = active_vehicle_ids[left_index]
+                right_track_id = active_vehicle_ids[right_index]
+                left_quality = _track_quality(left_track)
+                right_quality = _track_quality(right_track)
+                weak_pair = left_quality in {"fragmented", "single_frame", "weak"} or right_quality in {"fragmented", "single_frame", "weak"}
+                both_single_frame = left_quality == "single_frame" and right_quality == "single_frame"
+                has_sudden_stop_signal = left_track_id in sudden_stop_tracks or right_track_id in sudden_stop_tracks
+                has_overlap_signal = iou > 0.05
+                has_very_small_gap = center_distance_ratio <= 0.05
+                has_strong_corroboration = has_sudden_stop_signal or has_overlap_signal or strong_motion_evidence
+                if both_single_frame:
+                    rejected_trigger_decisions.append(
+                        _rejected_trigger_decision(
+                            event_type="possible_collision_or_near_miss",
+                            window_id=str(window["window_id"]),
+                            timestamp_seconds=float(window["center_timestamp_seconds"]),
+                            rejection_reasons=["rejected_single_frame_pair"],
+                            involved_track_ids=[left_track_id, right_track_id],
+                            involved_track_qualities=[left_quality, right_quality],
+                            evidence={
+                                "window": window,
+                                "bbox_iou": round(iou, 6),
+                                "center_distance_ratio": round(center_distance_ratio, 6),
+                            },
+                        )
+                    )
+                    continue
+                if not (has_sudden_stop_signal or has_overlap_signal or has_very_small_gap or strong_motion_evidence):
+                    rejected_trigger_decisions.append(
+                        _rejected_trigger_decision(
+                            event_type="possible_collision_or_near_miss",
+                            window_id=str(window["window_id"]),
+                            timestamp_seconds=float(window["center_timestamp_seconds"]),
+                            rejection_reasons=["weak_proximity_only_rejected"],
+                            involved_track_ids=[left_track_id, right_track_id],
+                            involved_track_qualities=[left_quality, right_quality],
+                            evidence={
+                                "window": window,
+                                "bbox_iou": round(iou, 6),
+                                "center_distance_ratio": round(center_distance_ratio, 6),
+                            },
+                        )
+                    )
+                    continue
+                if weak_pair and not has_strong_corroboration:
+                    rejected_trigger_decisions.append(
+                        _rejected_trigger_decision(
+                            event_type="possible_collision_or_near_miss",
+                            window_id=str(window["window_id"]),
+                            timestamp_seconds=float(window["center_timestamp_seconds"]),
+                            rejection_reasons=["weak_track_pair_requires_stronger_evidence"],
+                            involved_track_ids=[left_track_id, right_track_id],
+                            involved_track_qualities=[left_quality, right_quality],
+                            evidence={
+                                "window": window,
+                                "bbox_iou": round(iou, 6),
+                                "center_distance_ratio": round(center_distance_ratio, 6),
+                            },
+                        )
+                    )
+                    continue
                 score = 0.25
                 reasons = ["vehicle_close_interaction"]
                 if score_base > 0:
                     score += 0.15
                     reasons.extend(reasons_base)
-                if active_vehicle_ids[left_index] in sudden_stop_tracks or active_vehicle_ids[right_index] in sudden_stop_tracks:
+                if has_sudden_stop_signal:
                     score += 0.20
-                    reasons.append("sudden_speed_change")
-                if iou > 0.05:
+                    reasons.extend(["sudden_speed_change", "accepted_close_pair_with_sudden_stop"])
+                if has_overlap_signal:
                     score += 0.10
-                    reasons.append("bbox_overlap")
+                    reasons.extend(["bbox_overlap", "accepted_close_pair_with_overlap"])
+                if has_very_small_gap:
+                    reasons.append("accepted_close_pair_with_very_small_gap")
+                if strong_motion_evidence:
+                    reasons.append("accepted_close_pair_with_strong_motion")
                 if score >= min_candidate_score:
                     triggers.append(
                         _raw_trigger(
@@ -599,7 +748,7 @@ def _build_raw_triggers(
                             window_id=str(window["window_id"]),
                             score=score,
                             trigger_reasons=reasons,
-                            involved_track_ids=[active_vehicle_ids[left_index], active_vehicle_ids[right_index]],
+                            involved_track_ids=[left_track_id, right_track_id],
                             involved_classes=[
                                 str(left_track.get("dominant_class_name", "") or ""),
                                 str(right_track.get("dominant_class_name", "") or ""),
@@ -610,6 +759,7 @@ def _build_raw_triggers(
                                 "close_pair_count": 1,
                                 "bbox_iou": round(iou, 6),
                                 "center_distance_ratio": round(center_distance_ratio, 6),
+                                "involved_track_qualities": [left_quality, right_quality],
                             },
                         )
                     )
@@ -639,11 +789,35 @@ def _build_raw_triggers(
                 )
                 if center_distance_ratio > 0.10:
                     continue
+                vehicle_quality = _track_quality(vehicle_track)
+                person_quality = _track_quality(person_track)
+                weak_interaction_track = vehicle_quality in {"fragmented", "single_frame", "weak"} or person_quality in {
+                    "fragmented",
+                    "single_frame",
+                    "weak",
+                }
                 score = 0.15 + (0.15 if score_base > 0 else 0.0)
                 reasons = ["person_vehicle_proximity"] + reasons_base
-                if track_features.get(vehicle_track_id, {}).get("stationary_candidate"):
+                stationary_near_person = track_features.get(vehicle_track_id, {}).get("stationary_candidate")
+                if stationary_near_person:
                     score += 0.10
                     reasons.append("vehicle_stationary_near_person")
+                if weak_interaction_track and not (strong_motion_evidence or stationary_near_person or center_distance_ratio <= 0.05):
+                    rejected_trigger_decisions.append(
+                        _rejected_trigger_decision(
+                            event_type="vehicle_person_interaction",
+                            window_id=str(window["window_id"]),
+                            timestamp_seconds=float(window["center_timestamp_seconds"]),
+                            rejection_reasons=["weak_track_pair_requires_stronger_evidence"],
+                            involved_track_ids=[vehicle_track_id, person_track_id],
+                            involved_track_qualities=[vehicle_quality, person_quality],
+                            evidence={
+                                "window": window,
+                                "center_distance_ratio": round(center_distance_ratio, 6),
+                            },
+                        )
+                    )
+                    continue
                 if score >= min_candidate_score:
                     triggers.append(
                         _raw_trigger(
@@ -659,12 +833,16 @@ def _build_raw_triggers(
                                 "person",
                             ],
                             representative_frame_path=window.get("representative_frame_path"),
-                            evidence={"window": window, "center_distance_ratio": round(center_distance_ratio, 6)},
+                            evidence={
+                                "window": window,
+                                "center_distance_ratio": round(center_distance_ratio, 6),
+                                "involved_track_qualities": [vehicle_quality, person_quality],
+                            },
                         )
                     )
                     trigger_index += 1
 
-    return triggers
+    return triggers, rejected_trigger_decisions
 
 
 def _can_merge_triggers(left: dict[str, Any], right: dict[str, Any], merge_gap_seconds: float) -> bool:
@@ -685,6 +863,7 @@ def _merge_triggers_into_candidates(
     *,
     raw_triggers: list[dict[str, Any]],
     selected_frames: list[dict[str, Any]],
+    track_by_id: dict[str, dict[str, Any]],
     record_by_track_id: dict[str, dict[str, Any]],
     context_before_seconds: float,
     context_after_seconds: float,
@@ -771,6 +950,7 @@ def _merge_triggers_into_candidates(
                 "severity_label": _severity_label(event_type, merged_score),
                 "trigger_reasons": trigger_reasons,
                 "involved_track_ids": involved_track_ids,
+                "involved_track_qualities": _track_quality_counts(involved_track_ids, track_by_id),
                 "involved_classes": involved_classes,
                 "involved_objects": involved_objects,
                 "scene_evidence": scene_evidence,
@@ -808,11 +988,176 @@ def _flat_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _candidate_track_quality_counts(candidate: dict[str, Any], track_by_id: dict[str, dict[str, Any]]) -> dict[str, int]:
+    """Return involved track-quality counts for one candidate."""
+
+    return _track_quality_counts(list(candidate.get("involved_track_ids", [])), track_by_id)
+
+
+def _stats_summary(values: list[float]) -> dict[str, float | None]:
+    """Return min/mean/max summary for one float list."""
+
+    if not values:
+        return {"min": None, "mean": None, "max": None}
+    return {
+        "min": round(min(values), 6),
+        "mean": round(_mean(values), 6),
+        "max": round(max(values), 6),
+    }
+
+
+def _noisy_candidate_reason(candidate: dict[str, Any], track_quality_counts: dict[str, int]) -> list[str]:
+    """Return simple human-readable reasons why a candidate may be noisy."""
+
+    reasons: list[str] = []
+    trigger_reasons = set(candidate.get("trigger_reasons", []))
+    if str(candidate.get("confidence_label", "")) == "low":
+        reasons.append("low_confidence_candidate")
+    if str(candidate.get("event_type", "")) == "possible_collision_or_near_miss":
+        if "vehicle_close_interaction" in trigger_reasons and "sudden_speed_change" not in trigger_reasons:
+            reasons.append("near_miss_without_sudden_stop_signal")
+        if "bbox_overlap" not in trigger_reasons:
+            reasons.append("near_miss_without_bbox_overlap")
+    if track_quality_counts["fragmented"] + track_quality_counts["single_frame"] + track_quality_counts["weak"] > track_quality_counts["good"]:
+        reasons.append("mostly_weak_or_fragmented_tracks")
+    if trigger_reasons <= {"vehicle_close_interaction", "motion_pixels_high", "histogram_change_high", "bbox_overlap"}:
+        reasons.append("limited_trigger_diversity")
+    if str(candidate.get("event_type", "")) == "track_start_stop_activity" and "enough_good_quality_tracks" not in trigger_reasons:
+        reasons.append("activity_candidate_without_good_track_support")
+    return reasons
+
+
+def _build_diagnostics_payload(
+    *,
+    raw_triggers: list[dict[str, Any]],
+    rejected_trigger_decisions: list[dict[str, Any]],
+    candidate_events: list[dict[str, Any]],
+    track_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Build Step 11 diagnostics payload without changing Step 12 schema."""
+
+    raw_trigger_type_counts = Counter(str(trigger.get("event_type", "") or "") for trigger in raw_triggers)
+    raw_trigger_reason_counts = Counter(
+        reason for trigger in raw_triggers for reason in list(trigger.get("trigger_reasons", []))
+    )
+    candidate_reason_counts = Counter(
+        reason for candidate in candidate_events for reason in list(candidate.get("trigger_reasons", []))
+    )
+    rejected_reason_counts = Counter(
+        reason for item in rejected_trigger_decisions for reason in list(item.get("rejection_reasons", []))
+    )
+    rejected_event_type_counts = Counter(str(item.get("event_type", "") or "") for item in rejected_trigger_decisions)
+
+    candidate_confidence_breakdown_by_event_type: dict[str, dict[str, int]] = {}
+    involved_track_quality_counts = Counter()
+    event_type_track_quality_breakdown: dict[str, dict[str, int]] = {}
+    top_noisy_candidate_examples: list[dict[str, Any]] = []
+
+    for candidate in candidate_events:
+        event_type = str(candidate.get("event_type", "") or "unknown")
+        confidence = str(candidate.get("confidence_label", "") or "unknown")
+        quality_counts = _candidate_track_quality_counts(candidate, track_by_id)
+        event_conf_counts = candidate_confidence_breakdown_by_event_type.setdefault(
+            event_type,
+            {"high": 0, "medium": 0, "low": 0},
+        )
+        if confidence in event_conf_counts:
+            event_conf_counts[confidence] += 1
+        for quality, count in quality_counts.items():
+            involved_track_quality_counts[quality] += int(count)
+        event_quality_counts = event_type_track_quality_breakdown.setdefault(
+            event_type,
+            {"good": 0, "fragmented": 0, "single_frame": 0, "weak": 0, "unknown": 0},
+        )
+        for quality, count in quality_counts.items():
+            event_quality_counts[quality] += int(count)
+        noisy_reasons = _noisy_candidate_reason(candidate, quality_counts)
+        if noisy_reasons:
+            top_noisy_candidate_examples.append(
+                {
+                    "candidate_event_id": candidate.get("candidate_event_id"),
+                    "event_type": event_type,
+                    "candidate_score": candidate.get("candidate_score"),
+                    "confidence_label": confidence,
+                    "best_timestamp_text": candidate.get("best_timestamp_text"),
+                    "trigger_reasons": list(candidate.get("trigger_reasons", [])),
+                    "involved_track_ids": list(candidate.get("involved_track_ids", [])),
+                    "involved_track_qualities": quality_counts,
+                    "representative_frame_path": candidate.get("representative_frame", {}).get("image_path"),
+                    "why_it_may_be_noisy": noisy_reasons,
+                }
+            )
+
+    top_noisy_candidate_examples.sort(
+        key=lambda item: (
+            0 if str(item.get("confidence_label", "")) == "low" else 1,
+            float(item.get("candidate_score", 0.0) or 0.0),
+        )
+    )
+
+    collision_raw_triggers = [
+        trigger for trigger in raw_triggers if str(trigger.get("event_type", "")) == "possible_collision_or_near_miss"
+    ]
+    collision_candidates = [
+        candidate for candidate in candidate_events if str(candidate.get("event_type", "")) == "possible_collision_or_near_miss"
+    ]
+    collision_center_distances = [
+        float(trigger.get("evidence", {}).get("center_distance_ratio", 0.0) or 0.0)
+        for trigger in collision_raw_triggers
+        if trigger.get("evidence", {}).get("center_distance_ratio") is not None
+    ]
+    collision_ious = [
+        float(trigger.get("evidence", {}).get("bbox_iou", 0.0) or 0.0)
+        for trigger in collision_raw_triggers
+        if trigger.get("evidence", {}).get("bbox_iou") is not None
+    ]
+    collision_involving_weak_tracks = 0
+    collision_only_good_tracks = 0
+    for trigger in collision_raw_triggers:
+        track_ids = list(trigger.get("involved_track_ids", []))
+        quality_counts = _track_quality_counts(track_ids, track_by_id)
+        if quality_counts["fragmented"] + quality_counts["single_frame"] + quality_counts["weak"] > 0:
+            collision_involving_weak_tracks += 1
+        elif quality_counts["good"] > 0 and quality_counts["fragmented"] == 0 and quality_counts["single_frame"] == 0 and quality_counts["weak"] == 0:
+            collision_only_good_tracks += 1
+
+    return {
+        "raw_trigger_type_counts": dict(raw_trigger_type_counts),
+        "raw_trigger_reason_counts": dict(raw_trigger_reason_counts),
+        "candidate_reason_counts": dict(candidate_reason_counts),
+        "candidate_confidence_breakdown_by_event_type": candidate_confidence_breakdown_by_event_type,
+        "involved_track_quality_counts": dict(involved_track_quality_counts),
+        "event_type_track_quality_breakdown": event_type_track_quality_breakdown,
+        "collision_candidate_diagnostics": {
+            "total_collision_near_miss_raw_triggers": len(collision_raw_triggers),
+            "total_collision_near_miss_candidates": len(collision_candidates),
+            "raw_triggers_with_bbox_overlap": sum(
+                1 for trigger in collision_raw_triggers if "bbox_overlap" in list(trigger.get("trigger_reasons", []))
+            ),
+            "raw_triggers_with_sudden_speed_change": sum(
+                1 for trigger in collision_raw_triggers if "sudden_speed_change" in list(trigger.get("trigger_reasons", []))
+            ),
+            "raw_triggers_with_only_vehicle_close_interaction": sum(
+                1
+                for trigger in collision_raw_triggers
+                if set(trigger.get("trigger_reasons", [])) == {"vehicle_close_interaction"}
+            ),
+            "center_distance_ratio_stats": _stats_summary(collision_center_distances),
+            "bbox_iou_stats": _stats_summary(collision_ious),
+            "raw_triggers_involving_fragmented_or_single_frame_tracks": collision_involving_weak_tracks,
+            "raw_triggers_involving_only_good_tracks": collision_only_good_tracks,
+        },
+        "rejected_reason_counts": dict(rejected_reason_counts),
+        "rejected_event_type_counts": dict(rejected_event_type_counts),
+        "top_noisy_candidate_examples": top_noisy_candidate_examples[:10],
+    }
+
+
 def run_full_scene_event_candidate_generation(
     *,
     run_dir: Path,
     event_config: dict[str, Any],
-) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any], dict[str, Any]]:
     """Build rule-based full-scene event candidates from existing td_case2 outputs."""
 
     video_info = read_json(run_dir / "01_video_info.json")
@@ -828,6 +1173,7 @@ def run_full_scene_event_candidate_generation(
     tracks = list(tracks_payload.get("tracks", []))
     search_records = list(search_index_payload.get("records", []))
     record_by_track_id = {str(record.get("track_id", "") or ""): record for record in search_records}
+    track_by_id = {str(track.get("track_id", "") or ""): track for track in tracks}
 
     fps = float(video_info.get("fps", 0.0) or 0.0)
     frame_count = int(video_info.get("frame_count", 0) or 0)
@@ -848,7 +1194,7 @@ def run_full_scene_event_candidate_generation(
         str(track.get("track_id", "") or ""): _track_speed_features(track, width, height)
         for track in tracks
     }
-    raw_triggers = _build_raw_triggers(
+    raw_triggers, rejected_trigger_decisions = _build_raw_triggers(
         windows=windows,
         selected_frames=selected_frames,
         tracks=tracks,
@@ -859,6 +1205,7 @@ def run_full_scene_event_candidate_generation(
     candidate_events = _merge_triggers_into_candidates(
         raw_triggers=raw_triggers,
         selected_frames=selected_frames,
+        track_by_id=track_by_id,
         record_by_track_id=record_by_track_id,
         context_before_seconds=float(event_config["context_before_seconds"]),
         context_after_seconds=float(event_config["context_after_seconds"]),
@@ -879,6 +1226,12 @@ def run_full_scene_event_candidate_generation(
     severity_counts = Counter(candidate["severity_label"] for candidate in candidate_events)
     event_type_counts = Counter(candidate["event_type"] for candidate in candidate_events)
     full_event_type_counts = {event_type: int(event_type_counts.get(event_type, 0)) for event_type in SUPPORTED_EVENT_TYPES}
+    diagnostics_payload = _build_diagnostics_payload(
+        raw_triggers=raw_triggers,
+        rejected_trigger_decisions=rejected_trigger_decisions,
+        candidate_events=candidate_events,
+        track_by_id=track_by_id,
+    )
 
     summary = {
         "raw_triggers_created": len(raw_triggers),
@@ -919,6 +1272,15 @@ def run_full_scene_event_candidate_generation(
         "raw_triggers_created": len(raw_triggers),
         "candidate_events_created": len(candidate_events),
         "event_type_counts": full_event_type_counts,
+        "raw_trigger_type_counts": diagnostics_payload["raw_trigger_type_counts"],
+        "raw_trigger_reason_counts": diagnostics_payload["raw_trigger_reason_counts"],
+        "candidate_reason_counts": diagnostics_payload["candidate_reason_counts"],
+        "candidate_confidence_breakdown_by_event_type": diagnostics_payload["candidate_confidence_breakdown_by_event_type"],
+        "involved_track_quality_counts": diagnostics_payload["involved_track_quality_counts"],
+        "event_type_track_quality_breakdown": diagnostics_payload["event_type_track_quality_breakdown"],
+        "collision_candidate_diagnostics": diagnostics_payload["collision_candidate_diagnostics"],
+        "rejected_reason_counts": diagnostics_payload["rejected_reason_counts"],
+        "rejected_event_type_counts": diagnostics_payload["rejected_event_type_counts"],
         "confidence_counts": {
             "high": confidence_counts.get("high", 0),
             "medium": confidence_counts.get("medium", 0),
@@ -954,4 +1316,5 @@ def run_full_scene_event_candidate_generation(
     else:
         write_json_any(run_dir / "11_full_scene_event_candidates_flat.json", [])
     write_json(run_dir / "11_full_scene_event_candidate_report.json", report_payload)
-    return output_payload, flat_candidates, report_payload
+    write_json(run_dir / "11_full_scene_event_candidate_diagnostics.json", diagnostics_payload)
+    return output_payload, flat_candidates, report_payload, diagnostics_payload
