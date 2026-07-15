@@ -4,7 +4,7 @@
 
 **Project Name:** AI Video Review & Investigation System
 
-**Last Updated:** 2026-06-23
+**Last Updated:** 2026-07-15
 
 **Overall Progress:** ~45%
 
@@ -393,6 +393,32 @@ Event abstraction and summary quality improvements.
 ---
 
 # Change Log
+
+## 2026-07-15
+
+* Configured the isolated `tests/td_case2` local Qwen loaders (Step 11.5 3B and Step 14 7B) for strict BitsAndBytes 4-bit NF4 inference with double quantization and BF16/FP16 compute. CUDA is required and no higher-precision fallback is used. Pre-quantized Unsloth checkpoints are stored under the workspace `models/` directory and are now the default local model paths.
+* Fixed the `td_case2` search-ready orchestrator to propagate the freshly created Step 01-02A run directory to all downstream steps, instead of reusing a stale `TD_CASE2_RUN_DIR` value that could point at the input video.
+* Fixed Step 03 YOLO configuration so relative model paths loaded from `tests/td_case2/.env` resolve from the testcase directory; the portable `../../yolo11m.pt` fallback now locates the repository-root model correctly.
+* Added the missing `einops` runtime dependency required by the local Florence-2 custom model code used in td_case2 Steps 04A and 06.
+* Forced eager attention when loading the local Florence-2 custom model, avoiding incompatible SDPA capability probing under the installed Transformers runtime.
+* Added search-ready pipeline resume support after completed Step 03 outputs and a safe td_case2 `.env` fallback when an inherited Florence model path is invalid.
+* Fixed Florence-2 generation under Transformers 4.57 by disabling the incompatible KV cache, enabled the available license-plate detector for td_case2, forced Step 06 to recompute unless reuse is explicitly requested, and made all-crop inference failure a blocking stage error instead of a false success.
+* Validated the repair on `anpr_test_5min_20260715_140144`: Step 06 completed 157/157 crops, detected colors on 83 tracks, found 61 plate crops, produced 23 format-valid plate candidates and 3 verified plates; rebuilt Steps 07B-10B with all 42 dynamic search validations passing.
+* Updated td_case2 model-path resolution to accept existing paths relative to the launch directory while retaining testcase-relative `.env` paths, preventing interactive `yolo11m.pt` and `OCR_MUKUL/license_plate_weights.pt` values from being misresolved.
+* Configured all GPU-capable td_case2 models for explicit CUDA execution: combined YOLO, plate-detector YOLO, Florence OCR/color, Qwen 3B filtering, and Qwen 7B review. Plate detection now receives the resolved Florence/Step 06 device explicitly.
+* Replaced the td_case2 CPU-only PyTorch build with the official Windows CUDA 12.8 stack (`torch 2.11.0+cu128`, `torchvision 0.26.0+cu128`) on the RTX 5070 Ti. Verified real CUDA inference for combined YOLO, plate YOLO, Florence, Qwen 3B NF4, and Qwen 7B NF4; Qwen smoke tests used approximately 2.34 GB and 6.58 GB allocated VRAM respectively.
+* Refactored td_case2 into a GPU-first, self-configuring runtime. A centralized device manager now resolves CUDA vs CPU once and feeds YOLO, Florence, plate detection, and local Qwen stages. New runs write `gpu_utilization_report.json`, capturing the actual execution device, VRAM snapshot, and the CPU-only justification for non-accelerated stages.
+* Validated the updated runtime on `debug_runs/anpr_test_5min_20260715_143548`: Step 03 YOLO inference executed on `cuda:0`; Step 04A Florence audit and plate detection executed on `cuda:0`; Step 06 OCR/color enrichment executed on `cuda:0`; Step 11.5 local Qwen 3B executed on `cuda:0` with approximately 2.35 GB allocated VRAM; Step 14 local Qwen 7B executed on `cuda:0` with approximately 8.27 GB allocated VRAM. CPU-only stages remain motion sampling, deterministic tracking, event/search ranking, and JSON/report assembly.
+* Extended td_case2 Step 16 evidence-video generation so the final `evidence_video.mp4` can append two visual galleries in the same output: deduplicated unique full-scene object-detection frames from the searchable object index and the Step 13 VLM input media (temporal strips/contact sheets/primary frames). Validated on `debug_runs/ANPR1-D_20260715_175538`, which produced 1,200 object-gallery frames and 4 VLM-input gallery frames in the final MP4.
+* Removed Florence `<DETAILED_CAPTION>` inference from td_case2 Steps 04A/06 while retaining the compatibility fields and using only `<OCR>` plus `<CAPTION>`. Step 06 now extracts conservative structured vehicle, plate, and scene attributes and carries them into both Step 07 search indexes.
+* Improved td_case2 plate recovery with 0.20 detector confidence, 960-pixel inference, padded plate crops, an enhanced CLAHE OCR fallback, original-image preference when both OCR variants are valid, and real Indian state/UT-prefix checks before verification. Vehicle crops now receive 5% context padding in Step 03 for future full runs.
+* Validated Step 06 on `anpr_test_5min_20260715_151259` using the same 256 selected crops: plate crops increased 113 to 125, format-valid tracks 49 to 52, verified tracks 13 to 19, and verified unique plates 12 to 17. Total crop processing time decreased from 145.14 to 96.49 seconds; Florence detailed-caption calls decreased from 256 to zero. Rebuilt Steps 07 and 07B successfully.
+* Replaced td_case2's fixed Florence color-word scan with free-caption shade normalization plus a central-crop HSV fallback. Decorative shade names such as pearl white, navy, burgundy, champagne gold, bronze, and charcoal are stored as canonical search colors, while plate colors are no longer mistaken for vehicle colors. Revalidation populated a canonical color for all 242 vehicle tracks in `anpr_test_5min_20260715_151259`, with zero unknown/empty Step 06 or Step 07 vehicle colors.
+* Added td_case2 event-preview clip generation for search results. The traffic search UI can now build and preview per-result MP4 clips from the processed event frame sequence, overlay the running video timestamp plus detected start/end window, hold on the best frame, and persist clip metadata under `10C_search_event_clips_manifest.json`.
+* Added an integrated `td_case2` Streamlit workbench UI that combines video upload, end-to-end pipeline controls, editable stage parameters, object/event search with clip previews, event artifact inspection, and VLM summary review in one page.
+* Added td_case2 Step 16 evidence video generation. The VLM pipeline now finishes by building `evidence_video.mp4`, `evidence_video_index.json`, and `16_evidence_video_report.json` from existing event/search artifacts only, without re-running AI models.
+* Step 16 selects chronological, high-value searchable events, deduplicates near-identical plate/track evidence, adds investigator overlays plus title cards, and records clip-to-source traceability for future UI jump navigation.
+* Surfaced Step 16 outputs inside the td_case2 review UIs so investigators can preview the final evidence MP4 and inspect the per-clip index directly from the workbench / summary dashboard.
 
 ## 2026-06-08
 

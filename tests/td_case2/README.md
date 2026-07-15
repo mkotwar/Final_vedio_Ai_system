@@ -16,6 +16,72 @@ It also includes Step 13 VLM input generation, which turns the selected event ca
 
 It does not modify production code or `tests/tender_demo_case`.
 
+## Local development setup
+
+Use Python 3.11 and pip. From the repository root:
+
+```powershell
+py -3.11 -m venv tests\td_case2\.venv
+tests\td_case2\.venv\Scripts\python.exe -m pip install -r tests\td_case2\requirements-cuda.txt
+tests\td_case2\.venv\Scripts\python.exe -m pip install -r tests\td_case2\requirements.txt
+Copy-Item tests\td_case2\.env.example tests\td_case2\.env
+```
+
+Edit `tests/td_case2/.env` and set `TD_CASE2_INPUT_VIDEO` to an absolute local
+video path. The checked-in `yolo11m.pt` is configured as the portable combined
+YOLO fallback. The complete search-ready pipeline additionally needs
+`TD_CASE2_FLORENCE_MODEL_PATH` to point to a local Florence-2 model directory.
+Relative YOLO model paths in this file are resolved from `tests/td_case2`, so
+the default `../../yolo11m.pt` resolves to the repository-root model.
+For interactive commands launched from the repository root, existing paths such
+as `yolo11m.pt` and `OCR_MUKUL/license_plate_weights.pt` are also accepted.
+The plate detector is configured separately through
+`TD_CASE2_PLATE_DETECTOR_MODEL_PATH`; Florence OCR runs on its detected plate
+crops as well as on selected vehicle crops.
+
+`td_case2` is now GPU-first by default. If `torch.cuda.is_available()` is true,
+YOLO, the plate detector, Florence, and both local Qwen stages automatically
+use CUDA without any manual device environment variables. CPU is used only when
+CUDA is unavailable, when a stage is CPU-only by design, or when you explicitly
+override the default with `TD_CASE2_DEVICE=cpu` or a per-stage device override.
+
+Each run writes `gpu_utilization_report.json`, which records the resolved device
+for every GPU-capable component plus the stages that remain CPU-bound. Motion
+sampling, deterministic tracking association, JSON enrichment, search packaging,
+and result ranking remain CPU work in the current td_case2 implementation.
+
+The default `TD_CASE2_VLM_BACKEND=disabled` runs later stages without a Qwen
+model or API key. Set it to `local_qwen` and provide the local Qwen model paths,
+or set it to `api_qwen` and provide `TD_CASE2_QWEN_API_KEY`, when VLM review is
+needed.
+
+The `local_qwen` backend uses strict BitsAndBytes 4-bit NF4 loading for both
+the Step 11.5 3B filter and Step 14 7B reviewer. CUDA and `bitsandbytes` are
+required; these stages do not fall back to FP16, BF16, or CPU inference.
+The default local checkpoints are the pre-quantized Hugging Face repositories
+downloaded under `models/Qwen2.5-VL-3B-Instruct-bnb-4bit` and
+`models/Qwen2.5-VL-7B-Instruct-bnb-4bit`.
+
+Start the Streamlit UI with:
+
+```powershell
+tests\td_case2\.venv\Scripts\python.exe -m streamlit run tests\td_case2\td_case2_traffic_search_ui.py
+```
+
+For the integrated all-in-one workbench UI, use:
+
+```powershell
+tests\td_case2\.venv\Scripts\python.exe -m streamlit run tests\td_case2\td_case2_workbench_ui.py
+```
+
+`td_case2_results_ui.py` now opens the integrated workbench by default, with the VLM Summary section selected first.
+
+`td_case2` also exposes Streamlit sidebar pages under `tests/td_case2/pages/`, so you can switch between:
+
+- `Workbench`
+- `Search And Clips`
+- `VLM Summary`
+
 ## What it does
 
 The runner reads one local video path from an environment variable, creates a new debug run folder, writes `01_video_info.json`, saves sampled full-frame images into `02_sampled_frames/`, writes `02_sampled_frames.json`, and updates `00_stage_gate_report.json`.
@@ -35,6 +101,40 @@ $env:TD_CASE2_INPUT_VIDEO="C:\Users\Vinfocom\Downloads\anpr_test_5min.mp4"
 $env:TD_CASE2_SAMPLE_EVERY_SECONDS="1.0"
 
 python tests\td_case2\run_td_case2_step01_02.py
+```
+
+Complete search-ready pipeline:
+
+```powershell
+tests\td_case2\.venv\Scripts\python.exe tests\td_case2\run_td_case2_search_ready_pipeline.py
+```
+
+This runner creates a fresh run directory and sets `TD_CASE2_RUN_DIR` for its
+downstream steps internally. Any stale `TD_CASE2_RUN_DIR` value in the shell or
+local `.env` is replaced with the newly created directory.
+
+If Step 03 has already completed, resume at Step 04A without repeating sampling
+or YOLO detection:
+
+```powershell
+tests\td_case2\.venv\Scripts\python.exe tests\td_case2\run_td_case2_search_ready_pipeline.py --resume-run-dir "debug_runs\<existing-run>"
+```
+
+When an inherited `TD_CASE2_FLORENCE_MODEL_PATH` points to a missing placeholder
+path, Steps 04A and 06 use a valid model path from `tests/td_case2/.env`.
+
+Complete VLM + evidence pipeline on an existing search-ready run:
+
+```powershell
+$env:TD_CASE2_RUN_DIR="C:\path\to\debug_runs\<existing-run>"
+tests\td_case2\.venv\Scripts\python.exe tests\td_case2\run_td_case2_vlm_event_pipeline.py
+```
+
+Run Step 16 evidence video generation by itself on an existing VLM-ready run:
+
+```powershell
+$env:TD_CASE2_RUN_DIR="C:\path\to\debug_runs\<existing-run>"
+tests\td_case2\.venv\Scripts\python.exe tests\td_case2\run_td_case2_step16_evidence_video.py
 ```
 
 Optional custom output root:
@@ -248,6 +348,9 @@ Inside that run folder:
 - `13_vlm_event_inputs.json`
 - `13_vlm_event_inputs_flat.json`
 - `13_vlm_event_input_report.json`
+- `16_evidence_video_report.json`
+- `evidence_video.mp4`
+- `evidence_video_index.json`
 
 ## What to check after running
 
@@ -268,3 +371,5 @@ Inside that run folder:
 - For Step 12, confirm temporal suppression and event-type diversity look reasonable in `12_event_candidate_ranking_report.json`.
 - For Step 13, confirm merged groups make sense for nearby selected events and that only full-scene frames are used in strips/contact sheets.
 - For Step 13, confirm each VLM input package remains candidate-only and includes prompt context without calling any VLM yet.
+- For Step 16, confirm `evidence_video.mp4` now includes three sections in one file: searchable event clips, a deduplicated gallery of unique full-scene object-detection frames, and the Step 13 VLM input media.
+- For Step 16, confirm `evidence_video_index.json` maps each clip back to the original video time and indicates whether the clip came from an event, the object-frame gallery, or the VLM-input gallery.

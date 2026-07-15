@@ -6,6 +6,7 @@ from typing import Any
 
 import cv2
 
+from device_manager import cuda_memory_allocated_mb, cuda_memory_reserved_mb
 from stage_checks import read_json, write_json
 
 
@@ -60,6 +61,28 @@ def _bbox_iou(box_a: list[float], box_b: list[float]) -> float:
     return inter_area / union_area if union_area > 0 else 0.0
 
 
+def _safe_model_device(model: Any) -> str | None:
+    try:
+        inner_model = getattr(model, "model", None)
+        parameters = getattr(inner_model, "parameters", None)
+        if parameters is None:
+            return None
+        first_parameter = next(parameters())
+        return str(first_parameter.device)
+    except Exception:
+        return None
+
+
+def _safe_result_device(result: Any) -> str | None:
+    try:
+        boxes = getattr(result, "boxes", None)
+        data = getattr(boxes, "data", None)
+        device = getattr(data, "device", None)
+        return str(device) if device is not None else None
+    except Exception:
+        return None
+
+
 def run_yolo_detection(
     *,
     run_dir: Path,
@@ -103,6 +126,9 @@ def run_yolo_detection(
             class_name_lookup[model_role] = {str(index): str(value) for index, value in enumerate(raw_names)}
         else:
             class_name_lookup[model_role] = {}
+
+    model_device_map = {model_role: _safe_model_device(model) for model_role, model in loaded_models.items()}
+    inference_device_map: dict[str, str | None] = {model_role: None for model_role in loaded_models}
 
     annotated_dir = run_dir / "03_yolo_annotated_frames"
     crops_dir = run_dir / "03_yolo_object_crops"
@@ -158,6 +184,7 @@ def run_yolo_detection(
                     continue
 
                 result = results[0]
+                inference_device_map[model_role] = _safe_result_device(result)
                 plotted_image = result.plot()
                 annotated_image = plotted_image
                 boxes = getattr(result, "boxes", None)
@@ -183,11 +210,19 @@ def run_yolo_detection(
                     bbox_center_xy = [round(float(bbox_xywh[0]), 3), round(float(bbox_xywh[1]), 3)]
 
                     crop_path = ""
+                    crop_bbox_xyxy = [x1, y1, x2, y2]
+                    crop_padding_ratio = 0.0
                     if save_crops:
-                        ix1 = max(0, int(round(x1)))
-                        iy1 = max(0, int(round(y1)))
-                        ix2 = min(frame_width, int(round(x2)))
-                        iy2 = min(frame_height, int(round(y2)))
+                        crop_padding_ratio = 0.05 if class_name.lower() in {
+                            "car", "truck", "bus", "motorcycle", "bicycle", "auto", "van", "vehicle"
+                        } else 0.0
+                        pad_x = bbox_width * crop_padding_ratio
+                        pad_y = bbox_height * crop_padding_ratio
+                        ix1 = max(0, int(round(x1 - pad_x)))
+                        iy1 = max(0, int(round(y1 - pad_y)))
+                        ix2 = min(frame_width, int(round(x2 + pad_x)))
+                        iy2 = min(frame_height, int(round(y2 + pad_y)))
+                        crop_bbox_xyxy = [float(ix1), float(iy1), float(ix2), float(iy2)]
                         if ix2 > ix1 and iy2 > iy1:
                             crop = original_image[iy1:iy2, ix1:ix2]
                             crop_name = f"{frame_payload['frame_id']}_{model_role}_{index + 1:03d}_{class_name}.jpg"
@@ -208,6 +243,8 @@ def run_yolo_detection(
                         "bbox_area": round(bbox_area, 3),
                         "bbox_area_ratio": round(bbox_area_ratio, 6),
                         "crop_path": crop_path,
+                        "crop_bbox_xyxy": [round(value, 3) for value in crop_bbox_xyxy],
+                        "crop_padding_ratio": crop_padding_ratio,
                         "annotated_frame_path": "",
                         "duplicate_check_enabled": True,
                         "possible_duplicate_group_id": None,
@@ -273,12 +310,16 @@ def run_yolo_detection(
             {
                 "model_role": str(item["model_role"]),
                 "model_path": str(item["model_path"]),
+                "model_device": model_device_map.get(str(item["model_role"])),
+                "inference_output_device": inference_device_map.get(str(item["model_role"])),
             }
             for item in active_specs
         ],
         "yolo_conf_threshold": conf_threshold,
         "yolo_iou_threshold": iou_threshold,
         "device_used": device,
+        "cuda_memory_allocated_mb": cuda_memory_allocated_mb(),
+        "cuda_memory_reserved_mb": cuda_memory_reserved_mb(),
         "input_frame_count": len(adaptive_frames),
         "frames_processed": frames_processed,
         "frames_with_detections": frames_with_detections,

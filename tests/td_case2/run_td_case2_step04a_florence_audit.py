@@ -25,7 +25,10 @@ from config import (
     ENV_FLORENCE_TASK_MODE,
     ENV_PLATE_DETECTOR_MODEL_PATH,
     ENV_RUN_DIR,
+    read_local_env_path,
+    resolve_case_path,
 )
+from device_manager import record_stage_device, resolve_device
 from run_td_case2_step01_02 import log
 from stage_checks import build_failure_payload, update_stage_gate_report, write_json
 from step_04a_florence_model_audit import (
@@ -37,7 +40,6 @@ from step_04a_florence_model_audit import (
 
 
 DEFAULT_FLORENCE_ADAPTER_PATH = Path(r"C:\Mukul K\vinfo1\video-search-engine\ocr_colour\adaptor_florance_baseFT")
-SUPPORTED_DEVICE_VALUES = {"auto", "cpu", "cuda"}
 SUPPORTED_TASK_MODES = {"ocr", "color", "ocr_and_color"}
 
 
@@ -49,6 +51,7 @@ class FlorenceAuditConfig:
     florence_model_path: Path
     florence_adapter_path: Path | None
     device: str
+    device_reason: str
     audit_limit: int
     task_mode: str
     max_new_tokens: int
@@ -96,7 +99,7 @@ def _resolve_optional_path(raw_value: str | None, default_path: Path | None = No
     else:
         return None
     if not candidate.is_absolute():
-        candidate = candidate.resolve()
+        candidate = resolve_case_path(str(candidate))
     return candidate
 
 
@@ -104,9 +107,12 @@ def _read_native_tasks() -> list[str]:
     """Read comma-separated Florence native task prompts."""
 
     raw_value = os.environ.get(ENV_FLORENCE_AUDIT_NATIVE_TASKS, DEFAULT_FLORENCE_AUDIT_NATIVE_TASKS)
-    tasks = [item.strip() for item in raw_value.split(",") if item.strip()]
+    requested_tasks = [item.strip() for item in raw_value.split(",") if item.strip()]
+    tasks = [item for item in requested_tasks if item in {"<OCR>", "<CAPTION>"}]
     if not tasks:
-        raise ValueError(f"Environment variable {ENV_FLORENCE_AUDIT_NATIVE_TASKS} must contain at least one task prompt.")
+        raise ValueError(
+            f"Environment variable {ENV_FLORENCE_AUDIT_NATIVE_TASKS} must contain <OCR> and/or <CAPTION>."
+        )
     return tasks
 
 
@@ -136,9 +142,12 @@ def read_config() -> FlorenceAuditConfig:
             f"Environment variable {ENV_FLORENCE_MODEL_PATH} is required. "
             'Suggested setting: TD_CASE2_FLORENCE_MODEL_PATH="C:\\Mukul K\\models\\Florence-2-base-ft"'
         )
-    florence_model_path = Path(raw_model_path).expanduser()
-    if not florence_model_path.is_absolute():
-        florence_model_path = florence_model_path.resolve()
+    florence_model_path = resolve_case_path(raw_model_path)
+    if not florence_model_path.exists():
+        local_env_model_path = read_local_env_path(ENV_FLORENCE_MODEL_PATH)
+        if local_env_model_path is not None and local_env_model_path.exists():
+            florence_model_path = local_env_model_path
+            os.environ[ENV_FLORENCE_MODEL_PATH] = str(florence_model_path)
 
     florence_adapter_path = _resolve_optional_path(
         os.environ.get(ENV_FLORENCE_ADAPTER_PATH),
@@ -153,18 +162,14 @@ def read_config() -> FlorenceAuditConfig:
             f"Received: {task_mode!r}"
         )
 
-    device = os.environ.get(ENV_FLORENCE_DEVICE, DEFAULT_FLORENCE_DEVICE).strip().lower() or DEFAULT_FLORENCE_DEVICE
-    if device not in SUPPORTED_DEVICE_VALUES:
-        raise ValueError(
-            f"Environment variable {ENV_FLORENCE_DEVICE} must be one of {sorted(SUPPORTED_DEVICE_VALUES)}. "
-            f"Received: {device!r}"
-        )
+    device_decision = resolve_device(component_name="Step 04A Florence", override_env_names=(ENV_FLORENCE_DEVICE,))
 
     return FlorenceAuditConfig(
         run_dir=run_dir.resolve(),
         florence_model_path=florence_model_path.resolve(),
         florence_adapter_path=florence_adapter_path.resolve() if florence_adapter_path is not None else None,
-        device=device,
+        device=device_decision.torch_device,
+        device_reason=device_decision.reason,
         audit_limit=_read_positive_int(ENV_FLORENCE_AUDIT_LIMIT, DEFAULT_FLORENCE_AUDIT_LIMIT),
         task_mode=task_mode,
         max_new_tokens=_read_positive_int(ENV_FLORENCE_MAX_NEW_TOKENS, DEFAULT_FLORENCE_MAX_NEW_TOKENS),
@@ -240,6 +245,7 @@ def main() -> None:
 
     log(f"Run directory: {config.run_dir}")
     log(f"Florence model path: {config.florence_model_path}")
+    log(f"Florence device selection: {config.device} ({config.device_reason})")
     log(
         "Model required files status: "
         f"found={base_model_files['found_files']} missing={base_model_files['missing_files']}"
@@ -250,6 +256,7 @@ def main() -> None:
         f"found={adapter_files_summary['found_files']} missing={adapter_files_summary['missing_files']}"
     )
 
+    outputs_written = False
     try:
         audit_summary, _audit_results = run_florence_audit(
             run_dir=config.run_dir,
@@ -265,6 +272,12 @@ def main() -> None:
             device=config.device,
             plate_detector_model_path=config.plate_detector_model_path,
         )
+        outputs_written = True
+        if audit_summary["selected_crop_count"] > 0 and not audit_summary["ready_for_full_ocr_color_after_tracking"]:
+            raise RuntimeError(
+                "Florence loaded but inference failed for every audit crop. "
+                "Inspect 04A_florence_audit_results.json before continuing."
+            )
         update_stage_gate_report(
             config.run_dir,
             "04A_florence_model_audit",
@@ -285,15 +298,48 @@ def main() -> None:
         log(f"Plate detector status: {audit_summary['plate_detector_load_status']}")
         log(f"Final recommendation: {audit_summary['recommendation']}")
         log(f"Report paths: {config.run_dir / '04A_florence_model_audit.json'} | {config.run_dir / '04A_florence_audit_results.json'}")
-    except Exception as exc:
-        _write_failed_reports(
+        record_stage_device(
             run_dir=config.run_dir,
-            florence_model_path=config.florence_model_path,
-            florence_adapter_path=config.florence_adapter_path,
-            task_mode=config.task_mode,
-            audit_limit=config.audit_limit,
-            error_message=str(exc),
+            stage_name="04A_florence_model_audit",
+            component_name="florence",
+            supports_gpu=True,
+            selected_device=str(audit_summary.get("device_used") or config.device),
+            actual_device=str(audit_summary.get("device_used") or config.device),
+            model_device=audit_summary.get("model_device"),
+            input_device=str(audit_summary.get("device_used") or config.device),
+            output_device=str(audit_summary.get("device_used") or config.device),
+            preprocessing_device="cpu",
+            inference_device=str(audit_summary.get("device_used") or config.device),
+            postprocess_device="cpu",
+            vram_allocated_mb=audit_summary.get("cuda_memory_allocated_mb"),
+            vram_reserved_mb=audit_summary.get("cuda_memory_reserved_mb"),
+            reason=config.device_reason,
+            notes=["Crop decode and Florence post-processing stay on CPU; tensors are moved onto the resolved torch device for generation."],
         )
+        if audit_summary.get("plate_detector_load_status") == "success":
+            record_stage_device(
+                run_dir=config.run_dir,
+                stage_name="04A_florence_model_audit",
+                component_name="plate_detector",
+                supports_gpu=True,
+                selected_device=str(audit_summary.get("device_used") or config.device),
+                actual_device=str(audit_summary.get("device_used") or config.device),
+                inference_device=str(audit_summary.get("device_used") or config.device),
+                postprocess_device="cpu",
+                preprocessing_device="cpu",
+                reason="Plate detector inherits the same centralized device decision as Florence during audit.",
+                notes=["Plate crops are extracted and written back through OpenCV on CPU."],
+            )
+    except Exception as exc:
+        if not outputs_written:
+            _write_failed_reports(
+                run_dir=config.run_dir,
+                florence_model_path=config.florence_model_path,
+                florence_adapter_path=config.florence_adapter_path,
+                task_mode=config.task_mode,
+                audit_limit=config.audit_limit,
+                error_message=str(exc),
+            )
         update_stage_gate_report(config.run_dir, "04A_florence_model_audit", build_failure_payload(exc))
         log(f"Step 04A failed: {exc}")
         log(f"Final recommendation: {exc}")

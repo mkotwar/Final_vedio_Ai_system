@@ -7,6 +7,7 @@ from typing import Any
 
 from stage_checks import format_seconds_text, read_json, write_json
 from step_09_search_result_packaging import write_json_any
+from vehicle_color import CANONICAL_COLORS
 
 
 TRAFFIC_CLASS_WHITELIST = {
@@ -36,20 +37,8 @@ IGNORED_NOISY_CLASSES = {
     "toilet",
 }
 INVALID_OCR_TERMS = {"UNANSWERABLE", "STOP", "AMBULANCE", "CITYDL1FT"}
-COLOR_VOCAB = {
-    "white",
-    "black",
-    "red",
-    "blue",
-    "grey",
-    "gray",
-    "silver",
-    "yellow",
-    "green",
-    "brown",
-    "orange",
-}
-COLOR_NORMALIZATION = {"gray": "grey"}
+COLOR_VOCAB = set(CANONICAL_COLORS)
+COLOR_NORMALIZATION = {"grey": "gray"}
 CLASS_ALIASES = {
     "car": "car",
     "motorcycle": "motorcycle",
@@ -343,6 +332,16 @@ def searchable_tokens_for_record(record: dict[str, Any]) -> list[str]:
         record.get("possible_plate_text"),
         record.get("timestamp_text"),
         record.get("track_id"),
+        *[
+            value
+            for key, value in dict(record.get("vehicle_attributes", {})).items()
+            if key not in {"source", "confidence"} and isinstance(value, str)
+        ],
+        *[
+            value
+            for key, value in dict(record.get("scene_attributes", {})).items()
+            if key not in {"source", "confidence"} and isinstance(value, str)
+        ],
     ]:
         if isinstance(raw_value, list):
             candidates = raw_value
@@ -378,6 +377,10 @@ def build_search_text(record: dict[str, Any]) -> str:
         "verified_license_plate",
         "possible_plate_text",
         "timestamp_text",
+        "vehicle_make",
+        "vehicle_model",
+        "vehicle_body_type",
+        "vehicle_category",
     ]:
         value = record.get(key)
         if isinstance(value, list):
@@ -564,6 +567,13 @@ def build_traffic_index_payload(run_dir: Path) -> tuple[dict[str, Any], list[dic
                 "contact_sheet_path": contact_sheet_path,
                 **color_fields,
                 **plate_fields,
+                "vehicle_attributes": dict(ocr.get("vehicle_attributes", {})),
+                "license_plate_attributes": dict(ocr.get("license_plate_attributes", {})),
+                "scene_attributes": dict(ocr.get("scene_attributes", {})),
+                "vehicle_make": dict(ocr.get("vehicle_attributes", {})).get("make"),
+                "vehicle_model": dict(ocr.get("vehicle_attributes", {})).get("model"),
+                "vehicle_body_type": dict(ocr.get("vehicle_attributes", {})).get("body_type"),
+                "vehicle_category": dict(ocr.get("vehicle_attributes", {})).get("vehicle_category"),
                 "quality": quality,
                 "warnings": warnings,
             }

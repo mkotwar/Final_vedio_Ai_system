@@ -6,6 +6,8 @@ from typing import Any
 
 import streamlit as st
 
+import td_case2_traffic_search_ui as traffic_ui
+
 
 DEFAULT_RUN_DIR = Path(
     r"C:\Mukul K\vinfo1\video-search-engine\tests\td_case2\debug_runs\anpr_test_5min_20260707_122758"
@@ -21,6 +23,8 @@ FILE_NAMES = [
     "14_vlm_event_reviews.json",
     "14_vlm_event_reviews_flat.json",
     "14_final_video_summary.json",
+    "16_evidence_video_report.json",
+    "evidence_video_index.json",
 ]
 
 
@@ -133,17 +137,24 @@ def _review_list(reviews_payload: dict[str, Any] | None, flat_payload: list[Any]
     return []
 
 
-def main() -> None:
-    st.set_page_config(page_title="TD Case 2 Video Review Dashboard", layout="wide")
+def render_vlm_summary_dashboard(*, configure_page: bool = True, show_navigation_hint: bool = True) -> None:
+    if configure_page:
+        st.set_page_config(page_title="TD Case 2 Video Review Dashboard", layout="wide")
     st.title("TD Case 2 Video Review Dashboard")
+    if show_navigation_hint:
+        st.caption("Use the Workbench navigation to switch between Pipeline Control, Search & Clips, VLM Summary, Events, and Logs.")
+
+    resolved_run_dir, run_dir_source = traffic_ui._resolve_initial_run_dir()
+    initial_value = str(resolved_run_dir) if resolved_run_dir is not None else str(DEFAULT_RUN_DIR)
 
     st.sidebar.header("Run Directory")
-    run_dir_input = st.sidebar.text_input("run_dir", value=str(DEFAULT_RUN_DIR))
+    run_dir_input = st.sidebar.text_input("run_dir", value=initial_value)
     run_dir = Path(run_dir_input).expanduser()
     if not run_dir.is_absolute():
         run_dir = run_dir.resolve()
 
     st.sidebar.caption("This dashboard only reads existing td_case2 JSON outputs and images.")
+    st.sidebar.caption(f"Run source: {run_dir_source}")
     st.caption(f"Current run directory: `{run_dir}`")
 
     loaded: dict[str, dict[str, Any] | list[Any] | None] = {}
@@ -163,6 +174,8 @@ def main() -> None:
     flat_reviews_payload = loaded["14_vlm_event_reviews_flat.json"] if isinstance(loaded["14_vlm_event_reviews_flat.json"], list) else None
     step14_report = loaded["14_vlm_event_review_report.json"] if isinstance(loaded["14_vlm_event_review_report.json"], dict) else None
     final_summary = loaded["14_final_video_summary.json"] if isinstance(loaded["14_final_video_summary.json"], dict) else None
+    evidence_report = loaded["16_evidence_video_report.json"] if isinstance(loaded["16_evidence_video_report.json"], dict) else None
+    evidence_index = loaded["evidence_video_index.json"] if isinstance(loaded["evidence_video_index.json"], dict) else None
 
     _render_missing_messages(messages)
 
@@ -302,9 +315,36 @@ def main() -> None:
     else:
         st.info("Missing: 14_final_video_summary.json")
 
+    st.subheader("Evidence Video")
+    if evidence_report:
+        evidence_cols = st.columns(5)
+        evidence_cols[0].metric("Evidence clips", _safe_get(evidence_report, "event_count", 0))
+        evidence_cols[1].metric("Evidence duration", _safe_get(evidence_report, "evidence_duration_seconds", "—"))
+        evidence_cols[2].metric("Vehicles", _safe_get(evidence_report, "vehicles_detected", 0))
+        evidence_cols[3].metric("Persons", _safe_get(evidence_report, "persons_detected", 0))
+        evidence_cols[4].metric("Plates", _safe_get(evidence_report, "license_plates_detected", 0))
+
+        evidence_video_path = run_dir / str(evidence_report.get("video_file", "evidence_video.mp4"))
+        if evidence_video_path.exists():
+            st.video(str(evidence_video_path))
+        else:
+            st.info(f"Missing evidence video file: {evidence_video_path.name}")
+
+        if evidence_index and isinstance(evidence_index.get("clips"), list) and evidence_index["clips"]:
+            st.dataframe(evidence_index["clips"], use_container_width=True, hide_index=True)
+        st.json(evidence_report)
+    else:
+        st.info("Missing: 16_evidence_video_report.json")
+
     st.divider()
     st.caption(r'Run with: cd "C:\Mukul K\vinfo1\video-search-engine"')
     st.caption(r".venv\Scripts\python.exe -m streamlit run tests\td_case2\td_case2_results_ui.py")
+
+
+def main() -> None:
+    from td_case2_workbench_ui import main as workbench_main
+
+    workbench_main(configure_page=True, initial_section="VLM Summary")
 
 
 if __name__ == "__main__":

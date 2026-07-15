@@ -32,6 +32,7 @@ from config import (
     ENV_STEP11_5_USE_CACHE,
     ENV_VLM_BACKEND,
 )
+from device_manager import record_stage_device, resolve_device
 from run_td_case2_step01_02 import log
 from stage_checks import build_failure_payload, update_stage_gate_report, write_json
 from step_09_search_result_packaging import write_json_any
@@ -110,7 +111,11 @@ def read_config() -> Step11_5Config:
             ),
             "max_new_tokens": _read_positive_int(ENV_STEP11_5_MAX_NEW_TOKENS, DEFAULT_STEP11_5_MAX_NEW_TOKENS),
             "use_cache": _read_bool(ENV_STEP11_5_USE_CACHE, DEFAULT_STEP11_5_USE_CACHE),
-            "device": os.environ.get(ENV_STEP11_5_DEVICE, DEFAULT_STEP11_5_DEVICE).strip() or DEFAULT_STEP11_5_DEVICE,
+            "device": resolve_device(
+                component_name="Step 11.5 local Qwen",
+                override_env_names=(ENV_STEP11_5_DEVICE,),
+                require_cuda=False,
+            ).torch_device,
         },
     )
 
@@ -179,6 +184,7 @@ def _write_failed_reports(run_dir: Path, filter_config: dict[str, Any], error_me
 def main() -> None:
     config = read_config()
     log(f"Run directory: {config.run_dir}")
+    log(f"Step 11.5 device preference: {config.filter_config['device']}")
     try:
         output_payload, report_payload, _flat_payload = run_lightweight_vlm_filter(
             run_dir=config.run_dir,
@@ -211,6 +217,24 @@ def main() -> None:
             f"{config.run_dir / '11_5_vlm_filter_report.json'} | "
             f"{config.run_dir / '11_5_vlm_filter_results_flat.json'}"
         )
+        if str(report_payload.get("vlm_backend")) == "local_qwen" and report_payload.get("status") == "success":
+            record_stage_device(
+                run_dir=config.run_dir,
+                stage_name="11_5_lightweight_vlm_candidate_filter",
+                component_name="qwen_3b",
+                supports_gpu=True,
+                selected_device=str(report_payload.get("model_device") or config.filter_config["device"]),
+                actual_device=str(report_payload.get("model_device") or config.filter_config["device"]),
+                model_device=report_payload.get("model_device"),
+                input_device=str(report_payload.get("model_device") or config.filter_config["device"]),
+                output_device=str(report_payload.get("model_device") or config.filter_config["device"]),
+                preprocessing_device="cpu",
+                inference_device=str(report_payload.get("model_device") or config.filter_config["device"]),
+                postprocess_device="cpu",
+                vram_allocated_mb=report_payload.get("cuda_memory_allocated_after_mb"),
+                reason="Local Qwen Step 11.5 is GPU-first and requires CUDA for the installed 4-bit NF4 checkpoint.",
+                notes=["Prompt assembly, JSON parsing, and cache writes remain CPU work."],
+            )
     except Exception as exc:
         _write_failed_reports(config.run_dir, config.filter_config, str(exc))
         update_stage_gate_report(config.run_dir, "11_5_lightweight_vlm_candidate_filter", build_failure_payload(exc))

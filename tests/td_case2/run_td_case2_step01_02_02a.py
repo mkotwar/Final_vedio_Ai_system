@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from run_td_case2_step01_02 import (
     create_run_dir,
     extract_video_info,
@@ -11,7 +13,7 @@ from stage_checks import build_failure_payload, update_stage_gate_report, write_
 from step_02a_motion_adaptive_sampling import read_adaptive_config, run_motion_adaptive_sampling
 
 
-def main() -> None:
+def main() -> Path:
     """Run the isolated td_case2 pipeline through step 02A adaptive sampling."""
 
     config = read_config()
@@ -91,6 +93,7 @@ def main() -> None:
         raise
 
     log(f"Run directory: {run_dir}")
+    return run_dir
 
 
 if __name__ == "__main__":

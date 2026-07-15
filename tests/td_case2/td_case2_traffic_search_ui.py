@@ -11,6 +11,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from event_preview_video import build_event_preview_clip, get_existing_event_preview, resolve_run_path as resolve_preview_path
 from traffic_search_common import resolve_run_path, run_traffic_search
 
 
@@ -529,10 +530,49 @@ def _render_card(record: dict[str, Any], run_dir: Path, image_size: str) -> None
     info_cols[2].markdown(f"**Verified plate**  \n{record.get('verified_license_plate') or '-'}")
     info_cols[3].markdown(f"**Track ID**  \n{record.get('track_id') or '-'}")
 
-    meta_cols = st.columns(2)
+    meta_cols = st.columns(3)
     meta_cols[0].markdown(f"**Confidence / Quality**  \n{record.get('confidence', '-')} / {record.get('quality', '-')}")
+    first_seen = record.get("first_seen_seconds")
+    last_seen = record.get("last_seen_seconds")
+    duration_seconds = float(record.get("duration_seconds", 0.0) or 0.0)
+    if isinstance(first_seen, (int, float)) and isinstance(last_seen, (int, float)):
+        detection_window = f"{_format_seconds(first_seen)} to {_format_seconds(last_seen)}"
+    else:
+        detection_window = record.get("timestamp_text", "-")
+    meta_cols[1].markdown(f"**Detected window**  \n{detection_window} ({duration_seconds:.2f}s)")
     badges = _record_badges(record)
-    meta_cols[1].markdown(f"**Labels**  \n{', '.join(badges) if badges else '-'}")
+    meta_cols[2].markdown(f"**Labels**  \n{', '.join(badges) if badges else '-'}")
+
+    existing_clip = get_existing_event_preview(run_dir, record)
+    clip_cols = st.columns([1.1, 1.0])
+    with clip_cols[0]:
+        if existing_clip:
+            clip_path = resolve_preview_path(run_dir, existing_clip.get("event_clip_path"))
+            if clip_path is not None and clip_path.exists():
+                st.video(str(clip_path))
+                st.caption(
+                    "Event preview clip | "
+                    f"{existing_clip.get('start_timestamp_text', '-')} to {existing_clip.get('end_timestamp_text', '-')} | "
+                    f"{float(existing_clip.get('detection_duration_seconds', 0.0) or 0.0):.2f}s"
+                )
+        else:
+            if st.button("Generate event clip", key=f"generate_clip_{record.get('object_record_id')}"):
+                with st.spinner("Building event preview clip..."):
+                    build_event_preview_clip(run_dir, record)
+                st.rerun()
+    with clip_cols[1]:
+        if existing_clip:
+            st.markdown(
+                f"**Clip frames**  \n{existing_clip.get('clip_frame_count', '-')}"
+            )
+            st.markdown(
+                f"**Source frames**  \n{existing_clip.get('source_frame_count', '-')}"
+            )
+            st.markdown(
+                f"**Best frame**  \n{record.get('timestamp_text', '-')}"
+            )
+        else:
+            st.info("Generate the event clip to preview the processed event frames in the UI.")
 
     with st.expander("Details"):
         st.write(
@@ -546,6 +586,7 @@ def _render_card(record: dict[str, Any], run_dir: Path, image_size: str) -> None
                 "object_record_id": record.get("object_record_id"),
                 "full_frame_path": record.get("full_frame_path"),
                 "crop_path": record.get("crop_path"),
+                "existing_event_clip": existing_clip,
             }
         )
     st.markdown("</div>", unsafe_allow_html=True)
@@ -866,6 +907,13 @@ def main() -> None:
             selected_track_id = selected_track_label.split("|", 1)[0].strip()
             selected_track = next((item for item in journey_rows if item["track_id"] == selected_track_id), None)
             records_to_render = list(selected_track.get("records", []))[:max_cards_to_show] if selected_track else []
+
+        generate_clip_batch = st.button("Generate event clips for shown results", disabled=not records_to_render)
+        if generate_clip_batch and records_to_render:
+            with st.spinner("Building event preview clips for the current result set..."):
+                for record in records_to_render:
+                    build_event_preview_clip(run_dir, record)
+            st.rerun()
 
         st.subheader(f"Results ({len(records_to_render)} shown)")
         if result_view_mode == "Table":

@@ -1,0 +1,7 @@
+.env
+.venv/
+debug_runs/
+__pycache__/
+*.pyc
+!requirements.txt
+!requirements-cuda.txt

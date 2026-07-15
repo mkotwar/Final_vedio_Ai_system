@@ -6,6 +6,7 @@ from typing import Any
 
 import cv2
 
+from device_manager import cuda_memory_allocated_mb, cuda_memory_reserved_mb
 from stage_checks import read_json, write_json
 
 
@@ -47,6 +48,28 @@ def _render_annotated_frame(result: Any) -> Any:
         raise RuntimeError(f"Failed to render annotated YOLO frame: {exc}") from exc
 
 
+def _safe_model_device(model: Any) -> str | None:
+    try:
+        inner_model = getattr(model, "model", None)
+        parameters = getattr(inner_model, "parameters", None)
+        if parameters is None:
+            return None
+        first_parameter = next(parameters())
+        return str(first_parameter.device)
+    except Exception:
+        return None
+
+
+def _safe_result_device(result: Any) -> str | None:
+    try:
+        boxes = getattr(result, "boxes", None)
+        data = getattr(boxes, "data", None)
+        device = getattr(data, "device", None)
+        return str(device) if device is not None else None
+    except Exception:
+        return None
+
+
 def run_yolo_model_audit(
     *,
     run_dir: Path,
@@ -80,6 +103,10 @@ def run_yolo_model_audit(
             "test_frames_processed": 0,
             "test_total_detections": 0,
             "test_class_counts": {},
+            "model_device": None,
+            "inference_output_device": None,
+            "cuda_memory_allocated_mb": None,
+            "cuda_memory_reserved_mb": None,
             "error_message": None,
         }
 
@@ -91,6 +118,7 @@ def run_yolo_model_audit(
         try:
             YOLO = _load_yolo_class()
             model = YOLO(str(model_path))
+            model_payload["model_device"] = _safe_model_device(model)
             class_names = _normalize_class_names(getattr(model, "names", {}))
             class_counter: Counter[str] = Counter()
             total_detections = 0
@@ -111,6 +139,7 @@ def run_yolo_model_audit(
                     continue
 
                 result = results[0]
+                model_payload["inference_output_device"] = _safe_result_device(result)
                 boxes = getattr(result, "boxes", None)
                 if boxes is not None and getattr(boxes, "cls", None) is not None:
                     class_ids = boxes.cls.tolist()
@@ -131,6 +160,8 @@ def run_yolo_model_audit(
             model_payload["class_names"] = class_names
             model_payload["test_total_detections"] = total_detections
             model_payload["test_class_counts"] = dict(sorted(class_counter.items()))
+            model_payload["cuda_memory_allocated_mb"] = cuda_memory_allocated_mb()
+            model_payload["cuda_memory_reserved_mb"] = cuda_memory_reserved_mb()
             overall_ready_for_detection = True
         except Exception as exc:
             model_payload["error_message"] = str(exc)

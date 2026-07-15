@@ -9,7 +9,9 @@ from typing import Any
 
 import cv2
 
+from device_manager import cuda_memory_allocated_mb, cuda_memory_reserved_mb, resolve_device
 from stage_checks import read_json, write_json
+from vehicle_color import normalize_color_phrase, resolve_vehicle_color
 
 
 PREFERRED_VEHICLE_CLASSES = {
@@ -22,19 +24,6 @@ PREFERRED_VEHICLE_CLASSES = {
     "van",
     "vehicle",
 }
-COLOR_WORDS = [
-    "white",
-    "black",
-    "red",
-    "blue",
-    "yellow",
-    "grey",
-    "gray",
-    "silver",
-    "green",
-    "brown",
-    "orange",
-]
 BASE_MODEL_REQUIRED_FILES = [
     "config.json",
     "model.safetensors",
@@ -170,10 +159,13 @@ def load_florence_model(model_path: Path, device: str) -> tuple[Any, Any, str]:
     except Exception as exc:  # pragma: no cover
         raise RuntimeError(f"Failed to import Florence dependencies: {exc}") from exc
 
-    if device == "auto":
-        device_used = "cuda" if torch.cuda.is_available() else "cpu"
+    decision = resolve_device(component_name="Florence", require_cuda=False)
+    if device == "cpu":
+        device_used = "cpu"
+    elif device and device not in {"auto", ""}:
+        device_used = "cuda:0" if device in {"cuda", "0"} else device
     else:
-        device_used = device
+        device_used = decision.torch_device
 
     # local_files_only=True prevents any online Hugging Face download during this isolated audit.
     processor = AutoProcessor.from_pretrained(
@@ -185,6 +177,7 @@ def load_florence_model(model_path: Path, device: str) -> tuple[Any, Any, str]:
         str(model_path),
         trust_remote_code=True,
         local_files_only=True,
+        attn_implementation="eager",
     )
     model = model.to(device_used)
     model.eval()
@@ -220,6 +213,9 @@ def run_florence_generation(
             **inputs,
             max_new_tokens=max_new_tokens,
             num_beams=num_beams,
+            # Florence-2's custom generation code expects the legacy cache
+            # layout and crashes on the empty cache tuple from Transformers 4.57.
+            use_cache=False,
         )
 
     decoded_list = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -250,6 +246,7 @@ def run_florence_generation(
         "post_processed_output": post_processed_output,
         "generated_token_count": generated_token_count,
         "generated_ids_shape": generated_ids_shape,
+        "generated_ids_device": str(generated_ids.device) if hasattr(generated_ids, "device") else None,
         "status": status,
         "error_message": None,
         "processing_seconds": round(elapsed_seconds, 6),
@@ -274,13 +271,9 @@ def parse_florence_json(raw_output: str) -> dict[str, str]:
 
 
 def extract_color_from_text(text: str) -> str:
-    """Pick a simple color word from caption-like output."""
+    """Normalize a free-form Florence color phrase for compatibility callers."""
 
-    normalized = text.lower()
-    for color in COLOR_WORDS:
-        if re.search(rf"\b{re.escape(color)}\b", normalized):
-            return "grey" if color == "gray" else color
-    return "unknown"
+    return normalize_color_phrase(text) or "unknown"
 
 
 def stringify_result_content(result: dict[str, Any]) -> str:
@@ -310,19 +303,23 @@ def best_ocr_from_results(native_task_results: list[dict[str, Any]], json_prompt
     return "not_visible", "none"
 
 
-def best_color_from_results(native_task_results: list[dict[str, Any]], json_prompt_result: dict[str, Any] | None) -> tuple[str, str]:
+def best_color_from_results(
+    native_task_results: list[dict[str, Any]],
+    json_prompt_result: dict[str, Any] | None,
+    image_path: Path,
+) -> tuple[str, str]:
     """Choose the best available color source from captions or optional JSON."""
 
     for item in native_task_results:
-        if item.get("task_prompt") in {"<DETAILED_CAPTION>", "<CAPTION>"}:
-            color = extract_color_from_text(stringify_result_content(item))
-            if color != "unknown":
-                return color, item["task_name"].lower()
+        if item.get("task_prompt") == "<CAPTION>":
+            color_result = resolve_vehicle_color(stringify_result_content(item), image_path)
+            return str(color_result["color"]), str(color_result["source"])
     if json_prompt_result and json_prompt_result.get("status") == "success":
-        color = str(json_prompt_result.get("parsed_vehicle_color", "unknown")).strip().lower()
-        if color and color != "unknown":
+        color = normalize_color_phrase(str(json_prompt_result.get("parsed_vehicle_color", "")))
+        if color:
             return color, "json_prompt"
-    return "unknown", "none"
+    color_result = resolve_vehicle_color("", image_path)
+    return str(color_result["color"]), str(color_result["source"])
 
 
 def load_plate_detector(model_path: Path | None) -> tuple[str, Any | None]:
@@ -345,6 +342,7 @@ def run_plate_detector_on_crop(
     plate_detector: Any,
     plate_audit_dir: Path,
     detection_id: str,
+    device: str,
 ) -> dict[str, Any]:
     """Run optional plate detection on a vehicle crop and save plate crops."""
 
@@ -352,17 +350,28 @@ def run_plate_detector_on_crop(
     if image is None:
         raise RuntimeError(f"Failed to read crop image for plate detection: {crop_path}")
 
-    results = plate_detector.predict(source=str(crop_path), conf=0.25, iou=0.45, verbose=False)
+    results = plate_detector.predict(
+        source=str(crop_path),
+        conf=0.20,
+        iou=0.50,
+        imgsz=960,
+        device=device,
+        verbose=False,
+    )
     plate_crop_paths: list[str] = []
     if results:
         boxes = getattr(results[0], "boxes", None)
         if boxes is not None and getattr(boxes, "xyxy", None) is not None:
             for index, bbox_xyxy in enumerate(boxes.xyxy.tolist(), start=1):
-                x1, y1, x2, y2 = [int(round(float(value))) for value in bbox_xyxy]
-                x1 = max(0, x1)
-                y1 = max(0, y1)
-                x2 = min(image.shape[1], x2)
-                y2 = min(image.shape[0], y2)
+                raw_x1, raw_y1, raw_x2, raw_y2 = [int(round(float(value))) for value in bbox_xyxy]
+                box_width = max(1, raw_x2 - raw_x1)
+                box_height = max(1, raw_y2 - raw_y1)
+                pad_x = max(3, int(round(box_width * 0.10)))
+                pad_y = max(3, int(round(box_height * 0.20)))
+                x1 = max(0, raw_x1 - pad_x)
+                y1 = max(0, raw_y1 - pad_y)
+                x2 = min(image.shape[1], raw_x2 + pad_x)
+                y2 = min(image.shape[0], raw_y2 + pad_y)
                 if x2 <= x1 or y2 <= y1:
                     continue
                 plate_crop = image[y1:y2, x1:x2]
@@ -373,6 +382,9 @@ def run_plate_detector_on_crop(
     return {
         "plate_crop_paths": plate_crop_paths,
         "plate_crop_count": len(plate_crop_paths),
+        "inference_output_device": str(getattr(getattr(getattr(results[0], "boxes", None), "data", None), "device", None))
+        if results and getattr(getattr(results[0], "boxes", None), "data", None) is not None
+        else None,
     }
 
 
@@ -392,6 +404,8 @@ def run_florence_audit(
     plate_detector_model_path: Path | None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Run an offline Florence health-check audit on a few YOLO crops."""
+
+    native_tasks = [task for task in native_tasks if task in {"<OCR>", "<CAPTION>"}]
 
     audit_inputs_dir = run_dir / "04A_florence_audit_inputs"
     audit_inputs_dir.mkdir(parents=True, exist_ok=True)
@@ -482,8 +496,6 @@ def run_florence_audit(
                         ocr_native_success_count += 1
                     elif task_prompt == "<CAPTION>":
                         caption_success_count += 1
-                    elif task_prompt == "<DETAILED_CAPTION>":
-                        detailed_caption_success_count += 1
 
             if run_json_prompt_test:
                 json_prompt_started = time.perf_counter()
@@ -531,6 +543,7 @@ def run_florence_audit(
                     plate_detector=plate_detector,
                     plate_audit_dir=plate_audit_dir,
                     detection_id=result_payload["detection_id"],
+                    device=device_used,
                 )
                 plate_crop_count += int(plate_result["plate_crop_count"])
                 plate_result["plate_ocr_results"] = []
@@ -557,6 +570,7 @@ def run_florence_audit(
             best_color_text, best_color_source = best_color_from_results(
                 result_payload["native_task_results"],
                 result_payload["json_prompt_result"],
+                crop_path,
             )
             result_payload["parsed_ocr_text"] = best_ocr_text
             result_payload["parsed_vehicle_color"] = best_color_text
@@ -603,6 +617,9 @@ def run_florence_audit(
         "model_load_status": "success",
         "adapter_load_status": adapter_load_status,
         "device_used": device_used,
+        "model_device": str(getattr(model, "device", device_used)),
+        "cuda_memory_allocated_mb": cuda_memory_allocated_mb(),
+        "cuda_memory_reserved_mb": cuda_memory_reserved_mb(),
         "task_mode": task_mode,
         "audit_crop_limit": audit_limit,
         "selected_crop_count": len(selected_crops),

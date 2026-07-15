@@ -8,9 +8,12 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
+from config import ENV_STEP14_DEVICE
+from device_manager import resolve_device
 from stage_checks import read_json, write_json
 from step_09_search_result_packaging import write_json_any
 from qwen_api_client import call_qwen_api_with_image
+from qwen_4bit import validate_prequantized_nf4_checkpoint
 
 
 INPUT_FILE_PRIMARY = "14_vlm_event_reviews.json"
@@ -329,27 +332,20 @@ def _load_model_components(review_config: dict[str, Any]) -> tuple[Any, Any, Any
 
     if not _find_spec("qwen_vl_utils"):
         raise RuntimeError("qwen_vl_utils is required for Step 14 but is not installed.")
+    if not _find_spec("bitsandbytes"):
+        raise RuntimeError("bitsandbytes is required for Step 14 4-bit Qwen inference but is not installed.")
     from qwen_vl_utils import process_vision_info
 
     model_path = str(review_config["model_path"])
     if "3B" in model_path:
         raise RuntimeError("Step 14 is configured with a 3B model path. Qwen2.5-VL-7B-Instruct is required.")
-    device = str(review_config["device"] or "auto").strip().lower()
-    dtype = torch.float32
-    device_map: str | None = None
-    if device == "auto":
-        if torch.cuda.is_available():
-            device_map = "auto"
-            dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    elif device == "cuda":
-        if not torch.cuda.is_available():
-            raise RuntimeError("TD_CASE2_STEP14_DEVICE=cuda requested, but CUDA is not available.")
-        device_map = "auto"
-        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-    elif device == "cpu":
-        dtype = torch.float32
-    else:
-        raise ValueError(f"Unsupported Step 14 device: {device!r}")
+    _decision = resolve_device(
+        component_name="Step 14 local Qwen",
+        override_env_names=(ENV_STEP14_DEVICE,),
+        require_cuda=True,
+    )
+
+    quantization_config = validate_prequantized_nf4_checkpoint(model_path)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -359,15 +355,13 @@ def _load_model_components(review_config: dict[str, Any]) -> tuple[Any, Any, Any
     model_kwargs: dict[str, Any] = {
         "local_files_only": True,
         "trust_remote_code": True,
-        "torch_dtype": dtype,
+        "device_map": {"": "cuda:0"},
     }
-    if device_map is not None:
-        model_kwargs["device_map"] = device_map
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **model_kwargs)
-    if device == "cpu":
-        model = model.to("cpu")
     model_load_time_seconds = time.perf_counter() - load_start
-    return processor, model, process_vision_info, model_load_time_seconds, str(dtype).replace("torch.", ""), _cuda_memory_mb(torch)
+    compute_dtype = str(quantization_config.get("bnb_4bit_compute_dtype", "unknown"))
+    precision = f"4bit_nf4_compute_{compute_dtype}"
+    return processor, model, process_vision_info, model_load_time_seconds, precision, _cuda_memory_mb(torch)
 
 
 def _run_single_inference(
@@ -832,6 +826,7 @@ def run_vlm_event_review(
         "risk_counts": dict(risk_counts),
         "event_type_counts": dict(event_type_counts),
         "model_path": str(review_config["model_path"]),
+        "model_device": str(getattr(model, "device", "cuda:0")) if model is not None else None,
         "model_load_time_seconds": round(model_load_time_seconds, 3),
         "api_success_count": api_success_count,
         "api_failed_count": api_failed_count,

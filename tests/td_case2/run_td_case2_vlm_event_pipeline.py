@@ -13,13 +13,31 @@ from config import (
     ENV_RUN_DIR,
     ENV_VLM_BACKEND,
 )
+from device_manager import record_stage_device
 from run_td_case2_step01_02 import log
 from run_td_case2_step11_event_candidates import main as step11_main
 from run_td_case2_step11_5_vlm_filter import main as step11_5_main
 from run_td_case2_step12_event_ranking import main as step12_main
 from run_td_case2_step13_vlm_inputs import main as step13_main
 from run_td_case2_step14_vlm_review import main as step14_main
+from run_td_case2_step16_evidence_video import main as step16_main
 from stage_checks import read_json, write_json
+
+
+def _record_cpu_stage(run_dir: Path, stage_name: str, component_name: str, reason: str, notes: list[str] | None = None) -> None:
+    record_stage_device(
+        run_dir=run_dir,
+        stage_name=stage_name,
+        component_name=component_name,
+        supports_gpu=False,
+        selected_device="cpu",
+        actual_device="cpu",
+        preprocessing_device="cpu",
+        inference_device="cpu",
+        postprocess_device="cpu",
+        reason=reason,
+        notes=notes,
+    )
 
 
 def _pipeline_status_path(run_dir: Path) -> Path:
@@ -70,18 +88,46 @@ def main() -> None:
     _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="starting")
     try:
         step11_main()
+        _record_cpu_stage(
+            run_dir,
+            "11_full_scene_event_candidates",
+            "event_candidate_generation",
+            "Step 11 is rule-based temporal aggregation over existing JSON artifacts; no GPU model runs here.",
+        )
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step11")
         step11_5_main()
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step11_5")
         step12_main()
+        _record_cpu_stage(
+            run_dir,
+            "12_event_candidate_ranking",
+            "event_ranking",
+            "Step 12 is deterministic scoring and selection logic on CPU.",
+        )
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step12")
         step13_main()
+        _record_cpu_stage(
+            run_dir,
+            "13_vlm_event_inputs",
+            "vlm_input_generation",
+            "Step 13 builds temporal strips and contact sheets with OpenCV/image I/O on CPU.",
+            notes=["Image composition is CPU-bound in the current td_case2 implementation."],
+        )
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step13")
         step14_main()
+        _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step14")
+        step16_main()
+        _record_cpu_stage(
+            run_dir,
+            "16_evidence_video_generation",
+            "evidence_video_generation",
+            "Step 16 reuses existing JSON artifacts and sampled frames to build a final evidence MP4 on CPU with OpenCV encoding.",
+            notes=["No AI models are re-run in this stage."],
+        )
 
         step14_report = read_json(run_dir / "14_vlm_event_review_report.json")
         final_status = "skipped" if step14_report.get("status") == "skipped" else "ready"
-        _write_pipeline_status(run_dir, vlm_status=final_status, latest_completed_step="step14")
+        _write_pipeline_status(run_dir, vlm_status=final_status, latest_completed_step="step16")
     except Exception as exc:
         _write_pipeline_status(run_dir, vlm_status="failed", latest_completed_step="failed", error_message=str(exc))
         raise

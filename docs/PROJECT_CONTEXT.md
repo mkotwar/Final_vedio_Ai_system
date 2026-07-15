@@ -48,6 +48,11 @@ Video
 
 Events are the primary source of truth.
 
+Investigator-facing evidence exports must remain event-driven. If the system
+produces a condensed evidence video or clip package, it should be assembled
+from searchable events and already-generated artifacts rather than by
+re-running scene understanding directly over the source video.
+
 ---
 
 # Current System Architecture

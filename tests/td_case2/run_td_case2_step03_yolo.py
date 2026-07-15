@@ -8,7 +8,6 @@ from typing import Any
 from config import (
     DEFAULT_YOLO_AUDIT_FRAME_LIMIT,
     DEFAULT_YOLO_CONF_THRESHOLD,
-    DEFAULT_YOLO_DEVICE,
     DEFAULT_YOLO_IOU_THRESHOLD,
     DEFAULT_YOLO_SAVE_ANNOTATED,
     DEFAULT_YOLO_SAVE_CROPS,
@@ -23,7 +22,9 @@ from config import (
     ENV_YOLO_MODEL_PATH,
     ENV_YOLO_SAVE_ANNOTATED,
     ENV_YOLO_SAVE_CROPS,
+    resolve_case_path,
 )
+from device_manager import record_stage_device, resolve_device
 from run_td_case2_step01_02 import log
 from stage_checks import build_failure_payload, read_json, update_stage_gate_report
 from step_03a_yolo_model_audit import run_yolo_model_audit
@@ -32,7 +33,6 @@ from step_03b_yolo_detection import run_yolo_detection
 
 DEFAULT_PERSON_MODEL_PATH = Path(r"C:\Mukul K\vinfo1\video-search-engine\object\Person_detection (1)\Person_detection.pt")
 DEFAULT_OBJECT_MODEL_PATH = Path(r"C:\Mukul K\vinfo1\video-search-engine\object\vehical_detection")
-SUPPORTED_DEVICE_VALUES = {"auto", "cpu", "cuda"}
 
 
 @dataclass(frozen=True)
@@ -44,6 +44,7 @@ class YoloStepConfig:
     conf_threshold: float
     iou_threshold: float
     device: str
+    device_reason: str
     audit_frame_limit: int
     save_annotated: bool
     save_crops: bool
@@ -115,7 +116,7 @@ def _resolve_model_path(raw_value: str | None, default_path: Path | None) -> Pat
     else:
         return None
     if not candidate.is_absolute():
-        candidate = candidate.resolve()
+        candidate = resolve_case_path(str(candidate))
     return candidate
 
 
@@ -162,20 +163,15 @@ def read_config() -> YoloStepConfig:
             f"{ENV_PERSON_YOLO_MODEL_PATH}, {ENV_OBJECT_YOLO_MODEL_PATH}, or {ENV_YOLO_MODEL_PATH}."
         )
 
-    device = os.environ.get(ENV_YOLO_DEVICE, DEFAULT_YOLO_DEVICE).strip().lower() or DEFAULT_YOLO_DEVICE
-    if device not in SUPPORTED_DEVICE_VALUES:
-        raise ValueError(
-            f"Environment variable {ENV_YOLO_DEVICE} must be one of {sorted(SUPPORTED_DEVICE_VALUES)}. "
-            f"Received: {device!r}"
-        )
-    detection_device = "" if device == "auto" else device
+    device_decision = resolve_device(component_name="Step 03 YOLO", override_env_names=(ENV_YOLO_DEVICE,))
 
     return YoloStepConfig(
         run_dir=run_dir.resolve(),
         model_specs=model_specs,
         conf_threshold=_read_positive_float(ENV_YOLO_CONF_THRESHOLD, DEFAULT_YOLO_CONF_THRESHOLD),
         iou_threshold=_read_positive_float(ENV_YOLO_IOU_THRESHOLD, DEFAULT_YOLO_IOU_THRESHOLD),
-        device=detection_device,
+        device=device_decision.ultralytics_device,
+        device_reason=device_decision.reason,
         audit_frame_limit=_read_positive_int(ENV_YOLO_AUDIT_FRAME_LIMIT, DEFAULT_YOLO_AUDIT_FRAME_LIMIT),
         save_annotated=_read_bool(ENV_YOLO_SAVE_ANNOTATED, DEFAULT_YOLO_SAVE_ANNOTATED),
         save_crops=_read_bool(ENV_YOLO_SAVE_CROPS, DEFAULT_YOLO_SAVE_CROPS),
@@ -189,6 +185,7 @@ def main() -> None:
     config = read_config()
     log(f"Run directory: {config.run_dir}")
     log("Input manifest used: 02A_adaptive_frames.json")
+    log(f"YOLO device selection: {config.device} ({config.device_reason})")
     person_paths = [item["model_path"] for item in config.model_specs if item["model_role"] == "person"]
     object_paths = [item["model_path"] for item in config.model_specs if item["model_role"] == "object_vehicle"]
     log(f"Person model path: {person_paths[0] if person_paths else 'not provided'}")
@@ -222,6 +219,25 @@ def main() -> None:
                 f"Model {item['model_role']}: load_status={item['load_status']} "
                 f"class_names={item.get('class_names', {})}"
             )
+            if item.get("load_status") == "success":
+                actual_device = str(item.get("inference_output_device") or item.get("model_device") or config.device)
+                record_stage_device(
+                    run_dir=config.run_dir,
+                    stage_name="03A_yolo_model_audit",
+                    component_name=f"yolo_{item['model_role']}",
+                    supports_gpu=True,
+                    selected_device=actual_device,
+                    actual_device=actual_device,
+                    model_device=item.get("model_device"),
+                    output_device=item.get("inference_output_device"),
+                    inference_device=item.get("inference_output_device"),
+                    postprocess_device="cpu",
+                    preprocessing_device="ultralytics_internal",
+                    vram_allocated_mb=item.get("cuda_memory_allocated_mb"),
+                    vram_reserved_mb=item.get("cuda_memory_reserved_mb"),
+                    reason=config.device_reason,
+                    notes=["Ultralytics handles tensor preprocessing internally before model inference."],
+                )
     except Exception as exc:
         update_stage_gate_report(config.run_dir, "03A_yolo_model_audit", build_failure_payload(exc))
         log(f"Step 03A failed: {exc}")
@@ -272,6 +288,25 @@ def main() -> None:
         log(f"Total detections: {detections_payload['total_detections']}")
         log(f"Class counts: {detections_payload['class_counts']}")
         log(f"Output paths: {config.run_dir / '03_yolo_annotated_frames'} | {config.run_dir / '03_yolo_object_crops'}")
+        for item in detections_payload.get("models_used", []):
+            actual_device = str(item.get("inference_output_device") or item.get("model_device") or config.device)
+            record_stage_device(
+                run_dir=config.run_dir,
+                stage_name="03B_yolo_detection",
+                component_name=f"yolo_{item['model_role']}",
+                supports_gpu=True,
+                selected_device=actual_device,
+                actual_device=actual_device,
+                model_device=item.get("model_device"),
+                output_device=item.get("inference_output_device"),
+                inference_device=item.get("inference_output_device"),
+                postprocess_device="cpu",
+                preprocessing_device="ultralytics_internal",
+                vram_allocated_mb=detections_payload.get("cuda_memory_allocated_mb"),
+                vram_reserved_mb=detections_payload.get("cuda_memory_reserved_mb"),
+                reason=config.device_reason,
+                notes=["Annotated image rendering and crop JPEG writes remain on CPU via OpenCV."],
+            )
     except Exception as exc:
         update_stage_gate_report(config.run_dir, "03B_yolo_detection", build_failure_payload(exc))
         log(f"Step 03B failed: {exc}")

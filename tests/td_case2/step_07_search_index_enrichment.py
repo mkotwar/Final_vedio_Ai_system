@@ -294,6 +294,12 @@ def _build_search_terms(record: dict[str, Any], include_possible_ocr: bool) -> t
     add_grouped("timestamp_terms", str(record["best_timestamp_text"]))
     add_grouped("metadata_terms", str(record["selection_group"]))
     add_grouped("metadata_terms", str(record["quality_label"]))
+    for value in dict(record.get("vehicle_attributes", {})).values():
+        if isinstance(value, str):
+            add_grouped("metadata_terms", value)
+    for value in dict(record.get("scene_attributes", {})).values():
+        if isinstance(value, str):
+            add_grouped("metadata_terms", value)
 
     combined_terms: list[str] = []
     for group_name in [
@@ -470,6 +476,9 @@ def run_search_index_enrichment(
             "vehicle_color": vehicle_color if vehicle_color else "unknown",
             "vehicle_color_source": str(track_result.get("best_color_source", "unknown")),
             "all_candidate_colors": list(track_result.get("all_candidate_colors", [])),
+            "vehicle_attributes": dict(track_result.get("vehicle_attributes", {})),
+            "license_plate_attributes": dict(track_result.get("license_plate_attributes", {})),
+            "scene_attributes": dict(track_result.get("scene_attributes", {})),
             "best_crop_path": _relative_to_run(run_dir, best_crop_path),
             "best_full_frame_path": best_full_frame_path_value,
             "full_frame_available": full_frame_available,
@@ -505,6 +514,9 @@ def run_search_index_enrichment(
                 "track_id": record["track_id"],
                 "vehicle_class": record["vehicle_class"],
                 "vehicle_color": record["vehicle_color"],
+                "vehicle_make": record["vehicle_attributes"].get("make"),
+                "vehicle_model": record["vehicle_attributes"].get("model"),
+                "vehicle_body_type": record["vehicle_attributes"].get("body_type"),
                 "verified_license_plate": record["verified_license_plate"],
                 "has_verified_plate": record["verified_license_plate_valid"],
                 "possible_ocr_text": " ".join(

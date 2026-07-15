@@ -26,6 +26,7 @@ from config import (
     ENV_STEP14_USE_CACHE,
     ENV_VLM_BACKEND,
 )
+from device_manager import record_stage_device, resolve_device
 from run_td_case2_step01_02 import log
 from stage_checks import build_failure_payload, update_stage_gate_report, write_json
 from step_09_search_result_packaging import write_json_any
@@ -91,7 +92,11 @@ def read_config() -> Step14Config:
             "max_inputs": _read_positive_int(ENV_STEP14_MAX_INPUTS, DEFAULT_STEP14_MAX_INPUTS),
             "max_new_tokens": _read_positive_int(ENV_STEP14_MAX_NEW_TOKENS, DEFAULT_STEP14_MAX_NEW_TOKENS),
             "use_cache": _read_bool(ENV_STEP14_USE_CACHE, DEFAULT_STEP14_USE_CACHE),
-            "device": os.environ.get(ENV_STEP14_DEVICE, DEFAULT_STEP14_DEVICE).strip() or DEFAULT_STEP14_DEVICE,
+            "device": resolve_device(
+                component_name="Step 14 local Qwen",
+                override_env_names=(ENV_STEP14_DEVICE,),
+                require_cuda=False,
+            ).torch_device,
             "require_strip": _read_bool(ENV_STEP14_REQUIRE_STRIP, DEFAULT_STEP14_REQUIRE_STRIP),
         },
     )
@@ -170,6 +175,7 @@ def _write_failed_reports(run_dir: Path, review_config: dict[str, Any], error_me
 def main() -> None:
     config = read_config()
     log(f"Run directory: {config.run_dir}")
+    log(f"Step 14 device preference: {config.review_config['device']}")
     try:
         output_payload, _flat_payload, final_summary_payload, report_payload = run_vlm_event_review(
             run_dir=config.run_dir,
@@ -201,6 +207,24 @@ def main() -> None:
             f"{config.run_dir / '14_final_video_summary.json'} | "
             f"{config.run_dir / '14_vlm_event_review_report.json'}"
         )
+        if str(report_payload.get("vlm_backend")) == "local_qwen" and report_payload.get("status") == "success":
+            record_stage_device(
+                run_dir=config.run_dir,
+                stage_name="14_vlm_event_review",
+                component_name="qwen_7b",
+                supports_gpu=True,
+                selected_device=str(report_payload.get("model_device") or config.review_config["device"]),
+                actual_device=str(report_payload.get("model_device") or config.review_config["device"]),
+                model_device=report_payload.get("model_device"),
+                input_device=str(report_payload.get("model_device") or config.review_config["device"]),
+                output_device=str(report_payload.get("model_device") or config.review_config["device"]),
+                preprocessing_device="cpu",
+                inference_device=str(report_payload.get("model_device") or config.review_config["device"]),
+                postprocess_device="cpu",
+                vram_allocated_mb=report_payload.get("cuda_memory_allocated_after_mb"),
+                reason="Local Qwen Step 14 is GPU-first and requires CUDA for the installed 4-bit NF4 checkpoint.",
+                notes=["Temporal strip loading, prompt assembly, JSON parsing, and report writes remain CPU work."],
+            )
     except Exception as exc:
         _write_failed_reports(config.run_dir, config.review_config, str(exc))
         update_stage_gate_report(config.run_dir, "14_vlm_event_review", build_failure_payload(exc))

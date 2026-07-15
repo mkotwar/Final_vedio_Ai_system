@@ -34,7 +34,10 @@ from config import (
     ENV_STEP06_RUN_CLEANING_TESTS,
     ENV_STEP06_SAVE_DEBUG_IMAGES,
     ENV_STEP06_SAVE_PLATE_CROPS,
+    read_local_env_path,
+    resolve_case_path,
 )
+from device_manager import record_stage_device, resolve_device
 from run_td_case2_step01_02 import log
 from stage_checks import build_failure_payload, update_stage_gate_report, write_json
 from step_06_ocr_color_enrichment import (
@@ -46,7 +49,6 @@ from step_06_ocr_color_enrichment import (
 )
 
 
-SUPPORTED_DEVICE_VALUES = {"auto", "cpu", "cuda"}
 DEFAULT_PLATE_DETECTOR_MODEL_PATH = Path(r"C:\Mukul K\vinfo1\video-search-engine\ocr_colour\license_plate_weights.pt")
 
 
@@ -62,6 +64,7 @@ class Step06Config:
     primary_limit: int
     fallback_limit: int
     device: str
+    device_reason: str
     max_new_tokens: int
     num_beams: int
     save_plate_crops: bool
@@ -131,7 +134,7 @@ def _resolve_optional_path(raw_value: str | None) -> Path | None:
         return None
     candidate = Path(raw_value.strip()).expanduser()
     if not candidate.is_absolute():
-        candidate = candidate.resolve()
+        candidate = resolve_case_path(str(candidate))
     return candidate
 
 
@@ -175,9 +178,12 @@ def read_config() -> Step06Config:
     florence_model_path: Path
     raw_model_path = os.environ.get(ENV_FLORENCE_MODEL_PATH, "").strip()
     if raw_model_path:
-        florence_model_path = Path(raw_model_path).expanduser()
-        if not florence_model_path.is_absolute():
-            florence_model_path = florence_model_path.resolve()
+        florence_model_path = resolve_case_path(raw_model_path)
+        if not florence_model_path.exists():
+            local_env_model_path = read_local_env_path(ENV_FLORENCE_MODEL_PATH)
+            if local_env_model_path is not None and local_env_model_path.exists():
+                florence_model_path = local_env_model_path
+                os.environ[ENV_FLORENCE_MODEL_PATH] = str(florence_model_path)
     else:
         florence_model_path = Path(".")
 
@@ -186,12 +192,7 @@ def read_config() -> Step06Config:
     if plate_detector_model_path is None and DEFAULT_PLATE_DETECTOR_MODEL_PATH.exists():
         plate_detector_model_path = DEFAULT_PLATE_DETECTOR_MODEL_PATH
 
-    device = os.environ.get(ENV_STEP06_DEVICE, DEFAULT_STEP06_DEVICE).strip().lower() or DEFAULT_STEP06_DEVICE
-    if device not in SUPPORTED_DEVICE_VALUES:
-        raise ValueError(
-            f"Environment variable {ENV_STEP06_DEVICE} must be one of {sorted(SUPPORTED_DEVICE_VALUES)}. "
-            f"Received: {device!r}"
-        )
+    device_decision = resolve_device(component_name="Step 06 Florence OCR/Color", override_env_names=(ENV_STEP06_DEVICE,))
 
     return Step06Config(
         run_dir=run_dir.resolve(),
@@ -201,7 +202,8 @@ def read_config() -> Step06Config:
         process_groups=_read_process_groups(),
         primary_limit=_read_non_negative_int(ENV_STEP06_PRIMARY_LIMIT, DEFAULT_STEP06_PRIMARY_LIMIT),
         fallback_limit=_read_non_negative_int(ENV_STEP06_FALLBACK_LIMIT, DEFAULT_STEP06_FALLBACK_LIMIT),
-        device=device,
+        device=device_decision.torch_device,
+        device_reason=device_decision.reason,
         max_new_tokens=_read_positive_int(ENV_STEP06_MAX_NEW_TOKENS, DEFAULT_STEP06_MAX_NEW_TOKENS or DEFAULT_FLORENCE_MAX_NEW_TOKENS),
         num_beams=_read_positive_int(ENV_STEP06_NUM_BEAMS, DEFAULT_STEP06_NUM_BEAMS or DEFAULT_FLORENCE_NUM_BEAMS),
         save_plate_crops=_read_bool(ENV_STEP06_SAVE_PLATE_CROPS, DEFAULT_STEP06_SAVE_PLATE_CROPS),
@@ -262,6 +264,7 @@ def main() -> None:
     log(f"Run directory: {config.run_dir}")
     log("Input selected crops file: 05_best_track_frames.json")
     log(f"reuse_existing_raw_results: {str(config.reuse_existing_raw_results).lower()}")
+    log(f"Step 06 device selection: {config.device} ({config.device_reason})")
 
     if config.run_cleaning_tests:
         warnings = test_clean_plate_text_examples()
@@ -271,10 +274,11 @@ def main() -> None:
         for warning in verification_warnings:
             log(f"Verification test warning: {warning}")
 
+    outputs_written = False
     try:
         cleaned_source_path = config.run_dir / "06_ocr_color_results_cleaned.json"
         raw_source_path = config.run_dir / "06_ocr_color_results.json"
-        if config.reuse_existing_raw_results or cleaned_source_path.exists() or raw_source_path.exists():
+        if config.reuse_existing_raw_results:
             source_results_path = cleaned_source_path if cleaned_source_path.exists() else raw_source_path
             log(f"Source cleaned results file: {source_results_path}")
             results_payload, report_payload, results_path, report_path = verify_existing_step06_outputs(config.run_dir)
@@ -298,6 +302,12 @@ def main() -> None:
                 save_debug_images=config.save_debug_images,
                 min_plate_confidence=config.min_plate_confidence,
                 reuse_existing_raw_results=config.reuse_existing_raw_results,
+            )
+        outputs_written = True
+        if report_payload["processed_crop_count"] > 0 and report_payload["successful_crop_count"] == 0:
+            raise RuntimeError(
+                "OCR/color inference failed for every processed crop. "
+                "Inspect 06_ocr_color_report.json before continuing."
             )
         update_stage_gate_report(
             config.run_dir,
@@ -334,8 +344,42 @@ def main() -> None:
         log(f"Possible unique plates: {report_payload['possible_unique_license_plate_count']}")
         log(f"Output verified results path: {results_path}")
         log(f"Output verified report path: {report_path}")
+        if not config.reuse_existing_raw_results:
+            record_stage_device(
+                run_dir=config.run_dir,
+                stage_name="06_ocr_color_enrichment",
+                component_name="florence",
+                supports_gpu=True,
+                selected_device=str(results_payload.get("device_used") or config.device),
+                actual_device=str(results_payload.get("device_used") or config.device),
+                model_device=results_payload.get("model_device"),
+                input_device=str(results_payload.get("device_used") or config.device),
+                output_device=str(results_payload.get("device_used") or config.device),
+                preprocessing_device="cpu",
+                inference_device=str(results_payload.get("device_used") or config.device),
+                postprocess_device="cpu",
+                vram_allocated_mb=results_payload.get("cuda_memory_allocated_mb"),
+                vram_reserved_mb=results_payload.get("cuda_memory_reserved_mb"),
+                reason=config.device_reason,
+                notes=["Image decode, text cleaning, and JSON aggregation remain CPU work around CUDA generation."],
+            )
+            if report_payload.get("plate_detector_load_status") == "success":
+                record_stage_device(
+                    run_dir=config.run_dir,
+                    stage_name="06_ocr_color_enrichment",
+                    component_name="plate_detector",
+                    supports_gpu=True,
+                    selected_device=str(results_payload.get("device_used") or config.device),
+                    actual_device=str(results_payload.get("device_used") or config.device),
+                    preprocessing_device="cpu",
+                    inference_device=str(results_payload.get("device_used") or config.device),
+                    postprocess_device="cpu",
+                    reason="Plate detector shares the centralized Step 06 device decision.",
+                    notes=["Plate crop extraction and debug-image rendering remain on CPU via OpenCV."],
+                )
     except Exception as exc:
-        _write_failed_reports(config.run_dir, str(exc))
+        if not outputs_written:
+            _write_failed_reports(config.run_dir, str(exc))
         update_stage_gate_report(config.run_dir, "06_ocr_color_enrichment", build_failure_payload(exc))
         log(f"Step 06 failed: {exc}")
         log(f"Run directory: {config.run_dir}")
