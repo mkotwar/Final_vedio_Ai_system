@@ -4,7 +4,7 @@
 
 **Project Name:** AI Video Review & Investigation System
 
-**Last Updated:** 2026-07-15
+**Last Updated:** 2026-07-16
 
 **Overall Progress:** ~45%
 
@@ -422,6 +422,17 @@ Event abstraction and summary quality improvements.
 * Fixed td_case2 Step 13 non-merged VLM input generation so separate event review strips can be produced when `TD_CASE2_STEP13_MERGE_NEARBY_SELECTED=false`; re-reviewed the accident short with 10 separate VLM inputs and detected 4 high-risk collision moments.
 
 ## 2026-07-16
+
+* Fixed the isolated `tests/td_case2` ByteTrack LAP shim to use `scipy.optimize.linear_sum_assignment` instead of the removed `ultralytics.utils.ops.linear_sum_assignment` helper. This unblocks the dynamic YOLO tracking experiment and the dense ByteTrack experiment under the current Ultralytics build.
+* Revalidated the isolated tracking tests with `--noconftest`: `tests/td_case2/experiments/dynamic_yolo_tracking/test_dynamic_fps_controller.py`, `tests/td_case2/experiments/step04b_bytetrack/test_tracking_experiment.py`, and `tests/td_case2/test_step03_yolo_config.py` now pass 33/33 in the workspace root `.venv`.
+* Optimized the isolated td_case2 fragment-merging stage to short-circuit invalid geometric pairs before any crop I/O, cache up to three representative HSV descriptors per track, cap merge candidates per source track through `TD_CASE2_EXP_MERGE_MAX_CANDIDATES_PER_TRACK`, and emit merge-stage progress plus timing metrics without changing the active td_case2 pipeline.
+* Added a merge-only resume mode to the isolated dynamic YOLO tracking experiment so existing `single_pass_dynamic_tracks_raw.json` outputs can be finalized into merged tracks, audit, report, and preview artifacts without rerunning decoding, motion selection, YOLO, or ByteTrack.
+* Validated the optimized merge-only resume flow on `debug_runs/traffic moderate 3.5min_20260716_150146`: the interrupted run completed from raw tracks in 0.246 seconds of merge time, reduced 154 raw tracks to 140 merged tracks through 18 accepted merge operations, and preserved the preexisting frame-selection / detection / raw-track artifacts unchanged.
+* Added an isolated active-pipeline preflight helper at `tests/td_case2/check_td_case2_readiness.py` plus an optional launcher `tests/td_case2/run_current_td_case2.ps1` for new-PC setup. The checker validates the current search-ready and VLM/event runners, package/runtime availability, CUDA visibility, writable output roots, model-path loadability, and offline local-model readiness without running video inference or changing pipeline outputs.
+* Audited the active `tests/td_case2` pipeline on the July 16, 2026 Windows workstation. The validated search-ready configuration uses the workspace root `.venv`, `object/Person_detection (1)/Person_detection.pt`, `object/vehical_detection/best_old.pt`, `ocr_colour/license_plate_weights.pt`, `C:\Mukul K\models\Florence-2-base-ft`, and the repo-level `debug_runs` output root. The code default `object/vehical_detection` directory remains invalid for Ultralytics unless overridden to the actual `.pt` file.
+* Updated the active isolated `td_case2` local Qwen loaders so Step 11.5 and Step 14 can load normal FP16/BF16 Hugging Face checkpoints directly into runtime BitsAndBytes 4-bit NF4 mode, while still accepting already prequantized NF4 checkpoints. The loaders now enforce strict CUDA-only 4-bit verification, offline processor preflight checks, GPU-memory/load-time reporting, and explicit model cleanup between the 3B and 7B stages.
+* Added isolated runtime validation coverage for the new local Qwen loading path at `tests/td_case2/test_qwen_4bit.py` and `tests/td_case2/validate_qwen_runtime_4bit.py`.
+* Revalidated local Qwen runtime loading on this workstation using the restored normal checkpoints at `C:\Mukul K\models\Qwen2.5-VL-3B-Instruct` and `C:\Users\Vinfocom\.cache\huggingface\hub\models--Qwen--Qwen2.5-VL-7B-Instruct\snapshots\cc594898137f460bfe9f0759e9844b3ce807cfb5`. Runtime NF4 validation passed for both models with BF16 compute; the 3B load used approximately 2304.50 MB allocated GPU memory and the 7B load used approximately 5690.11 MB allocated GPU memory.
 
 * Added td_case2 Step 15 searchable reviewed-event generation so Step 14 `collision` / `near_miss` decisions are persisted as standalone searchable scene events instead of being reconstructed later from weaker Step 11 labels.
 * Hardened Step 12 and Step 13 against silent loss of accident evidence: Step 11.5 `yes` detections with critical visible-event types now receive forced preservation through ranking, and Step 13 no longer merges critical accident candidates into ordinary nearby traffic groups.

@@ -6,6 +6,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import cv2
@@ -60,7 +61,7 @@ else:
     from .tracking_metrics import build_step05_compatible_tracks, compare_mode_summaries, summarize_tracks, validate_step05_compatibility
     from .yolo_tracking_pipeline import build_preview_video, class_group, detect_on_selected_frames, merge_track_fragments, resolve_pipeline_config, run_variable_gap_bytetrack, YoloFrameProcessor
 
-from stage_checks import write_json
+from stage_checks import read_json, write_json
 
 
 ENV_DYNAMIC_VIDEO_PATH = "TD_CASE2_DYNAMIC_VIDEO_PATH"
@@ -73,6 +74,7 @@ ENV_DYNAMIC_TRACK_MIN_LENGTH = "TD_CASE2_DYNAMIC_TRACK_MIN_LENGTH"
 ENV_DYNAMIC_SAVE_ANNOTATED = "TD_CASE2_DYNAMIC_SAVE_ANNOTATED"
 ENV_DYNAMIC_SAVE_CROPS = "TD_CASE2_DYNAMIC_SAVE_CROPS"
 ENV_DYNAMIC_EMPTY_HEARTBEAT_SECONDS = "TD_CASE2_EXP_EMPTY_HEARTBEAT_SECONDS"
+ENV_DYNAMIC_MERGE_MAX_CANDIDATES_PER_TRACK = "TD_CASE2_EXP_MERGE_MAX_CANDIDATES_PER_TRACK"
 
 
 def _read_bool(env_name: str, default_value: bool) -> bool:
@@ -285,6 +287,17 @@ def _build_yolo_config() -> Any:
         save_annotated=_read_bool(ENV_DYNAMIC_SAVE_ANNOTATED, True),
         save_crops=_read_bool(ENV_DYNAMIC_SAVE_CROPS, True),
     )
+
+
+def _build_tracking_runtime_config() -> dict[str, Any]:
+    return {
+        "track_buffer_seconds": _read_float(ENV_DYNAMIC_TRACK_BUFFER_SECONDS, 2.0),
+        "high_confidence": _read_float(ENV_DYNAMIC_TRACK_HIGH_CONFIDENCE, 0.25),
+        "low_confidence": _read_float(ENV_DYNAMIC_TRACK_LOW_CONFIDENCE, 0.10),
+        "match_threshold": _read_float(ENV_DYNAMIC_TRACK_MATCH_THRESHOLD, 0.80),
+        "min_track_length": _read_int(ENV_DYNAMIC_TRACK_MIN_LENGTH, 2),
+        "merge_max_candidates_per_track": _read_int(ENV_DYNAMIC_MERGE_MAX_CANDIDATES_PER_TRACK, 5),
+    }
 
 
 def _dedupe_reason_items(items: list[str]) -> list[str]:
@@ -586,12 +599,13 @@ def _run_mode(
     merged_tracks_name: str,
     merge_audit_name: str,
 ) -> dict[str, Any]:
+    tracking_runtime = _build_tracking_runtime_config()
     config = resolve_pipeline_config(
-        track_buffer_seconds=_read_float(ENV_DYNAMIC_TRACK_BUFFER_SECONDS, 2.0),
-        high_confidence=_read_float(ENV_DYNAMIC_TRACK_HIGH_CONFIDENCE, 0.25),
-        low_confidence=_read_float(ENV_DYNAMIC_TRACK_LOW_CONFIDENCE, 0.10),
-        match_threshold=_read_float(ENV_DYNAMIC_TRACK_MATCH_THRESHOLD, 0.80),
-        min_track_length=_read_int(ENV_DYNAMIC_TRACK_MIN_LENGTH, 2),
+        track_buffer_seconds=tracking_runtime["track_buffer_seconds"],
+        high_confidence=tracking_runtime["high_confidence"],
+        low_confidence=tracking_runtime["low_confidence"],
+        match_threshold=tracking_runtime["match_threshold"],
+        min_track_length=tracking_runtime["min_track_length"],
         save_annotated=_read_bool(ENV_DYNAMIC_SAVE_ANNOTATED, True),
         save_crops=_read_bool(ENV_DYNAMIC_SAVE_CROPS, True),
     )
@@ -618,10 +632,10 @@ def _run_mode(
         image_width=metadata.width,
         image_height=metadata.height,
         reference_fps=max(10.0, config.match_threshold * 12.5),
-        track_buffer_seconds=config.track_buffer_seconds,
-        high_confidence=config.high_confidence,
-        low_confidence=config.low_confidence,
-        match_threshold=config.match_threshold,
+        track_buffer_seconds=tracking_runtime["track_buffer_seconds"],
+        high_confidence=tracking_runtime["high_confidence"],
+        low_confidence=tracking_runtime["low_confidence"],
+        match_threshold=tracking_runtime["match_threshold"],
     )
     tracker_seconds = time.perf_counter() - tracker_started
 
@@ -630,7 +644,7 @@ def _run_mode(
         tracks=raw_tracks,
         image_width=metadata.width,
         image_height=metadata.height,
-        min_track_length=config.min_track_length,
+        min_track_length=tracking_runtime["min_track_length"],
     )
     write_json(experiment_dir / raw_tracks_name, raw_tracks_payload)
 
@@ -640,6 +654,7 @@ def _run_mode(
         run_dir=experiment_dir,
         raw_tracks=raw_tracks,
         image_diagonal=image_diagonal,
+        max_candidates_per_track=tracking_runtime["merge_max_candidates_per_track"],
     )
     merge_seconds = time.perf_counter() - merge_started
     write_json(experiment_dir / merge_audit_name, merge_audit)
@@ -648,7 +663,7 @@ def _run_mode(
         tracks=merged_tracks,
         image_width=metadata.width,
         image_height=metadata.height,
-        min_track_length=config.min_track_length,
+        min_track_length=tracking_runtime["min_track_length"],
     )
     compatibility = validate_step05_compatibility(merged_tracks_payload)
     if not compatibility["compatible"]:
@@ -691,7 +706,7 @@ def _run_single_pass_tracking_outputs(
     detection_rows: list[dict[str, Any]],
     single_pass_report: dict[str, Any],
 ) -> dict[str, Any]:
-    config = _build_yolo_config()
+    tracking_runtime = _build_tracking_runtime_config()
     write_json(experiment_dir / "single_pass_dynamic_yolo_detections.json", yolo_payload)
 
     tracker_started = time.perf_counter()
@@ -700,11 +715,11 @@ def _run_single_pass_tracking_outputs(
         detection_rows=detection_rows,
         image_width=metadata.width,
         image_height=metadata.height,
-        reference_fps=max(10.0, config.match_threshold * 12.5),
-        track_buffer_seconds=config.track_buffer_seconds,
-        high_confidence=config.high_confidence,
-        low_confidence=config.low_confidence,
-        match_threshold=config.match_threshold,
+        reference_fps=max(10.0, tracking_runtime["match_threshold"] * 12.5),
+        track_buffer_seconds=tracking_runtime["track_buffer_seconds"],
+        high_confidence=tracking_runtime["high_confidence"],
+        low_confidence=tracking_runtime["low_confidence"],
+        match_threshold=tracking_runtime["match_threshold"],
     )
     single_pass_report["tracking_time_seconds"] = round(time.perf_counter() - tracker_started, 3)
 
@@ -713,15 +728,48 @@ def _run_single_pass_tracking_outputs(
         tracks=raw_tracks,
         image_width=metadata.width,
         image_height=metadata.height,
-        min_track_length=config.min_track_length,
+        min_track_length=tracking_runtime["min_track_length"],
     )
     write_json(experiment_dir / "single_pass_dynamic_tracks_raw.json", raw_tracks_payload)
 
+    return _finalize_single_pass_merge_outputs(
+        metadata=metadata,
+        experiment_dir=experiment_dir,
+        frame_records=frame_records,
+        yolo_payload=yolo_payload,
+        yolo_report=yolo_report,
+        raw_tracks_payload=raw_tracks_payload,
+        raw_tracks=raw_tracks,
+        bytetrack_meta=bytetrack_meta,
+        yolo_seconds=float(single_pass_report["yolo_processing_time_seconds"]),
+        tracker_seconds=float(single_pass_report["tracking_time_seconds"]),
+        report_seed=single_pass_report,
+        resumed_from_existing_raw_tracks=False,
+    )
+
+
+def _finalize_single_pass_merge_outputs(
+    *,
+    metadata: Any,
+    experiment_dir: Path,
+    frame_records: list[dict[str, Any]],
+    yolo_payload: dict[str, Any],
+    yolo_report: dict[str, Any],
+    raw_tracks_payload: dict[str, Any],
+    raw_tracks: list[dict[str, Any]],
+    bytetrack_meta: dict[str, Any],
+    yolo_seconds: float,
+    tracker_seconds: float,
+    report_seed: dict[str, Any],
+    resumed_from_existing_raw_tracks: bool,
+) -> dict[str, Any]:
+    tracking_runtime = _build_tracking_runtime_config()
     image_diagonal = (metadata.width**2 + metadata.height**2) ** 0.5
     merged_tracks, merge_audit, merge_meta = merge_track_fragments(
         run_dir=experiment_dir,
         raw_tracks=raw_tracks,
         image_diagonal=image_diagonal,
+        max_candidates_per_track=tracking_runtime["merge_max_candidates_per_track"],
     )
     write_json(experiment_dir / "single_pass_dynamic_merge_audit.json", merge_audit)
     merged_tracks_payload, _ = build_step05_compatible_tracks(
@@ -729,7 +777,7 @@ def _run_single_pass_tracking_outputs(
         tracks=merged_tracks,
         image_width=metadata.width,
         image_height=metadata.height,
-        min_track_length=config.min_track_length,
+        min_track_length=tracking_runtime["min_track_length"],
     )
     compatibility = validate_step05_compatibility(merged_tracks_payload)
     if not compatibility["compatible"]:
@@ -749,40 +797,117 @@ def _run_single_pass_tracking_outputs(
         burst_timestamps=burst_timestamps,
     )
 
+    merge_seconds = float(merge_meta.get("merge_time_seconds", 0.0))
     summary = summarize_tracks(
         mode_name="single_pass_dynamic",
         total_video_frames=metadata.frame_count,
         frames_processed=len(frame_records),
-        yolo_seconds=float(single_pass_report["yolo_processing_time_seconds"]),
-        tracker_seconds=float(single_pass_report["tracking_time_seconds"]),
-        merge_seconds=0.0,
+        yolo_seconds=yolo_seconds,
+        tracker_seconds=tracker_seconds,
+        merge_seconds=merge_seconds,
         yolo_payload=yolo_payload,
         raw_tracks_payload=raw_tracks_payload,
         merged_tracks_payload=merged_tracks_payload,
         bytetrack_meta=bytetrack_meta,
     )
-    vehicle_tracks = [item for item in list(merged_tracks_payload.get("tracks", [])) if item.get("track_type") == "vehicle"]
-    single_pass_report["raw_track_count"] = len([item for item in list(raw_tracks_payload.get("tracks", [])) if item.get("track_type") == "vehicle"])
-    single_pass_report["merged_track_count"] = len(vehicle_tracks)
-    quality_counts = summary.get("step05_compatibility", {})
-    del quality_counts
-    single_pass_report["single_frame_track_count"] = int(summary.get("single_frame_tracks", 0))
-    single_pass_report["fragmented_track_count"] = int(summary.get("fragmented_tracks", 0))
-    single_pass_report["good_track_count"] = int(summary.get("good_tracks", 0))
-    single_pass_report["merge_meta"] = merge_meta
-    single_pass_report["lost_track_recoveries"] = int(bytetrack_meta.get("vehicle_refind_count", 0))
-    single_pass_report["step05_compatibility"] = compatibility
-    single_pass_report["frames_processed_by_yolo"] = len(frame_records)
-    single_pass_report["processed_frame_percentage"] = yolo_report.get("processed_frame_percentage", 0.0)
-    single_pass_report["mode_name"] = "single_pass_dynamic"
-    return single_pass_report
+    raw_tracks_list = list(raw_tracks_payload.get("tracks", []))
+    merged_tracks_list = list(merged_tracks_payload.get("tracks", []))
+    raw_vehicle_tracks = [item for item in raw_tracks_list if item.get("track_type") == "vehicle"]
+    merged_vehicle_tracks = [item for item in merged_tracks_list if item.get("track_type") == "vehicle"]
+    raw_person_tracks = [item for item in raw_tracks_list if item.get("track_type") == "person"]
+    merged_person_tracks = [item for item in merged_tracks_list if item.get("track_type") == "person"]
+    final_report = dict(report_seed)
+    final_report["raw_track_count"] = len(raw_tracks_list)
+    final_report["merged_track_count"] = len(merged_tracks_list)
+    final_report["raw_vehicle_track_count"] = len(raw_vehicle_tracks)
+    final_report["merged_vehicle_track_count"] = len(merged_vehicle_tracks)
+    final_report["raw_person_track_count"] = len(raw_person_tracks)
+    final_report["merged_person_track_count"] = len(merged_person_tracks)
+    final_report["single_frame_track_count"] = int(summary.get("single_frame_tracks", 0))
+    final_report["fragmented_track_count"] = int(summary.get("fragmented_tracks", 0))
+    final_report["good_track_count"] = int(summary.get("good_tracks", 0))
+    final_report["merge_meta"] = merge_meta
+    final_report["lost_track_recoveries"] = int(bytetrack_meta.get("vehicle_refind_count", 0))
+    final_report["step05_compatibility"] = compatibility
+    final_report["frames_processed_by_yolo"] = len(frame_records)
+    final_report["processed_frame_percentage"] = yolo_report.get("processed_frame_percentage", 0.0)
+    final_report["mode_name"] = "single_pass_dynamic"
+    final_report["resumed_from_existing_raw_tracks"] = resumed_from_existing_raw_tracks
+    return final_report
+
+
+def _resolve_resume_paths(path_value: Path, repo_root: Path) -> tuple[Path, Path]:
+    resolved = path_value.expanduser()
+    if not resolved.is_absolute():
+        resolved = (repo_root / resolved).resolve()
+    if resolved.name == "dynamic_yolo_tracking_experiment":
+        experiment_dir = resolved
+        run_dir = resolved.parent
+    else:
+        run_dir = resolved
+        experiment_dir = run_dir / "dynamic_yolo_tracking_experiment"
+    return run_dir, experiment_dir
+
+
+def _resume_single_pass_merge_outputs(*, repo_root: Path, resume_run_dir: Path) -> tuple[Path, Path]:
+    run_dir, experiment_dir = _resolve_resume_paths(resume_run_dir, repo_root)
+    required_paths = [
+        run_dir / "01_video_info.json",
+        experiment_dir / "single_pass_dynamic_frames.json",
+        experiment_dir / "single_pass_dynamic_yolo_detections.json",
+        experiment_dir / "single_pass_dynamic_tracks_raw.json",
+    ]
+    missing = [str(path) for path in required_paths if not path.exists()]
+    if missing:
+        raise FileNotFoundError(f"Resume merge mode is missing required files: {missing}")
+
+    video_info = read_json(run_dir / "01_video_info.json")
+    metadata = SimpleNamespace(
+        video_path=Path(str(video_info.get("input_video_path", ""))),
+        fps=float(video_info.get("fps", 0.0) or 0.0),
+        frame_count=int(video_info.get("frame_count", 0) or 0),
+        width=int(video_info.get("width", 0) or 0),
+        height=int(video_info.get("height", 0) or 0),
+        duration_seconds=float(video_info.get("duration_seconds", 0.0) or 0.0),
+    )
+    frame_records = list(read_json(experiment_dir / "single_pass_dynamic_frames.json").get("selected_frames", []))
+    yolo_payload = read_json(experiment_dir / "single_pass_dynamic_yolo_detections.json")
+    raw_tracks_payload = read_json(experiment_dir / "single_pass_dynamic_tracks_raw.json")
+    yolo_report = {
+        "processed_frame_percentage": round((len(frame_records) / metadata.frame_count) * 100.0, 3) if metadata.frame_count > 0 else 0.0,
+    }
+    final_report = _finalize_single_pass_merge_outputs(
+        metadata=metadata,
+        experiment_dir=experiment_dir,
+        frame_records=frame_records,
+        yolo_payload=yolo_payload,
+        yolo_report=yolo_report,
+        raw_tracks_payload=raw_tracks_payload,
+        raw_tracks=list(raw_tracks_payload.get("tracks", [])),
+        bytetrack_meta={},
+        yolo_seconds=0.0,
+        tracker_seconds=0.0,
+        report_seed={
+            "tracking_time_seconds": 0.0,
+            "yolo_processing_time_seconds": 0.0,
+        },
+        resumed_from_existing_raw_tracks=True,
+    )
+    write_json(experiment_dir / "single_pass_dynamic_report.json", final_report)
+    return run_dir, experiment_dir
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the isolated single-pass dynamic YOLO tracking experiment.")
     parser.add_argument("--with-fixed-comparisons", action="store_true", help="Also run the legacy fixed 3 FPS and fixed 5 FPS comparison passes.")
+    parser.add_argument("--resume-merge-run-dir", type=Path, help="Resume only the fragment-merge/finalization stage from an existing dynamic experiment run directory.")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[4]
+    if args.resume_merge_run_dir is not None:
+        run_dir, experiment_dir = _resume_single_pass_merge_outputs(repo_root=repo_root, resume_run_dir=args.resume_merge_run_dir)
+        print(f"run_dir={run_dir}")
+        print(f"experiment_dir={experiment_dir}")
+        return
     raw_video_path = os.environ.get(ENV_DYNAMIC_VIDEO_PATH, "").strip()
     if not raw_video_path:
         raise RuntimeError(

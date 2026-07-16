@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
+from scipy.optimize import linear_sum_assignment
 
 
 def _install_lap_shim() -> None:
@@ -19,8 +20,6 @@ def _install_lap_shim() -> None:
     lap_module.__version__ = "0.5.12"
 
     def lapjv(cost_matrix: np.ndarray, extend_cost: bool = True, cost_limit: float = np.inf):
-        from ultralytics.utils.ops import linear_sum_assignment
-
         rows, cols = linear_sum_assignment(cost_matrix)
         x = np.full(cost_matrix.shape[0], -1, dtype=int)
         y = np.full(cost_matrix.shape[1], -1, dtype=int)

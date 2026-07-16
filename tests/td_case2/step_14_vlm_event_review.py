@@ -13,7 +13,12 @@ from device_manager import resolve_device
 from stage_checks import read_json, write_json
 from step_09_search_result_packaging import write_json_any
 from qwen_api_client import call_qwen_api_with_image
-from qwen_4bit import validate_prequantized_nf4_checkpoint
+from qwen_4bit import (
+    build_qwen_4bit_load_config,
+    capture_cuda_memory_snapshot,
+    release_qwen_resources,
+    verify_model_loaded_in_4bit,
+)
 
 
 INPUT_FILE_PRIMARY = "14_vlm_event_reviews.json"
@@ -327,7 +332,7 @@ def _cache_key(vlm_input_id: str, image_path_used: str | None, model_name: str) 
     return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
-def _load_model_components(review_config: dict[str, Any]) -> tuple[Any, Any, Any, float, str, float | None]:
+def _load_model_components(review_config: dict[str, Any]) -> tuple[Any, Any, Any, dict[str, Any]]:
     import torch
     from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
@@ -345,24 +350,41 @@ def _load_model_components(review_config: dict[str, Any]) -> tuple[Any, Any, Any
         override_env_names=(ENV_STEP14_DEVICE,),
         require_cuda=True,
     )
-
-    quantization_config = validate_prequantized_nf4_checkpoint(model_path)
+    load_config = build_qwen_4bit_load_config(model_path, torch_module=torch)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    memory_before = capture_cuda_memory_snapshot(torch)
 
     load_start = time.perf_counter()
     processor = AutoProcessor.from_pretrained(model_path, local_files_only=True, trust_remote_code=True)
     model_kwargs: dict[str, Any] = {
         "local_files_only": True,
         "trust_remote_code": True,
-        "device_map": {"": "cuda:0"},
+        "device_map": "auto",
+        "low_cpu_mem_usage": True,
     }
+    if load_config["quantization_config"] is not None:
+        model_kwargs["quantization_config"] = load_config["quantization_config"]
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **model_kwargs)
     model_load_time_seconds = time.perf_counter() - load_start
-    compute_dtype = str(quantization_config.get("bnb_4bit_compute_dtype", "unknown"))
-    precision = f"4bit_nf4_compute_{compute_dtype}"
-    return processor, model, process_vision_info, model_load_time_seconds, precision, _cuda_memory_mb(torch)
+    verification = verify_model_loaded_in_4bit(model)
+    memory_after = capture_cuda_memory_snapshot(torch)
+    return processor, model, process_vision_info, {
+        "model_load_time_seconds": model_load_time_seconds,
+        "precision_label": str(load_config["precision_label"]),
+        "checkpoint_type": str(load_config["checkpoint_type"]),
+        "compute_dtype_name": str(load_config["compute_dtype_name"]),
+        "quantization_type": str(load_config["quantization_type"]),
+        "double_quant": bool(load_config["double_quant"]),
+        "is_loaded_in_4bit": bool(verification["is_loaded_in_4bit"]),
+        "linear_4bit_module_count": int(verification["linear_4bit_module_count"]),
+        "cuda_memory_allocated_before_load_mb": memory_before["allocated_mb"],
+        "cuda_memory_reserved_before_load_mb": memory_before["reserved_mb"],
+        "cuda_memory_allocated_after_load_mb": memory_after["allocated_mb"],
+        "cuda_memory_reserved_after_load_mb": memory_after["reserved_mb"],
+        "processor_class": str(load_config["processor_info"]["processor_class"]),
+    }
 
 
 def _run_single_inference(
@@ -536,6 +558,16 @@ def run_vlm_event_review(
     model_dtype = ""
     cuda_after_load_mb: float | None = None
     cuda_after_mb: float | None = None
+    cuda_reserved_after_load_mb: float | None = None
+    cuda_reserved_after_mb: float | None = None
+    cuda_before_load_mb: float | None = None
+    cuda_reserved_before_load_mb: float | None = None
+    checkpoint_type: str | None = None
+    is_loaded_in_4bit: bool | None = None
+    quantization_type: str | None = None
+    double_quant: bool | None = None
+    compute_dtype_name: str | None = None
+    linear_4bit_module_count = 0
     cache_used_count = 0
     used_strip_count = 0
     used_contact_sheet_count = 0
@@ -584,18 +616,31 @@ def run_vlm_event_review(
             uncached_review_count += 1
 
     processor = model = process_vision_info = None
-    if backend == "disabled":
-        warnings.append("VLM skipped because TD_CASE2_VLM_BACKEND=disabled.")
-    elif backend == "local_qwen" and uncached_review_count > 0:
-        processor, model, process_vision_info, model_load_time_seconds, model_dtype, cuda_after_load_mb = _load_model_components(
-            review_config
-        )
+    try:
+        if backend == "disabled":
+            warnings.append("VLM skipped because TD_CASE2_VLM_BACKEND=disabled.")
+        elif backend == "local_qwen" and uncached_review_count > 0:
+            processor, model, process_vision_info, load_metadata = _load_model_components(
+                review_config
+            )
+            model_load_time_seconds = float(load_metadata["model_load_time_seconds"])
+            model_dtype = str(load_metadata["precision_label"])
+            checkpoint_type = str(load_metadata["checkpoint_type"])
+            compute_dtype_name = str(load_metadata["compute_dtype_name"])
+            is_loaded_in_4bit = bool(load_metadata["is_loaded_in_4bit"])
+            quantization_type = str(load_metadata["quantization_type"])
+            double_quant = bool(load_metadata["double_quant"])
+            linear_4bit_module_count = int(load_metadata["linear_4bit_module_count"])
+            cuda_before_load_mb = load_metadata["cuda_memory_allocated_before_load_mb"]
+            cuda_reserved_before_load_mb = load_metadata["cuda_memory_reserved_before_load_mb"]
+            cuda_after_load_mb = load_metadata["cuda_memory_allocated_after_load_mb"]
+            cuda_reserved_after_load_mb = load_metadata["cuda_memory_reserved_after_load_mb"]
 
-    reviews: list[dict[str, Any]] = []
-    flat_reviews: list[dict[str, Any]] = []
+        reviews: list[dict[str, Any]] = []
+        flat_reviews: list[dict[str, Any]] = []
 
-    if backend == "disabled":
-        final_summary_payload = {
+        if backend == "disabled":
+            final_summary_payload = {
             "overall_status": "vlm_skipped",
             "headline": "VLM review skipped",
             "summary": "Step 14 VLM review was skipped because TD_CASE2_VLM_BACKEND=disabled.",
@@ -609,7 +654,7 @@ def run_vlm_event_review(
             "video_name": video_info.get("video_name"),
             "duration_text": video_info.get("duration_text"),
         }
-        output_payload = {
+            output_payload = {
             "status": "skipped",
             "source_file": SOURCE_FILE,
             "model": MODEL_NAME,
@@ -628,7 +673,7 @@ def run_vlm_event_review(
             },
             "reviews": [],
         }
-        report_payload = {
+            report_payload = {
             "status": "skipped",
             "vlm_backend": backend,
             "api_provider": None,
@@ -643,6 +688,13 @@ def run_vlm_event_review(
             "event_type_counts": {},
             "model_path": str(review_config["model_path"]),
             "model_load_time_seconds": 0.0,
+            "checkpoint_type": None,
+            "model_precision_label": "",
+            "compute_dtype": None,
+            "is_loaded_in_4bit": None,
+            "quantization_type": None,
+            "double_quant": None,
+            "linear_4bit_module_count": 0,
             "api_success_count": 0,
             "api_failed_count": 0,
             "parse_success_count": 0,
@@ -652,6 +704,10 @@ def run_vlm_event_review(
             "estimated_cost_usd": None,
             "total_inference_time_seconds": 0.0,
             "average_inference_time_seconds": 0.0,
+            "cuda_memory_allocated_before_load_mb": None,
+            "cuda_memory_reserved_before_load_mb": None,
+            "cuda_memory_allocated_after_load_mb": None,
+            "cuda_memory_reserved_after_load_mb": None,
             "cuda_memory_allocated_after_mb": None,
             "cache_used_count": 0,
             "used_temporal_strip_count": used_strip_count,
@@ -663,104 +719,104 @@ def run_vlm_event_review(
             "warnings": warnings,
             "recommendation": final_summary_payload.get("recommended_action"),
         }
-        write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
-        write_json_any(run_dir / "14_vlm_event_reviews_flat.json", [])
-        write_json(run_dir / "14_final_video_summary.json", final_summary_payload)
-        write_json(run_dir / "14_vlm_event_review_report.json", report_payload)
-        return output_payload, [], final_summary_payload, report_payload
+            write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
+            write_json_any(run_dir / "14_vlm_event_reviews_flat.json", [])
+            write_json(run_dir / "14_final_video_summary.json", final_summary_payload)
+            write_json(run_dir / "14_vlm_event_review_report.json", report_payload)
+            return output_payload, [], final_summary_payload, report_payload
 
-    for item in review_candidates:
-        vlm_input = dict(item["vlm_input"])
-        vlm_input_id = str(vlm_input.get("vlm_input_id", "") or "")
-        image_path_used = item["image_path_used"]
-        resolved_image_path = item["resolved_image_path"]
-        image_source_type = item["image_source_type"]
-        source_candidate_ids = [str(candidate_id or "") for candidate_id in list(vlm_input.get("source_candidate_ids", []))]
-        step11_5_context = _summarize_step11_5_context(source_candidate_ids, step11_5_map)
-        prompt_text = _build_prompt(vlm_input, step11_5_context)
-        cache_path = cache_dir / f"{_cache_key(vlm_input_id, image_path_used, MODEL_NAME)}.json"
-        cached_payload: dict[str, Any] | None = None
+        for item in review_candidates:
+            vlm_input = dict(item["vlm_input"])
+            vlm_input_id = str(vlm_input.get("vlm_input_id", "") or "")
+            image_path_used = item["image_path_used"]
+            resolved_image_path = item["resolved_image_path"]
+            image_source_type = item["image_source_type"]
+            source_candidate_ids = [str(candidate_id or "") for candidate_id in list(vlm_input.get("source_candidate_ids", []))]
+            step11_5_context = _summarize_step11_5_context(source_candidate_ids, step11_5_map)
+            prompt_text = _build_prompt(vlm_input, step11_5_context)
+            cache_path = cache_dir / f"{_cache_key(vlm_input_id, image_path_used, MODEL_NAME)}.json"
+            cached_payload: dict[str, Any] | None = None
 
-        if bool(review_config["use_cache"]) and cache_path.exists():
-            try:
-                cached_payload = read_json(cache_path)
-            except Exception as exc:
-                warnings.append(f"{vlm_input_id}: cache read failed ({exc}). Re-running inference.")
+            if bool(review_config["use_cache"]) and cache_path.exists():
+                try:
+                    cached_payload = read_json(cache_path)
+                except Exception as exc:
+                    warnings.append(f"{vlm_input_id}: cache read failed ({exc}). Re-running inference.")
 
-        if cached_payload is None:
-            if backend == "api_qwen":
-                api_result = call_qwen_api_with_image(prompt_text=prompt_text, image_path=resolved_image_path)
-                total_latency_seconds += float(api_result.get("latency_seconds", 0.0) or 0.0)
-                if api_result.get("status") == "success":
-                    api_success_count += 1
+            if cached_payload is None:
+                if backend == "api_qwen":
+                    api_result = call_qwen_api_with_image(prompt_text=prompt_text, image_path=resolved_image_path)
+                    total_latency_seconds += float(api_result.get("latency_seconds", 0.0) or 0.0)
+                    if api_result.get("status") == "success":
+                        api_success_count += 1
+                    else:
+                        api_failed_count += 1
+                        warnings.append(f"{vlm_input_id}: API failure ({api_result.get('error_message')}).")
+                    parsed_ok, parsed_payload = _try_parse_json(str(api_result.get("assistant_text", "") or ""))
+                    if parsed_ok:
+                        parse_success_count += 1
+                    else:
+                        parse_failed_count += 1
+                    normalized_review = _normalize_review_payload(
+                        vlm_input=vlm_input,
+                        parsed_payload=parsed_payload,
+                        raw_output_text=str(api_result.get("assistant_text", "") or ""),
+                        parsed_ok=parsed_ok,
+                        inference_time_seconds=float(api_result.get("latency_seconds", 0.0) or 0.0),
+                        image_path_used=image_path_used,
+                        image_source_type=image_source_type,
+                        step11_5_context=step11_5_context,
+                    )
+                    normalized_review["api_request_metadata"] = api_result.get("request_metadata")
+                    normalized_review["api_provider"] = api_result.get("provider")
+                    normalized_review["api_model"] = api_result.get("model")
+                    normalized_review["api_raw_response_text"] = api_result.get("raw_response_text")
+                    normalized_review["api_error_message"] = api_result.get("error_message")
                 else:
-                    api_failed_count += 1
-                    warnings.append(f"{vlm_input_id}: API failure ({api_result.get('error_message')}).")
-                parsed_ok, parsed_payload = _try_parse_json(str(api_result.get("assistant_text", "") or ""))
-                if parsed_ok:
+                    raw_output_text, parsed_ok, parsed_payload, inference_time_seconds = _run_single_inference(
+                        processor=processor,
+                        model=model,
+                        process_vision_info=process_vision_info,
+                        image_path=resolved_image_path,
+                        prompt_text=prompt_text,
+                        max_new_tokens=int(review_config["max_new_tokens"]),
+                    )
+                    if parsed_ok:
+                        parse_success_count += 1
+                    else:
+                        parse_failed_count += 1
+                    normalized_review = _normalize_review_payload(
+                        vlm_input=vlm_input,
+                        parsed_payload=parsed_payload,
+                        raw_output_text=raw_output_text,
+                        parsed_ok=parsed_ok,
+                        inference_time_seconds=inference_time_seconds,
+                        image_path_used=image_path_used,
+                        image_source_type=image_source_type,
+                        step11_5_context=step11_5_context,
+                    )
+                cached_payload = normalized_review
+                if bool(review_config["use_cache"]):
+                    write_json(cache_path, cached_payload)
+            else:
+                cache_used_count += 1
+                if bool(cached_payload.get("parsed_json_ok")):
                     parse_success_count += 1
                 else:
                     parse_failed_count += 1
                 normalized_review = _normalize_review_payload(
                     vlm_input=vlm_input,
-                    parsed_payload=parsed_payload,
-                    raw_output_text=str(api_result.get("assistant_text", "") or ""),
-                    parsed_ok=parsed_ok,
-                    inference_time_seconds=float(api_result.get("latency_seconds", 0.0) or 0.0),
+                    parsed_payload=cached_payload,
+                    raw_output_text=str(cached_payload.get("raw_output_text", "") or ""),
+                    parsed_ok=bool(cached_payload.get("parsed_json_ok")),
+                    inference_time_seconds=float(cached_payload.get("inference_time_seconds", 0.0) or 0.0),
                     image_path_used=image_path_used,
                     image_source_type=image_source_type,
                     step11_5_context=step11_5_context,
                 )
-                normalized_review["api_request_metadata"] = api_result.get("request_metadata")
-                normalized_review["api_provider"] = api_result.get("provider")
-                normalized_review["api_model"] = api_result.get("model")
-                normalized_review["api_raw_response_text"] = api_result.get("raw_response_text")
-                normalized_review["api_error_message"] = api_result.get("error_message")
-            else:
-                raw_output_text, parsed_ok, parsed_payload, inference_time_seconds = _run_single_inference(
-                    processor=processor,
-                    model=model,
-                    process_vision_info=process_vision_info,
-                    image_path=resolved_image_path,
-                    prompt_text=prompt_text,
-                    max_new_tokens=int(review_config["max_new_tokens"]),
-                )
-                if parsed_ok:
-                    parse_success_count += 1
-                else:
-                    parse_failed_count += 1
-                normalized_review = _normalize_review_payload(
-                    vlm_input=vlm_input,
-                    parsed_payload=parsed_payload,
-                    raw_output_text=raw_output_text,
-                    parsed_ok=parsed_ok,
-                    inference_time_seconds=inference_time_seconds,
-                    image_path_used=image_path_used,
-                    image_source_type=image_source_type,
-                    step11_5_context=step11_5_context,
-                )
-            cached_payload = normalized_review
-            if bool(review_config["use_cache"]):
-                write_json(cache_path, cached_payload)
-        else:
-            cache_used_count += 1
-            if bool(cached_payload.get("parsed_json_ok")):
-                parse_success_count += 1
-            else:
-                parse_failed_count += 1
-            normalized_review = _normalize_review_payload(
-                vlm_input=vlm_input,
-                parsed_payload=cached_payload,
-                raw_output_text=str(cached_payload.get("raw_output_text", "") or ""),
-                parsed_ok=bool(cached_payload.get("parsed_json_ok")),
-                inference_time_seconds=float(cached_payload.get("inference_time_seconds", 0.0) or 0.0),
-                image_path_used=image_path_used,
-                image_source_type=image_source_type,
-                step11_5_context=step11_5_context,
-            )
 
-        total_inference_time_seconds += float(normalized_review.get("inference_time_seconds", 0.0) or 0.0)
-        review_record = {
+            total_inference_time_seconds += float(normalized_review.get("inference_time_seconds", 0.0) or 0.0)
+            review_record = {
             "vlm_input_id": vlm_input_id,
             "source_candidate_ids": source_candidate_ids,
             "source_event_types": list(vlm_input.get("source_event_types", [])),
@@ -790,87 +846,111 @@ def run_vlm_event_review(
             "image_source_type": normalized_review.get("image_source_type"),
             "ready_for_final_summary": True,
         }
-        reviews.append(review_record)
-        flat_reviews.append(_build_flat_review(review_record))
+            reviews.append(review_record)
+            flat_reviews.append(_build_flat_review(review_record))
 
-    if model is not None:
-        try:
-            import torch
+        if model is not None:
+            try:
+                import torch
 
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                cuda_after_mb = _cuda_memory_mb(torch)
-        except Exception:
-            cuda_after_mb = None
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    memory_after = capture_cuda_memory_snapshot(torch)
+                    cuda_after_mb = memory_after["allocated_mb"]
+                    cuda_reserved_after_mb = memory_after["reserved_mb"]
+            except Exception:
+                cuda_after_mb = None
+                cuda_reserved_after_mb = None
 
-    review_decision_counts = Counter(str(item.get("model_review", {}).get("review_decision", "uncertain")) for item in reviews)
-    risk_counts = Counter(str(item.get("model_review", {}).get("risk_level", "none")) for item in reviews)
-    event_type_counts = Counter(str(item.get("model_review", {}).get("event_type", "uncertain")) for item in reviews)
-    average_inference_time_seconds = round(total_inference_time_seconds / len(reviews), 3) if reviews else 0.0
-    final_summary_payload = _build_final_summary(video_info=video_info, reviews=reviews)
+        review_decision_counts = Counter(str(item.get("model_review", {}).get("review_decision", "uncertain")) for item in reviews)
+        risk_counts = Counter(str(item.get("model_review", {}).get("risk_level", "none")) for item in reviews)
+        event_type_counts = Counter(str(item.get("model_review", {}).get("event_type", "uncertain")) for item in reviews)
+        average_inference_time_seconds = round(total_inference_time_seconds / len(reviews), 3) if reviews else 0.0
+        final_summary_payload = _build_final_summary(video_info=video_info, reviews=reviews)
 
-    output_payload = {
-        "status": "success",
-        "source_file": SOURCE_FILE,
-        "model": MODEL_NAME,
-        "config": {
-            **dict(review_config),
-            "model_path": str(review_config["model_path"]),
-            "model_dtype": model_dtype,
-            "prompt_version": PROMPT_VERSION,
-        },
-        "summary": {
+        output_payload = {
+            "status": "success",
+            "source_file": SOURCE_FILE,
+            "model": MODEL_NAME,
+            "config": {
+                **dict(review_config),
+                "model_path": str(review_config["model_path"]),
+                "model_dtype": model_dtype,
+                "prompt_version": PROMPT_VERSION,
+            },
+            "summary": {
+                "inputs_loaded": len(vlm_inputs),
+                "inputs_reviewed": len(reviews),
+                "inputs_skipped": len(skipped_inputs),
+                "event_visible_count": int(sum(1 for item in reviews if item.get("model_review", {}).get("event_visible") is True)),
+                "normal_context_count": int(review_decision_counts.get("normal_context", 0)),
+                "uncertain_count": int(review_decision_counts.get("uncertain", 0)),
+                "used_temporal_strip_count": used_strip_count,
+                "used_contact_sheet_count": used_contact_sheet_count,
+                "ready_for_demo_report_ui": True,
+            },
+            "reviews": reviews,
+        }
+        report_payload = {
+            "status": "success",
+            "vlm_backend": backend,
+            "api_provider": api_provider if backend == "api_qwen" else None,
+            "api_model": api_model if backend == "api_qwen" else None,
             "inputs_loaded": len(vlm_inputs),
             "inputs_reviewed": len(reviews),
             "inputs_skipped": len(skipped_inputs),
             "event_visible_count": int(sum(1 for item in reviews if item.get("model_review", {}).get("event_visible") is True)),
             "normal_context_count": int(review_decision_counts.get("normal_context", 0)),
             "uncertain_count": int(review_decision_counts.get("uncertain", 0)),
+            "risk_counts": dict(risk_counts),
+            "event_type_counts": dict(event_type_counts),
+            "model_path": str(review_config["model_path"]),
+            "model_device": str(getattr(model, "device", "cuda:0")) if model is not None else None,
+            "model_load_time_seconds": round(model_load_time_seconds, 3),
+            "checkpoint_type": checkpoint_type,
+            "model_precision_label": model_dtype,
+            "compute_dtype": compute_dtype_name,
+            "is_loaded_in_4bit": is_loaded_in_4bit,
+            "quantization_type": quantization_type,
+            "double_quant": double_quant,
+            "linear_4bit_module_count": linear_4bit_module_count,
+            "api_success_count": api_success_count,
+            "api_failed_count": api_failed_count,
+            "parse_success_count": parse_success_count,
+            "parse_failed_count": parse_failed_count,
+            "average_latency_seconds": round(total_latency_seconds / len(reviews), 3) if reviews else 0.0,
+            "total_latency_seconds": round(total_latency_seconds, 3),
+            "estimated_cost_usd": None,
+            "total_inference_time_seconds": round(total_inference_time_seconds, 3),
+            "average_inference_time_seconds": average_inference_time_seconds,
+            "cuda_memory_allocated_before_load_mb": cuda_before_load_mb,
+            "cuda_memory_reserved_before_load_mb": cuda_reserved_before_load_mb,
+            "cuda_memory_allocated_after_load_mb": cuda_after_load_mb,
+            "cuda_memory_reserved_after_load_mb": cuda_reserved_after_load_mb,
+            "cuda_memory_allocated_after_mb": cuda_after_mb if cuda_after_mb is not None else cuda_after_load_mb,
+            "cache_used_count": cache_used_count,
             "used_temporal_strip_count": used_strip_count,
             "used_contact_sheet_count": used_contact_sheet_count,
-            "ready_for_demo_report_ui": True,
-        },
-        "reviews": reviews,
-    }
-    report_payload = {
-        "status": "success",
-        "vlm_backend": backend,
-        "api_provider": api_provider if backend == "api_qwen" else None,
-        "api_model": api_model if backend == "api_qwen" else None,
-        "inputs_loaded": len(vlm_inputs),
-        "inputs_reviewed": len(reviews),
-        "inputs_skipped": len(skipped_inputs),
-        "event_visible_count": int(sum(1 for item in reviews if item.get("model_review", {}).get("event_visible") is True)),
-        "normal_context_count": int(review_decision_counts.get("normal_context", 0)),
-        "uncertain_count": int(review_decision_counts.get("uncertain", 0)),
-        "risk_counts": dict(risk_counts),
-        "event_type_counts": dict(event_type_counts),
-        "model_path": str(review_config["model_path"]),
-        "model_device": str(getattr(model, "device", "cuda:0")) if model is not None else None,
-        "model_load_time_seconds": round(model_load_time_seconds, 3),
-        "api_success_count": api_success_count,
-        "api_failed_count": api_failed_count,
-        "parse_success_count": parse_success_count,
-        "parse_failed_count": parse_failed_count,
-        "average_latency_seconds": round(total_latency_seconds / len(reviews), 3) if reviews else 0.0,
-        "total_latency_seconds": round(total_latency_seconds, 3),
-        "estimated_cost_usd": None,
-        "total_inference_time_seconds": round(total_inference_time_seconds, 3),
-        "average_inference_time_seconds": average_inference_time_seconds,
-        "cuda_memory_allocated_after_mb": cuda_after_mb if cuda_after_mb is not None else cuda_after_load_mb,
-        "cache_used_count": cache_used_count,
-        "used_temporal_strip_count": used_strip_count,
-        "used_contact_sheet_count": used_contact_sheet_count,
-        "source_inputs_ready_for_vlm": input_report.get("inputs_ready_for_vlm"),
-        "selected_candidates_count": selected_candidates_payload.get("selected_count"),
-        "step11_5_available": bool(step11_5_payload),
-        "step11_5_filter_summary": step11_5_report.get("decision_counts", {}),
-        "warnings": warnings,
-        "recommendation": final_summary_payload.get("recommended_action"),
-    }
+            "source_inputs_ready_for_vlm": input_report.get("inputs_ready_for_vlm"),
+            "selected_candidates_count": selected_candidates_payload.get("selected_count"),
+            "step11_5_available": bool(step11_5_payload),
+            "step11_5_filter_summary": step11_5_report.get("decision_counts", {}),
+            "warnings": warnings,
+            "recommendation": final_summary_payload.get("recommended_action"),
+        }
 
-    write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
-    write_json_any(run_dir / "14_vlm_event_reviews_flat.json", flat_reviews)
-    write_json(run_dir / "14_final_video_summary.json", final_summary_payload)
-    write_json(run_dir / "14_vlm_event_review_report.json", report_payload)
-    return output_payload, flat_reviews, final_summary_payload, report_payload
+        write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
+        write_json_any(run_dir / "14_vlm_event_reviews_flat.json", flat_reviews)
+        write_json(run_dir / "14_final_video_summary.json", final_summary_payload)
+        write_json(run_dir / "14_vlm_event_review_report.json", report_payload)
+        return output_payload, flat_reviews, final_summary_payload, report_payload
+    finally:
+        if model is not None or processor is not None:
+            loaded_model = model
+            loaded_processor = processor
+            loaded_process_vision_info = process_vision_info
+            model = None
+            processor = None
+            process_vision_info = None
+            del loaded_model, loaded_processor, loaded_process_vision_info
+            release_qwen_resources()

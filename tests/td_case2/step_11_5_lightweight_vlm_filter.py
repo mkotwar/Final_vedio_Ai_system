@@ -13,7 +13,12 @@ from device_manager import resolve_device
 from stage_checks import read_json, write_json
 from step_09_search_result_packaging import write_json_any
 from qwen_api_client import call_qwen_api_with_image
-from qwen_4bit import validate_prequantized_nf4_checkpoint
+from qwen_4bit import (
+    build_qwen_4bit_load_config,
+    capture_cuda_memory_snapshot,
+    release_qwen_resources,
+    verify_model_loaded_in_4bit,
+)
 
 
 INPUT_FILE_PRIMARY = "11_5_vlm_filtered_event_candidates.json"
@@ -305,7 +310,7 @@ def _normalize_filter_payload(
     }
 
 
-def _load_model_components(filter_config: dict[str, Any]) -> tuple[Any, Any, Any, float, str, float | None]:
+def _load_model_components(filter_config: dict[str, Any]) -> tuple[Any, Any, Any, dict[str, Any]]:
     import torch
     from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
@@ -321,24 +326,41 @@ def _load_model_components(filter_config: dict[str, Any]) -> tuple[Any, Any, Any
         override_env_names=(ENV_STEP11_5_DEVICE,),
         require_cuda=True,
     )
-
-    quantization_config = validate_prequantized_nf4_checkpoint(model_path)
+    load_config = build_qwen_4bit_load_config(model_path, torch_module=torch)
 
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+    memory_before = capture_cuda_memory_snapshot(torch)
 
     load_start = time.perf_counter()
     processor = AutoProcessor.from_pretrained(model_path, local_files_only=True, trust_remote_code=True)
     model_kwargs: dict[str, Any] = {
         "local_files_only": True,
         "trust_remote_code": True,
-        "device_map": {"": "cuda:0"},
+        "device_map": "auto",
+        "low_cpu_mem_usage": True,
     }
+    if load_config["quantization_config"] is not None:
+        model_kwargs["quantization_config"] = load_config["quantization_config"]
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_path, **model_kwargs)
     model_load_time_seconds = time.perf_counter() - load_start
-    compute_dtype = str(quantization_config.get("bnb_4bit_compute_dtype", "unknown"))
-    precision = f"4bit_nf4_compute_{compute_dtype}"
-    return processor, model, process_vision_info, model_load_time_seconds, precision, _cuda_memory_mb(torch)
+    verification = verify_model_loaded_in_4bit(model)
+    memory_after = capture_cuda_memory_snapshot(torch)
+    return processor, model, process_vision_info, {
+        "model_load_time_seconds": model_load_time_seconds,
+        "precision_label": str(load_config["precision_label"]),
+        "checkpoint_type": str(load_config["checkpoint_type"]),
+        "compute_dtype_name": str(load_config["compute_dtype_name"]),
+        "quantization_type": str(load_config["quantization_type"]),
+        "double_quant": bool(load_config["double_quant"]),
+        "is_loaded_in_4bit": bool(verification["is_loaded_in_4bit"]),
+        "linear_4bit_module_count": int(verification["linear_4bit_module_count"]),
+        "cuda_memory_allocated_before_load_mb": memory_before["allocated_mb"],
+        "cuda_memory_reserved_before_load_mb": memory_before["reserved_mb"],
+        "cuda_memory_allocated_after_load_mb": memory_after["allocated_mb"],
+        "cuda_memory_reserved_after_load_mb": memory_after["reserved_mb"],
+        "processor_class": str(load_config["processor_info"]["processor_class"]),
+    }
 
 
 def _run_single_inference(
@@ -408,6 +430,16 @@ def run_lightweight_vlm_filter(
     model_dtype = ""
     cuda_after_load_mb: float | None = None
     cuda_after_mb: float | None = None
+    cuda_reserved_after_load_mb: float | None = None
+    cuda_reserved_after_mb: float | None = None
+    cuda_before_load_mb: float | None = None
+    cuda_reserved_before_load_mb: float | None = None
+    checkpoint_type: str | None = None
+    is_loaded_in_4bit: bool | None = None
+    quantization_type: str | None = None
+    double_quant: bool | None = None
+    compute_dtype_name: str | None = None
+    linear_4bit_module_count = 0
     decision_counts: Counter[str] = Counter()
     api_success_count = 0
     api_failed_count = 0
@@ -434,260 +466,292 @@ def run_lightweight_vlm_filter(
         by_id[str(candidate.get("candidate_event_id", "") or "")] = candidate
 
     processor = model = process_vision_info = None
-    if backend == "disabled":
-        fallback_used = True
-        warnings.append("VLM skipped because TD_CASE2_VLM_BACKEND=disabled. Using deterministic fallback candidate selection.")
-    elif backend == "local_qwen" and checked_candidates:
-        processor, model, process_vision_info, model_load_time_seconds, model_dtype, cuda_after_load_mb = _load_model_components(
-            filter_config
-        )
+    try:
+        if backend == "disabled":
+            fallback_used = True
+            warnings.append("VLM skipped because TD_CASE2_VLM_BACKEND=disabled. Using deterministic fallback candidate selection.")
+        elif backend == "local_qwen" and checked_candidates:
+            processor, model, process_vision_info, load_metadata = _load_model_components(
+                filter_config
+            )
+            model_load_time_seconds = float(load_metadata["model_load_time_seconds"])
+            model_dtype = str(load_metadata["precision_label"])
+            checkpoint_type = str(load_metadata["checkpoint_type"])
+            compute_dtype_name = str(load_metadata["compute_dtype_name"])
+            is_loaded_in_4bit = bool(load_metadata["is_loaded_in_4bit"])
+            quantization_type = str(load_metadata["quantization_type"])
+            double_quant = bool(load_metadata["double_quant"])
+            linear_4bit_module_count = int(load_metadata["linear_4bit_module_count"])
+            cuda_before_load_mb = load_metadata["cuda_memory_allocated_before_load_mb"]
+            cuda_reserved_before_load_mb = load_metadata["cuda_memory_reserved_before_load_mb"]
+            cuda_after_load_mb = load_metadata["cuda_memory_allocated_after_load_mb"]
+            cuda_reserved_after_load_mb = load_metadata["cuda_memory_reserved_after_load_mb"]
 
-    accepted_yes: list[dict[str, Any]] = []
-    uncertain_candidates: list[dict[str, Any]] = []
-    rejected_no: list[dict[str, Any]] = []
-    flat_results: list[dict[str, Any]] = []
+        accepted_yes: list[dict[str, Any]] = []
+        uncertain_candidates: list[dict[str, Any]] = []
+        rejected_no: list[dict[str, Any]] = []
+        flat_results: list[dict[str, Any]] = []
 
-    for candidate in checked_candidates:
-        candidate_id = str(candidate.get("candidate_event_id", "") or "")
-        image_path_used = _normalize_rel_path(candidate.get("_step11_5_image_path"))
-        resolved_image_path = candidate.get("_step11_5_image_resolved")
-        if resolved_image_path is None:
-            warnings.append(f"{candidate_id}: no full-scene image could be resolved for VLM filtering.")
-            continue
-        cache_path = cache_dir / f"{_cache_key(candidate_id, image_path_used, MODEL_NAME)}.json"
-        cache_payload: dict[str, Any] | None = None
-        if bool(filter_config["use_cache"]) and cache_path.exists():
-            try:
-                cache_payload = read_json(cache_path)
-            except Exception as exc:
-                warnings.append(f"{candidate_id}: cache read failed ({exc}). Re-running inference.")
+        for candidate in checked_candidates:
+            candidate_id = str(candidate.get("candidate_event_id", "") or "")
+            image_path_used = _normalize_rel_path(candidate.get("_step11_5_image_path"))
+            resolved_image_path = candidate.get("_step11_5_image_resolved")
+            if resolved_image_path is None:
+                warnings.append(f"{candidate_id}: no full-scene image could be resolved for VLM filtering.")
+                continue
+            cache_path = cache_dir / f"{_cache_key(candidate_id, image_path_used, MODEL_NAME)}.json"
+            cache_payload: dict[str, Any] | None = None
+            if bool(filter_config["use_cache"]) and cache_path.exists():
+                try:
+                    cache_payload = read_json(cache_path)
+                except Exception as exc:
+                    warnings.append(f"{candidate_id}: cache read failed ({exc}). Re-running inference.")
 
-        if cache_payload is None:
-            if backend == "disabled":
-                cache_payload = {
-                    "checked": False,
-                    "decision": "skipped_backend_disabled",
-                    "event_likelihood": None,
-                    "visible_event_type": "skipped",
-                    "short_reason": "VLM skipped because TD_CASE2_VLM_BACKEND=disabled.",
-                    "should_keep": False,
-                    "model": MODEL_NAME,
-                    "image_path_used": image_path_used,
-                    "inference_time_seconds": 0.0,
-                    "raw_output_text": "",
-                    "parsed_json_ok": False,
-                }
-            elif backend == "api_qwen":
-                api_result = call_qwen_api_with_image(prompt_text=FILTER_PROMPT, image_path=resolved_image_path)
-                total_api_latency_seconds += float(api_result.get("latency_seconds", 0.0) or 0.0)
-                if api_result.get("status") == "success":
-                    api_success_count += 1
+            if cache_payload is None:
+                if backend == "disabled":
+                    cache_payload = {
+                        "checked": False,
+                        "decision": "skipped_backend_disabled",
+                        "event_likelihood": None,
+                        "visible_event_type": "skipped",
+                        "short_reason": "VLM skipped because TD_CASE2_VLM_BACKEND=disabled.",
+                        "should_keep": False,
+                        "model": MODEL_NAME,
+                        "image_path_used": image_path_used,
+                        "inference_time_seconds": 0.0,
+                        "raw_output_text": "",
+                        "parsed_json_ok": False,
+                    }
+                elif backend == "api_qwen":
+                    api_result = call_qwen_api_with_image(prompt_text=FILTER_PROMPT, image_path=resolved_image_path)
+                    total_api_latency_seconds += float(api_result.get("latency_seconds", 0.0) or 0.0)
+                    if api_result.get("status") == "success":
+                        api_success_count += 1
+                    else:
+                        api_failed_count += 1
+                        error_message = str(api_result.get("error_message", "") or "Unknown API failure.")
+                        errors_summary.append(f"{candidate_id}: {error_message}")
+                    parsed_ok, parsed_payload = _try_parse_json(str(api_result.get("assistant_text", "") or ""))
+                    cache_payload = _normalize_filter_payload(
+                        raw_output_text=str(api_result.get("assistant_text", "") or ""),
+                        parsed_ok=parsed_ok,
+                        parsed_payload=parsed_payload,
+                        model_name=api_model or MODEL_NAME,
+                        image_path_used=image_path_used,
+                        inference_time_seconds=float(api_result.get("latency_seconds", 0.0) or 0.0),
+                        checked=True,
+                    )
+                    cache_payload["api_request_metadata"] = api_result.get("request_metadata")
+                    cache_payload["api_provider"] = api_result.get("provider")
+                    cache_payload["api_model"] = api_result.get("model")
+                    cache_payload["api_raw_response_text"] = api_result.get("raw_response_text")
+                    cache_payload["api_error_message"] = api_result.get("error_message")
                 else:
-                    api_failed_count += 1
-                    error_message = str(api_result.get("error_message", "") or "Unknown API failure.")
-                    errors_summary.append(f"{candidate_id}: {error_message}")
-                parsed_ok, parsed_payload = _try_parse_json(str(api_result.get("assistant_text", "") or ""))
-                cache_payload = _normalize_filter_payload(
-                    raw_output_text=str(api_result.get("assistant_text", "") or ""),
-                    parsed_ok=parsed_ok,
-                    parsed_payload=parsed_payload,
-                    model_name=api_model or MODEL_NAME,
-                    image_path_used=image_path_used,
-                    inference_time_seconds=float(api_result.get("latency_seconds", 0.0) or 0.0),
-                    checked=True,
-                )
-                cache_payload["api_request_metadata"] = api_result.get("request_metadata")
-                cache_payload["api_provider"] = api_result.get("provider")
-                cache_payload["api_model"] = api_result.get("model")
-                cache_payload["api_raw_response_text"] = api_result.get("raw_response_text")
-                cache_payload["api_error_message"] = api_result.get("error_message")
+                    raw_output_text, parsed_ok, parsed_payload, inference_time_seconds = _run_single_inference(
+                        processor=processor,
+                        model=model,
+                        process_vision_info=process_vision_info,
+                        image_path=resolved_image_path,
+                        max_new_tokens=int(filter_config["max_new_tokens"]),
+                    )
+                    cache_payload = _normalize_filter_payload(
+                        raw_output_text=raw_output_text,
+                        parsed_ok=parsed_ok,
+                        parsed_payload=parsed_payload,
+                        model_name=MODEL_NAME,
+                        image_path_used=image_path_used,
+                        inference_time_seconds=inference_time_seconds,
+                        checked=True,
+                    )
+                if bool(filter_config["use_cache"]):
+                    write_json(cache_path, cache_payload)
             else:
-                raw_output_text, parsed_ok, parsed_payload, inference_time_seconds = _run_single_inference(
-                    processor=processor,
-                    model=model,
-                    process_vision_info=process_vision_info,
-                    image_path=resolved_image_path,
-                    max_new_tokens=int(filter_config["max_new_tokens"]),
-                )
                 cache_payload = _normalize_filter_payload(
-                    raw_output_text=raw_output_text,
-                    parsed_ok=parsed_ok,
-                    parsed_payload=parsed_payload,
+                    raw_output_text=str(cache_payload.get("raw_output_text", "") or ""),
+                    parsed_ok=bool(cache_payload.get("parsed_json_ok")),
+                    parsed_payload={
+                        "decision": cache_payload.get("decision"),
+                        "event_likelihood": cache_payload.get("event_likelihood"),
+                        "visible_event_type": cache_payload.get("visible_event_type"),
+                        "short_reason": cache_payload.get("short_reason"),
+                        "should_keep": cache_payload.get("should_keep"),
+                    },
                     model_name=MODEL_NAME,
                     image_path_used=image_path_used,
-                    inference_time_seconds=inference_time_seconds,
+                    inference_time_seconds=float(cache_payload.get("inference_time_seconds", 0.0) or 0.0),
                     checked=True,
                 )
-            if bool(filter_config["use_cache"]):
-                write_json(cache_path, cache_payload)
-        else:
-            cache_payload = _normalize_filter_payload(
-                raw_output_text=str(cache_payload.get("raw_output_text", "") or ""),
-                parsed_ok=bool(cache_payload.get("parsed_json_ok")),
-                parsed_payload={
-                    "decision": cache_payload.get("decision"),
-                    "event_likelihood": cache_payload.get("event_likelihood"),
-                    "visible_event_type": cache_payload.get("visible_event_type"),
-                    "short_reason": cache_payload.get("short_reason"),
-                    "should_keep": cache_payload.get("should_keep"),
-                },
-                model_name=MODEL_NAME,
-                image_path_used=image_path_used,
-                inference_time_seconds=float(cache_payload.get("inference_time_seconds", 0.0) or 0.0),
-                checked=True,
-            )
-        total_inference_time_seconds += float(cache_payload.get("inference_time_seconds", 0.0) or 0.0)
+            total_inference_time_seconds += float(cache_payload.get("inference_time_seconds", 0.0) or 0.0)
 
-        decision = str(cache_payload.get("decision", "uncertain"))
-        decision_counts[decision] += 1
-        candidate_out = by_id[candidate_id]
-        candidate_out["vlm_filter"] = cache_payload
-        if decision == "yes":
-            accepted_yes.append(candidate_out)
-        elif decision == "uncertain":
-            uncertain_candidates.append(candidate_out)
-        else:
-            rejected_no.append(candidate_out)
-        flat_results.append(
-            {
-                "candidate_event_id": candidate_id,
-                "event_type": candidate_out.get("event_type"),
-                "best_timestamp_text": candidate_out.get("best_timestamp_text"),
-                "candidate_score": candidate_out.get("candidate_score"),
-                "filter_decision": cache_payload.get("decision"),
-                "event_likelihood": cache_payload.get("event_likelihood"),
-                "short_reason": cache_payload.get("short_reason"),
-                "should_keep": cache_payload.get("should_keep"),
-                "image_path_used": cache_payload.get("image_path_used"),
-                "inference_time_seconds": cache_payload.get("inference_time_seconds"),
-                "representative_frame_path": candidate_out.get("representative_frame", {}).get("image_path"),
-            }
-        )
-
-    if model is not None:
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                cuda_after_mb = _cuda_memory_mb(torch)
-        except Exception:
-            cuda_after_mb = None
-
-    if backend == "disabled":
-        selected_final = checked_candidates[: int(filter_config["max_filtered_events"])]
-        for candidate in selected_final:
-            candidate_id = str(candidate.get("candidate_event_id", "") or "")
+            decision = str(cache_payload.get("decision", "uncertain"))
+            decision_counts[decision] += 1
             candidate_out = by_id[candidate_id]
-            candidate_out["vlm_filter"] = {
-                "checked": False,
-                "decision": "skipped_backend_disabled",
-                "event_likelihood": None,
-                "visible_event_type": "skipped",
-                "short_reason": "VLM skipped because TD_CASE2_VLM_BACKEND=disabled. Selected deterministically.",
-                "should_keep": True,
-                "model": MODEL_NAME,
-                "image_path_used": candidate.get("_step11_5_image_path"),
-                "inference_time_seconds": 0.0,
-                "raw_output_text": "",
-                "parsed_json_ok": False,
-            }
+            candidate_out["vlm_filter"] = cache_payload
+            if decision == "yes":
+                accepted_yes.append(candidate_out)
+            elif decision == "uncertain":
+                uncertain_candidates.append(candidate_out)
+            else:
+                rejected_no.append(candidate_out)
             flat_results.append(
                 {
                     "candidate_event_id": candidate_id,
                     "event_type": candidate_out.get("event_type"),
                     "best_timestamp_text": candidate_out.get("best_timestamp_text"),
                     "candidate_score": candidate_out.get("candidate_score"),
-                    "filter_decision": "skipped_backend_disabled",
-                    "event_likelihood": None,
-                    "short_reason": candidate_out["vlm_filter"]["short_reason"],
-                    "should_keep": True,
-                    "image_path_used": candidate_out["vlm_filter"]["image_path_used"],
-                    "inference_time_seconds": 0.0,
+                    "filter_decision": cache_payload.get("decision"),
+                    "event_likelihood": cache_payload.get("event_likelihood"),
+                    "short_reason": cache_payload.get("short_reason"),
+                    "should_keep": cache_payload.get("should_keep"),
+                    "image_path_used": cache_payload.get("image_path_used"),
+                    "inference_time_seconds": cache_payload.get("inference_time_seconds"),
                     "representative_frame_path": candidate_out.get("representative_frame", {}).get("image_path"),
                 }
             )
-        accepted_yes = list(selected_final)
-    else:
-        selected_final = accepted_yes[: int(filter_config["max_filtered_events"])]
-    if bool(filter_config["allow_uncertain_backfill"]) and len(selected_final) < int(filter_config["min_filtered_events"]):
-        for candidate in uncertain_candidates:
-            if len(selected_final) >= int(filter_config["max_filtered_events"]):
-                break
-            selected_final.append(candidate)
-            if len(selected_final) >= int(filter_config["min_filtered_events"]):
-                break
+        if model is not None:
+            try:
+                import torch
 
-    fallback_normal_context_count = 0
-    if bool(filter_config["allow_normal_context_backfill"]) and len(selected_final) < int(filter_config["min_filtered_events"]):
-        already_selected = {str(item.get("candidate_event_id", "") or "") for item in selected_final}
-        fallback_pool = sorted(
-            source_candidates,
-            key=lambda item: (
-                -_event_preselection_score(item),
-                -float(item.get("candidate_score", 0.0) or 0.0),
-                float(item.get("best_timestamp_seconds", 0.0) or 0.0),
-            ),
-        )
-        for original in fallback_pool:
-            if len(selected_final) >= int(filter_config["min_filtered_events"]):
-                break
-            candidate_id = str(original.get("candidate_event_id", "") or "")
-            if candidate_id in already_selected:
-                continue
-            candidate = by_id[candidate_id]
-            candidate["vlm_filter"] = {
-                "checked": candidate_id in checked_ids,
-                "decision": "fallback_normal_context",
-                "event_likelihood": candidate.get("vlm_filter", {}).get("event_likelihood"),
-                "visible_event_type": candidate.get("vlm_filter", {}).get("visible_event_type", "normal_context"),
-                "short_reason": "Included as fallback normal context to preserve downstream minimum candidate count.",
-                "should_keep": True,
-                "model": MODEL_NAME,
-                "image_path_used": candidate.get("vlm_filter", {}).get("image_path_used"),
-                "inference_time_seconds": candidate.get("vlm_filter", {}).get("inference_time_seconds", 0.0),
-                "raw_output_text": candidate.get("vlm_filter", {}).get("raw_output_text", ""),
-                "parsed_json_ok": candidate.get("vlm_filter", {}).get("parsed_json_ok", False),
-            }
-            candidate["final_event_truth"] = "normal_context_or_uncertain_candidate"
-            selected_final.append(candidate)
-            already_selected.add(candidate_id)
-            fallback_normal_context_count += 1
-            decision_counts["fallback_normal_context"] += 1
-            flat_results.append(
-                {
-                    "candidate_event_id": candidate_id,
-                    "event_type": candidate.get("event_type"),
-                    "best_timestamp_text": candidate.get("best_timestamp_text"),
-                    "candidate_score": candidate.get("candidate_score"),
-                    "filter_decision": "fallback_normal_context",
-                    "event_likelihood": candidate["vlm_filter"].get("event_likelihood"),
-                    "short_reason": candidate["vlm_filter"].get("short_reason"),
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    memory_after = capture_cuda_memory_snapshot(torch)
+                    cuda_after_mb = memory_after["allocated_mb"]
+                    cuda_reserved_after_mb = memory_after["reserved_mb"]
+            except Exception:
+                cuda_after_mb = None
+                cuda_reserved_after_mb = None
+
+        if backend == "disabled":
+            selected_final = checked_candidates[: int(filter_config["max_filtered_events"])]
+            for candidate in selected_final:
+                candidate_id = str(candidate.get("candidate_event_id", "") or "")
+                candidate_out = by_id[candidate_id]
+                candidate_out["vlm_filter"] = {
+                    "checked": False,
+                    "decision": "skipped_backend_disabled",
+                    "event_likelihood": None,
+                    "visible_event_type": "skipped",
+                    "short_reason": "VLM skipped because TD_CASE2_VLM_BACKEND=disabled. Selected deterministically.",
                     "should_keep": True,
-                    "image_path_used": candidate["vlm_filter"].get("image_path_used"),
-                    "inference_time_seconds": candidate["vlm_filter"].get("inference_time_seconds"),
-                    "representative_frame_path": candidate.get("representative_frame", {}).get("image_path"),
+                    "model": MODEL_NAME,
+                    "image_path_used": candidate.get("_step11_5_image_path"),
+                    "inference_time_seconds": 0.0,
+                    "raw_output_text": "",
+                    "parsed_json_ok": False,
                 }
+                flat_results.append(
+                    {
+                        "candidate_event_id": candidate_id,
+                        "event_type": candidate_out.get("event_type"),
+                        "best_timestamp_text": candidate_out.get("best_timestamp_text"),
+                        "candidate_score": candidate_out.get("candidate_score"),
+                        "filter_decision": "skipped_backend_disabled",
+                        "event_likelihood": None,
+                        "short_reason": candidate_out["vlm_filter"]["short_reason"],
+                        "should_keep": True,
+                        "image_path_used": candidate_out["vlm_filter"]["image_path_used"],
+                        "inference_time_seconds": 0.0,
+                        "representative_frame_path": candidate_out.get("representative_frame", {}).get("image_path"),
+                    }
+                )
+            accepted_yes = list(selected_final)
+        else:
+            selected_final = accepted_yes[: int(filter_config["max_filtered_events"])]
+        if bool(filter_config["allow_uncertain_backfill"]) and len(selected_final) < int(filter_config["min_filtered_events"]):
+            for candidate in uncertain_candidates:
+                if len(selected_final) >= int(filter_config["max_filtered_events"]):
+                    break
+                selected_final.append(candidate)
+                if len(selected_final) >= int(filter_config["min_filtered_events"]):
+                    break
+
+        fallback_normal_context_count = 0
+        if bool(filter_config["allow_normal_context_backfill"]) and len(selected_final) < int(filter_config["min_filtered_events"]):
+            already_selected = {str(item.get("candidate_event_id", "") or "") for item in selected_final}
+            fallback_pool = sorted(
+                source_candidates,
+                key=lambda item: (
+                    -_event_preselection_score(item),
+                    -float(item.get("candidate_score", 0.0) or 0.0),
+                    float(item.get("best_timestamp_seconds", 0.0) or 0.0),
+                ),
             )
+            for original in fallback_pool:
+                if len(selected_final) >= int(filter_config["min_filtered_events"]):
+                    break
+                candidate_id = str(original.get("candidate_event_id", "") or "")
+                if candidate_id in already_selected:
+                    continue
+                candidate = by_id[candidate_id]
+                candidate["vlm_filter"] = {
+                    "checked": candidate_id in checked_ids,
+                    "decision": "fallback_normal_context",
+                    "event_likelihood": candidate.get("vlm_filter", {}).get("event_likelihood"),
+                    "visible_event_type": candidate.get("vlm_filter", {}).get("visible_event_type", "normal_context"),
+                    "short_reason": "Included as fallback normal context to preserve downstream minimum candidate count.",
+                    "should_keep": True,
+                    "model": MODEL_NAME,
+                    "image_path_used": candidate.get("vlm_filter", {}).get("image_path_used"),
+                    "inference_time_seconds": candidate.get("vlm_filter", {}).get("inference_time_seconds", 0.0),
+                    "raw_output_text": candidate.get("vlm_filter", {}).get("raw_output_text", ""),
+                    "parsed_json_ok": candidate.get("vlm_filter", {}).get("parsed_json_ok", False),
+                }
+                candidate["final_event_truth"] = "normal_context_or_uncertain_candidate"
+                selected_final.append(candidate)
+                already_selected.add(candidate_id)
+                fallback_normal_context_count += 1
+                decision_counts["fallback_normal_context"] += 1
+                flat_results.append(
+                    {
+                        "candidate_event_id": candidate_id,
+                        "event_type": candidate.get("event_type"),
+                        "best_timestamp_text": candidate.get("best_timestamp_text"),
+                        "candidate_score": candidate.get("candidate_score"),
+                        "filter_decision": "fallback_normal_context",
+                        "event_likelihood": candidate["vlm_filter"].get("event_likelihood"),
+                        "short_reason": candidate["vlm_filter"].get("short_reason"),
+                        "should_keep": True,
+                        "image_path_used": candidate["vlm_filter"].get("image_path_used"),
+                        "inference_time_seconds": candidate["vlm_filter"].get("inference_time_seconds"),
+                        "representative_frame_path": candidate.get("representative_frame", {}).get("image_path"),
+                    }
+                )
 
-    selected_final = selected_final[: int(filter_config["max_filtered_events"])]
-    event_type_counts_before = Counter(str(item.get("event_type", "") or "unknown") for item in source_candidates)
-    event_type_counts_after = Counter(str(item.get("event_type", "") or "unknown") for item in selected_final)
-    average_inference_time_seconds = round(total_inference_time_seconds / len(checked_candidates), 3) if checked_candidates else 0.0
-    average_api_latency_seconds = round(total_api_latency_seconds / max(1, api_success_count + api_failed_count), 3) if (api_success_count + api_failed_count) else 0.0
+        selected_final = selected_final[: int(filter_config["max_filtered_events"])]
+        event_type_counts_before = Counter(str(item.get("event_type", "") or "unknown") for item in source_candidates)
+        event_type_counts_after = Counter(str(item.get("event_type", "") or "unknown") for item in selected_final)
+        average_inference_time_seconds = round(total_inference_time_seconds / len(checked_candidates), 3) if checked_candidates else 0.0
+        average_api_latency_seconds = round(total_api_latency_seconds / max(1, api_success_count + api_failed_count), 3) if (api_success_count + api_failed_count) else 0.0
 
-    output_payload = {
-        "status": "success" if backend != "disabled" else "skipped",
-        "source_file": SOURCE_FILE,
-        "filter_model": MODEL_NAME,
-        "vlm_backend": backend,
-        "config": {
-            **dict(filter_config),
-            "model_path": str(filter_config["model_path"]),
-            "prompt_style": "single_full_scene_frame",
-            "model_dtype": model_dtype,
-        },
-        "summary": {
+        output_payload = {
+            "status": "success" if backend != "disabled" else "skipped",
+            "source_file": SOURCE_FILE,
+            "filter_model": MODEL_NAME,
+            "vlm_backend": backend,
+            "config": {
+                **dict(filter_config),
+                "model_path": str(filter_config["model_path"]),
+                "prompt_style": "single_full_scene_frame",
+                "model_dtype": model_dtype,
+            },
+            "summary": {
+                "input_candidate_count": len(source_candidates),
+                "candidates_checked_by_vlm": len(checked_candidates),
+                "accepted_yes_count": len(accepted_yes),
+                "uncertain_count": len(uncertain_candidates),
+                "rejected_no_count": len(rejected_no),
+                "fallback_normal_context_count": fallback_normal_context_count,
+                "final_filtered_candidate_count": len(selected_final),
+                "ready_for_step12_event_ranking": len(selected_final) > 0,
+            },
+            "candidate_events": selected_final,
+        }
+        report_payload = {
+            "status": "success" if backend != "disabled" else "skipped",
+            "source_file": SOURCE_FILE,
+            "vlm_backend": backend,
+            "api_provider": api_provider if backend == "api_qwen" else None,
+            "api_model": api_model if backend == "api_qwen" else None,
             "input_candidate_count": len(source_candidates),
             "candidates_checked_by_vlm": len(checked_candidates),
             "accepted_yes_count": len(accepted_yes),
@@ -695,70 +759,74 @@ def run_lightweight_vlm_filter(
             "rejected_no_count": len(rejected_no),
             "fallback_normal_context_count": fallback_normal_context_count,
             "final_filtered_candidate_count": len(selected_final),
+            "selected_for_step12_count": len(selected_final),
+            "min_filtered_events": int(filter_config["min_filtered_events"]),
+            "max_filtered_events": int(filter_config["max_filtered_events"]),
+            "max_candidates_to_check": int(filter_config["max_candidates_to_check"]),
+            "model_path": str(filter_config["model_path"]),
+            "model_device": str(getattr(model, "device", "cuda:0")) if model is not None else None,
+            "model_load_time_seconds": round(model_load_time_seconds, 3),
+            "checkpoint_type": checkpoint_type,
+            "model_precision_label": model_dtype,
+            "compute_dtype": compute_dtype_name,
+            "is_loaded_in_4bit": is_loaded_in_4bit,
+            "quantization_type": quantization_type,
+            "double_quant": double_quant,
+            "linear_4bit_module_count": linear_4bit_module_count,
+            "api_success_count": api_success_count,
+            "api_failed_count": api_failed_count,
+            "total_api_latency_seconds": round(total_api_latency_seconds, 3),
+            "average_api_latency_seconds": average_api_latency_seconds,
+            "total_inference_time_seconds": round(total_inference_time_seconds, 3),
+            "average_inference_time_seconds": average_inference_time_seconds,
+            "cuda_memory_allocated_before_load_mb": cuda_before_load_mb,
+            "cuda_memory_reserved_before_load_mb": cuda_reserved_before_load_mb,
+            "cuda_memory_allocated_after_load_mb": cuda_after_load_mb,
+            "cuda_memory_reserved_after_load_mb": cuda_reserved_after_load_mb,
+            "fallback_used": fallback_used,
+            "errors_summary": errors_summary,
+            "cuda_memory_allocated_after_mb": cuda_after_mb if cuda_after_mb is not None else cuda_after_load_mb,
+            "decision_counts": dict(decision_counts),
+            "event_type_counts_before": dict(event_type_counts_before),
+            "event_type_counts_after": dict(event_type_counts_after),
+            "top_filtered_candidates": [
+                {
+                    "candidate_event_id": item.get("candidate_event_id"),
+                    "event_type": item.get("event_type"),
+                    "best_timestamp_text": item.get("best_timestamp_text"),
+                    "candidate_score": item.get("candidate_score"),
+                    "filter_decision": item.get("vlm_filter", {}).get("decision"),
+                    "event_likelihood": item.get("vlm_filter", {}).get("event_likelihood"),
+                    "short_reason": item.get("vlm_filter", {}).get("short_reason"),
+                }
+                for item in selected_final[:10]
+            ],
+            "rejected_examples": [
+                {
+                    "candidate_event_id": item.get("candidate_event_id"),
+                    "event_type": item.get("event_type"),
+                    "best_timestamp_text": item.get("best_timestamp_text"),
+                    "candidate_score": item.get("candidate_score"),
+                    "filter_decision": item.get("vlm_filter", {}).get("decision"),
+                    "short_reason": item.get("vlm_filter", {}).get("short_reason"),
+                }
+                for item in rejected_no[:8]
+            ],
+            "warnings": warnings,
             "ready_for_step12_event_ranking": len(selected_final) > 0,
-        },
-        "candidate_events": selected_final,
-    }
-    report_payload = {
-        "status": "success" if backend != "disabled" else "skipped",
-        "source_file": SOURCE_FILE,
-        "vlm_backend": backend,
-        "api_provider": api_provider if backend == "api_qwen" else None,
-        "api_model": api_model if backend == "api_qwen" else None,
-        "input_candidate_count": len(source_candidates),
-        "candidates_checked_by_vlm": len(checked_candidates),
-        "accepted_yes_count": len(accepted_yes),
-        "uncertain_count": len(uncertain_candidates),
-        "rejected_no_count": len(rejected_no),
-        "fallback_normal_context_count": fallback_normal_context_count,
-        "final_filtered_candidate_count": len(selected_final),
-        "selected_for_step12_count": len(selected_final),
-        "min_filtered_events": int(filter_config["min_filtered_events"]),
-        "max_filtered_events": int(filter_config["max_filtered_events"]),
-        "max_candidates_to_check": int(filter_config["max_candidates_to_check"]),
-        "model_path": str(filter_config["model_path"]),
-        "model_device": str(getattr(model, "device", "cuda:0")) if model is not None else None,
-        "model_load_time_seconds": round(model_load_time_seconds, 3),
-        "api_success_count": api_success_count,
-        "api_failed_count": api_failed_count,
-        "total_api_latency_seconds": round(total_api_latency_seconds, 3),
-        "average_api_latency_seconds": average_api_latency_seconds,
-        "total_inference_time_seconds": round(total_inference_time_seconds, 3),
-        "average_inference_time_seconds": average_inference_time_seconds,
-        "fallback_used": fallback_used,
-        "errors_summary": errors_summary,
-        "cuda_memory_allocated_after_mb": cuda_after_mb if cuda_after_mb is not None else cuda_after_load_mb,
-        "decision_counts": dict(decision_counts),
-        "event_type_counts_before": dict(event_type_counts_before),
-        "event_type_counts_after": dict(event_type_counts_after),
-        "top_filtered_candidates": [
-            {
-                "candidate_event_id": item.get("candidate_event_id"),
-                "event_type": item.get("event_type"),
-                "best_timestamp_text": item.get("best_timestamp_text"),
-                "candidate_score": item.get("candidate_score"),
-                "filter_decision": item.get("vlm_filter", {}).get("decision"),
-                "event_likelihood": item.get("vlm_filter", {}).get("event_likelihood"),
-                "short_reason": item.get("vlm_filter", {}).get("short_reason"),
-            }
-            for item in selected_final[:10]
-        ],
-        "rejected_examples": [
-            {
-                "candidate_event_id": item.get("candidate_event_id"),
-                "event_type": item.get("event_type"),
-                "best_timestamp_text": item.get("best_timestamp_text"),
-                "candidate_score": item.get("candidate_score"),
-                "filter_decision": item.get("vlm_filter", {}).get("decision"),
-                "short_reason": item.get("vlm_filter", {}).get("short_reason"),
-            }
-            for item in rejected_no[:8]
-        ],
-        "warnings": warnings,
-        "ready_for_step12_event_ranking": len(selected_final) > 0,
-    }
+        }
 
-    write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
-    write_json(run_dir / "11_5_vlm_filter_report.json", report_payload)
-    write_json_any(run_dir / "11_5_vlm_filter_results_flat.json", flat_results)
-    return output_payload, report_payload, flat_results
+        write_json(run_dir / INPUT_FILE_PRIMARY, output_payload)
+        write_json(run_dir / "11_5_vlm_filter_report.json", report_payload)
+        write_json_any(run_dir / "11_5_vlm_filter_results_flat.json", flat_results)
+        return output_payload, report_payload, flat_results
+    finally:
+        if model is not None or processor is not None:
+            loaded_model = model
+            loaded_processor = processor
+            loaded_process_vision_info = process_vision_info
+            model = None
+            processor = None
+            process_vision_info = None
+            del loaded_model, loaded_processor, loaded_process_vision_info
+            release_qwen_resources()

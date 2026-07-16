@@ -4,6 +4,9 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -58,12 +61,16 @@ def _track_synthetic(frames: list[dict[str, object]], detections_by_frame: dict[
 
 @contextmanager
 def _patched_appearance(value: float | None):
-    original = fragment_merger._appearance_similarity
-    fragment_merger._appearance_similarity = lambda run_dir, source, target: value
+    original = fragment_merger._appearance_similarity_cached
+
+    def _patched(run_dir, source, target, **kwargs):
+        return value
+
+    fragment_merger._appearance_similarity_cached = _patched
     try:
         yield
     finally:
-        fragment_merger._appearance_similarity = original
+        fragment_merger._appearance_similarity_cached = original
 
 
 def _raw_track(track_id: str, detections: list[dict[str, object]]) -> dict[str, object]:
@@ -322,6 +329,102 @@ def test_competing_successor_candidates_block_exception_merge(tmp_path: Path):
     assert rejected
     assert rejected[0]["curved_path_or_abrupt_turn_exception_checks"]["no_competing_successor"] is False
     assert rejected[0]["accepted"] is False
+
+
+def test_geometry_invalid_pair_skips_appearance(tmp_path: Path, monkeypatch):
+    raw_tracks = [
+        _raw_track(
+            "vehicle_track_0001",
+            [_det(0, 0.0, 100, 100, 180, 160, detection_id="a0"), _det(1, 0.2, 120, 100, 200, 160, detection_id="a1")],
+        ),
+        _raw_track(
+            "vehicle_track_0002",
+            [_det(4, 0.8, 900, 500, 980, 560, detection_id="b0"), _det(5, 1.0, 920, 500, 1000, 560, detection_id="b1")],
+        ),
+    ]
+    calls = {"count": 0}
+
+    def _counting_appearance(*args, **kwargs):
+        calls["count"] += 1
+        return 0.95
+
+    monkeypatch.setattr(fragment_merger, "_appearance_similarity_cached", _counting_appearance)
+    merged, audit, meta = merge_track_fragments(run_dir=tmp_path, raw_tracks=raw_tracks, image_diagonal=1468.6, max_prediction_distance=0.05)
+    assert len(merged) == 2
+    assert meta["pairs_rejected_before_appearance"] >= 1
+    assert calls["count"] == 0
+    assert any(item["final_merge_reason"] == "rejected_initial_checks" for item in audit)
+
+
+def test_each_crop_loaded_once_with_descriptor_cache(tmp_path: Path, monkeypatch):
+    crops_dir = tmp_path / "crops"
+    crops_dir.mkdir(parents=True, exist_ok=True)
+    colors = {
+        "a.jpg": (0, 0, 255),
+        "b.jpg": (0, 255, 0),
+        "c.jpg": (255, 0, 0),
+    }
+    for name, bgr in colors.items():
+        image = np.full((48, 48, 3), bgr, dtype=np.uint8)
+        assert cv2.imwrite(str(crops_dir / name), image)
+
+    def _track(track_id: str, timestamp_seconds: float, x1: float, crop_name: str) -> dict[str, object]:
+        detection = _det(int(timestamp_seconds * 10), timestamp_seconds, x1, 100, x1 + 80, 160, detection_id=f"{track_id}_d0")
+        detection["crop_path"] = str(Path("crops") / crop_name)
+        detection["crop_exists"] = True
+        return _raw_track(track_id, [detection])
+
+    raw_tracks = [
+        _track("vehicle_track_0001", 0.0, 100, "a.jpg"),
+        _track("vehicle_track_0002", 0.6, 120, "b.jpg"),
+        _track("vehicle_track_0003", 1.2, 140, "c.jpg"),
+    ]
+    original_imread = fragment_merger.cv2.imread
+    read_counts: dict[str, int] = {}
+
+    def _counting_imread(path: str):
+        read_counts[path] = read_counts.get(path, 0) + 1
+        return original_imread(path)
+
+    monkeypatch.setattr(fragment_merger.cv2, "imread", _counting_imread)
+    merged, _audit, meta = merge_track_fragments(run_dir=tmp_path, raw_tracks=raw_tracks, image_diagonal=1468.6, min_appearance_similarity=0.99)
+    assert len(merged) == 3
+    assert meta["crop_images_loaded"] == 3
+    assert max(read_counts.values()) == 1
+
+
+def test_candidate_limit_rejects_extra_geometric_successors(tmp_path: Path):
+    raw_tracks = [
+        _raw_track(
+            "vehicle_track_0001",
+            [_det(0, 0.0, 100, 100, 180, 160, detection_id="a0"), _det(1, 0.2, 120, 100, 200, 160, detection_id="a1")],
+        ),
+        _raw_track(
+            "vehicle_track_0002",
+            [_det(3, 0.6, 140, 100, 220, 160, detection_id="b0"), _det(4, 0.8, 160, 100, 240, 160, detection_id="b1")],
+        ),
+        _raw_track(
+            "vehicle_track_0003",
+            [_det(5, 1.0, 165, 100, 245, 160, detection_id="c0"), _det(6, 1.2, 185, 100, 265, 160, detection_id="c1")],
+        ),
+        _raw_track(
+            "vehicle_track_0004",
+            [_det(7, 1.4, 190, 100, 270, 160, detection_id="d0"), _det(8, 1.6, 210, 100, 290, 160, detection_id="d1")],
+        ),
+    ]
+    merged, audit, meta = merge_track_fragments(
+        run_dir=tmp_path,
+        raw_tracks=raw_tracks,
+        image_diagonal=1468.6,
+        max_candidates_per_track=1,
+    )
+    del merged
+    limited = [
+        item for item in audit
+        if item["source_track_id"] == "vehicle_track_0001" and item["final_merge_reason"] == "rejected_candidate_limit"
+    ]
+    assert limited
+    assert meta["pairs_rejected_before_appearance"] >= len(limited)
 
 
 def test_output_compatibility():
