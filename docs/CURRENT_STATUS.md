@@ -419,6 +419,13 @@ Event abstraction and summary quality improvements.
 * Added td_case2 Step 16 evidence video generation. The VLM pipeline now finishes by building `evidence_video.mp4`, `evidence_video_index.json`, and `16_evidence_video_report.json` from existing event/search artifacts only, without re-running AI models.
 * Step 16 selects chronological, high-value searchable events, deduplicates near-identical plate/track evidence, adds investigator overlays plus title cards, and records clip-to-source traceability for future UI jump navigation.
 * Surfaced Step 16 outputs inside the td_case2 review UIs so investigators can preview the final evidence MP4 and inspect the per-clip index directly from the workbench / summary dashboard.
+* Fixed td_case2 Step 13 non-merged VLM input generation so separate event review strips can be produced when `TD_CASE2_STEP13_MERGE_NEARBY_SELECTED=false`; re-reviewed the accident short with 10 separate VLM inputs and detected 4 high-risk collision moments.
+
+## 2026-07-16
+
+* Added td_case2 Step 15 searchable reviewed-event generation so Step 14 `collision` / `near_miss` decisions are persisted as standalone searchable scene events instead of being reconstructed later from weaker Step 11 labels.
+* Hardened Step 12 and Step 13 against silent loss of accident evidence: Step 11.5 `yes` detections with critical visible-event types now receive forced preservation through ranking, and Step 13 no longer merges critical accident candidates into ordinary nearby traffic groups.
+* Updated Step 14 and Step 16 final summaries to explicitly surface collision evidence, and updated Step 16 to consume the new Step 15 reviewed-event file so evidence export preserves reviewed collision truth, priority, and timestamps end-to-end.
 
 ## 2026-06-08
 

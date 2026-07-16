@@ -20,6 +20,7 @@ from run_td_case2_step11_5_vlm_filter import main as step11_5_main
 from run_td_case2_step12_event_ranking import main as step12_main
 from run_td_case2_step13_vlm_inputs import main as step13_main
 from run_td_case2_step14_vlm_review import main as step14_main
+from run_td_case2_step15_searchable_events import main as step15_main
 from run_td_case2_step16_evidence_video import main as step16_main
 from stage_checks import read_json, write_json
 
@@ -116,6 +117,14 @@ def main() -> None:
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step13")
         step14_main()
         _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step14")
+        step15_main()
+        _record_cpu_stage(
+            run_dir,
+            "15_searchable_event_generation",
+            "searchable_event_generation",
+            "Step 15 normalizes reviewed scene events into searchable event JSON on CPU.",
+        )
+        _write_pipeline_status(run_dir, vlm_status="running", latest_completed_step="step15")
         step16_main()
         _record_cpu_stage(
             run_dir,

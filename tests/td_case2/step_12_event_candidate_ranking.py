@@ -45,6 +45,32 @@ TRAFFIC_SAFETY_TYPES = {
     "sudden_stop",
     "vehicle_person_interaction",
 }
+CRITICAL_VISIBLE_EVENT_TYPES = {
+    "collision",
+    "accident",
+    "crash",
+    "impact",
+    "vehicle_impact",
+    "pedestrian_impact",
+    "fire",
+    "explosion",
+    "rollover",
+    "vehicle_hitting_another_vehicle",
+    "near_miss",
+}
+CRITICAL_REASON_TERMS = (
+    "collision",
+    "accident",
+    "crash",
+    "impact",
+    "near miss",
+    "rollover",
+    "overturned",
+    "fire",
+    "explosion",
+    "hit another vehicle",
+    "person on the ground",
+)
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -83,6 +109,35 @@ def _vlm_priority(score: float) -> str | None:
     if score >= 0.35:
         return "low"
     return None
+
+
+def _normalize_label(value: Any) -> str:
+    """Normalize a free-text label into a snake-like key."""
+
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    while "__" in text:
+        text = text.replace("__", "_")
+    return text.strip("_")
+
+
+def _contains_critical_reason(candidate: dict[str, Any]) -> bool:
+    """Return whether Step 11.5 reason text mentions a critical incident."""
+
+    short_reason = str(dict(candidate.get("vlm_filter", {})).get("short_reason", "") or "").lower()
+    return any(term in short_reason for term in CRITICAL_REASON_TERMS)
+
+
+def _critical_event_flags(candidate: dict[str, Any]) -> tuple[bool, str | None]:
+    """Return whether Step 11.5 marked this as a critical incident."""
+
+    vlm_filter = dict(candidate.get("vlm_filter", {}))
+    decision = str(vlm_filter.get("decision", "") or "").strip().lower()
+    visible_event_type = _normalize_label(vlm_filter.get("visible_event_type"))
+    if decision == "yes" and visible_event_type in CRITICAL_VISIBLE_EVENT_TYPES:
+        return True, visible_event_type
+    if decision == "yes" and _contains_critical_reason(candidate):
+        return True, "critical_reason_text"
+    return False, None
 
 
 def _validate_candidate(candidate: dict[str, Any]) -> dict[str, bool]:
@@ -200,6 +255,8 @@ def _ranking_fields(
     confidence_score = float(CONFIDENCE_LABEL_SCORE.get(str(candidate.get("confidence_label", "")), 0.35))
     severity_score = float(SEVERITY_LABEL_SCORE.get(str(candidate.get("severity_label", "")), 0.35))
     candidate_score = float(candidate.get("candidate_score", 0.0) or 0.0)
+    critical_event, critical_reason = _critical_event_flags(candidate)
+    step11_5_bonus = 0.15 if critical_event else 0.0
     ranking_score = _clamp(
         candidate_score * 0.40
         + event_type_priority * 0.20
@@ -207,6 +264,7 @@ def _ranking_fields(
         + severity_score * 0.10
         + trigger_score * 0.10
         + evidence_score * 0.10
+        + step11_5_bonus
         - penalty_score,
         0.0,
         1.0,
@@ -227,6 +285,9 @@ def _ranking_fields(
         "strong_trigger_count": strong_count,
         "medium_trigger_count": medium_count,
         "weak_trigger_count": weak_count,
+        "step11_5_priority_bonus": round(step11_5_bonus, 6),
+        "critical_event": critical_event,
+        "critical_reason": critical_reason,
     }
     valid_for_ranking = all(
         [
@@ -385,6 +446,7 @@ def run_event_candidate_ranking(
 
     ranked_candidates.sort(
         key=lambda item: (
+            -int(bool(item["ranking"].get("critical_event"))),
             -float(item["ranking"]["ranking_score"]),
             -float(item.get("candidate_score", 0.0) or 0.0),
             float(item.get("best_timestamp_seconds", 0.0) or 0.0),
@@ -403,12 +465,48 @@ def run_event_candidate_ranking(
     suppressed_by_score = 0
     top_k = int(ranking_config["top_k"])
     min_ranking_score = float(ranking_config["min_ranking_score"])
+    critical_candidates = [
+        candidate
+        for candidate in ranked_candidates
+        if bool(candidate.get("validation", {}).get("valid_for_ranking"))
+        and bool(candidate.get("ranking", {}).get("critical_event"))
+    ]
+    selection_limit = max(top_k, len(critical_candidates))
 
+    def _append_selected(candidate: dict[str, Any], *, forced_reason: str | None = None) -> None:
+        cluster_id = str(candidate.get("selection", {}).get("temporal_cluster_id", "") or "")
+        event_type = str(candidate.get("event_type", "") or "unknown")
+        candidate["selection"]["selected_for_vlm"] = True
+        candidate["selection"]["selection_rank"] = len(selected_candidates) + 1
+        selection_reason = _selection_reason(
+            candidate,
+            bool(ranking_config["prefer_traffic_safety"]),
+        )
+        if forced_reason and forced_reason not in selection_reason:
+            selection_reason.insert(0, forced_reason)
+        candidate["selection"]["selection_reason"] = selection_reason
+        selected_candidates.append(candidate)
+        selected_by_cluster[cluster_id] += 1
+        selected_by_type[event_type] += 1
+
+    for candidate in critical_candidates:
+        if bool(ranking_config["require_full_frame_path"]) and not bool(candidate.get("validation", {}).get("has_full_frame_paths")):
+            suppressed_by_score += 1
+            continue
+        if not bool(ranking_config["include_low_confidence"]) and str(candidate.get("confidence_label", "")) == "low":
+            suppressed_by_score += 1
+            continue
+        _append_selected(candidate, forced_reason="critical_accident_priority")
+
+    selected_ids = {str(candidate.get("candidate_event_id", "") or "") for candidate in selected_candidates}
     for candidate in ranked_candidates:
         ranking = dict(candidate.get("ranking", {}))
         selection = dict(candidate.get("selection", {}))
         cluster_id = str(selection.get("temporal_cluster_id", "") or "")
         event_type = str(candidate.get("event_type", "") or "unknown")
+        candidate_id = str(candidate.get("candidate_event_id", "") or "")
+        if candidate_id in selected_ids:
+            continue
         if not bool(candidate.get("validation", {}).get("valid_for_ranking")):
             suppressed_by_score += 1
             continue
@@ -427,16 +525,9 @@ def run_event_candidate_ranking(
         if selected_by_type[event_type] >= int(ranking_config["max_per_event_type"]):
             suppressed_by_type += 1
             continue
-        candidate["selection"]["selected_for_vlm"] = True
-        candidate["selection"]["selection_rank"] = len(selected_candidates) + 1
-        candidate["selection"]["selection_reason"] = _selection_reason(
-            candidate,
-            bool(ranking_config["prefer_traffic_safety"]),
-        )
-        selected_candidates.append(candidate)
-        selected_by_cluster[cluster_id] += 1
-        selected_by_type[event_type] += 1
-        if len(selected_candidates) >= top_k:
+        _append_selected(candidate)
+        selected_ids.add(candidate_id)
+        if len(selected_candidates) >= selection_limit:
             break
 
     selected_event_type_counts = Counter(candidate["event_type"] for candidate in selected_candidates)
@@ -457,6 +548,7 @@ def run_event_candidate_ranking(
             "selected_top_k_count": len(selected_candidates),
             "rejected_candidate_count": max(0, len(ranked_candidates) - len(selected_candidates)),
             "temporal_cluster_count": temporal_cluster_count,
+            "critical_event_count": len(critical_candidates),
             "ready_for_step13_vlm_input_generation": len(selected_candidates) > 0,
         },
         "ranked_candidates": ranked_candidates,
@@ -495,6 +587,7 @@ def run_event_candidate_ranking(
         "ranked_candidate_count": len(ranked_candidates),
         "selected_top_k_count": len(selected_candidates),
         "temporal_cluster_count": temporal_cluster_count,
+        "critical_event_count": len(critical_candidates),
         "selected_event_type_counts": dict(selected_event_type_counts),
         "selected_confidence_counts": dict(selected_confidence_counts),
         "selected_severity_counts": dict(selected_severity_counts),

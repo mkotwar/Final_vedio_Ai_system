@@ -124,6 +124,8 @@ def _selected_candidate_valid(candidate: dict[str, Any]) -> tuple[bool, list[str
 def _should_merge(left: dict[str, Any], right: dict[str, Any], merge_gap_seconds: float) -> bool:
     """Return whether two selected candidates should be merged into one VLM group."""
 
+    if bool(dict(left.get("ranking", {})).get("critical_event")) or bool(dict(right.get("ranking", {})).get("critical_event")):
+        return False
     left_start = float(left.get("context_start_seconds", 0.0) or 0.0)
     left_end = float(left.get("context_end_seconds", 0.0) or 0.0)
     right_start = float(right.get("context_start_seconds", 0.0) or 0.0)
@@ -155,6 +157,29 @@ def _merge_selected_candidates(
             {
                 "group_index": index,
                 "candidates": [candidate],
+                "highest_ranked_candidate": candidate,
+                "source_candidate_ids": [str(candidate.get("candidate_event_id", "") or "")],
+                "source_event_types": [str(candidate.get("event_type", "") or "")],
+                "source_best_timestamps": [str(candidate.get("best_timestamp_text", "") or "")],
+                "selection_ranks": [
+                    int(candidate.get("selection_rank", candidate.get("selection", {}).get("selection_rank", 0)) or 0)
+                ],
+                "merged_context_start_seconds": round(float(candidate.get("context_start_seconds", 0.0) or 0.0), 6),
+                "merged_context_end_seconds": round(float(candidate.get("context_end_seconds", 0.0) or 0.0), 6),
+                "group_best_timestamp_seconds": round(float(candidate.get("best_timestamp_seconds", 0.0) or 0.0), 6),
+                "max_ranking_score": round(
+                    float(candidate.get("ranking", {}).get("ranking_score", candidate.get("ranking_score", 0.0)) or 0.0),
+                    6,
+                ),
+                "max_vlm_priority": candidate.get("ranking", {}).get("vlm_priority", candidate.get("vlm_priority")),
+                "combined_trigger_reasons": sorted(list(candidate.get("trigger_reasons", []))),
+                "combined_involved_classes": sorted(list(candidate.get("involved_classes", []))),
+                "temporal_cluster_ids": [
+                    str(candidate.get("selection", {}).get("temporal_cluster_id", "") or "")
+                ]
+                if str(candidate.get("selection", {}).get("temporal_cluster_id", "") or "")
+                else [],
+                "merged": False,
             }
             for index, candidate in enumerate(ordered, start=1)
         ]

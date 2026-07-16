@@ -19,6 +19,7 @@ STEP12_FILE = "12_selected_top_event_candidates.json"
 STEP13_FILE = "13_vlm_event_inputs.json"
 STEP14_FILE = "14_vlm_event_reviews.json"
 STEP14_SUMMARY_FILE = "14_final_video_summary.json"
+STEP15_FILE = "15_searchable_events.json"
 SEARCH_INDEX_FILE = "07B_traffic_object_search_index.json"
 TRACKS_FILE = "04B_tracks.json"
 FRAME_MANIFEST_FILES = ("02A_adaptive_frames.json", "02_sampled_frames.json")
@@ -158,6 +159,14 @@ def _step14_reviews(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, dict
             if key and key not in by_candidate_id:
                 by_candidate_id[key] = review
     return reviews, by_candidate_id, summary_payload
+
+
+def _step15_scene_events(run_dir: Path) -> list[dict[str, Any]]:
+    path = run_dir / STEP15_FILE
+    if not path.exists():
+        return []
+    payload = read_json(path)
+    return [item for item in list(payload.get("records", [])) if isinstance(item, dict)]
 
 
 def _search_records(run_dir: Path) -> list[dict[str, Any]]:
@@ -499,9 +508,10 @@ def select_evidence_events(run_dir: Path, config: EvidenceVideoConfig) -> tuple[
     step11_map = _step11_map(run_dir)
     selected_candidates = _step12_selected(run_dir)
     reviews, review_map, step14_summary = _step14_reviews(run_dir)
+    step15_scene_events = _step15_scene_events(run_dir)
     search_records = _search_records(run_dir)
 
-    scene_events = _scene_event_entries(
+    scene_events = step15_scene_events or _scene_event_entries(
         selected_candidates=selected_candidates,
         step11_map=step11_map,
         review_map=review_map,
@@ -514,11 +524,38 @@ def select_evidence_events(run_dir: Path, config: EvidenceVideoConfig) -> tuple[
         "step12_selected_candidates": len(selected_candidates),
         "step14_reviews_loaded": len(reviews),
         "step14_summary_status": (step14_summary or {}).get("overall_status"),
+        "step15_scene_events_loaded": len(step15_scene_events),
         "scene_events_selected": len(scene_events),
         "object_events_selected": len(object_events),
         "search_records_loaded": len(search_records),
     }
     return all_events, diagnostics
+
+
+def _incident_summary(selected_events: list[dict[str, Any]]) -> tuple[str, str]:
+    critical_events = [
+        item
+        for item in selected_events
+        if str(item.get("source_type", "") or "") in {"scene_event_review", "scene_event"}
+        and (
+            bool(item.get("critical_event"))
+            or str(item.get("event_type", "") or "").strip().lower() in {"collision", "near_miss", "sudden_stop"}
+        )
+    ]
+    if not critical_events:
+        return "No critical incident retained in final evidence.", "Reviewed scene events were normal-context only."
+    labels = []
+    timestamps = []
+    for item in critical_events[:4]:
+        labels.append(str(item.get("event_type", "") or "event").replace("_", " "))
+        timestamp_value = _safe_float(item.get("best_timestamp_seconds"), 0.0)
+        timestamps.append(format_seconds_text(timestamp_value))
+    unique_labels = ", ".join(dict.fromkeys(labels))
+    unique_times = ", ".join(dict.fromkeys(timestamps))
+    return (
+        f"Critical incident evidence: {unique_labels}.",
+        f"Key timestamps: {unique_times}.",
+    )
 
 
 def _nearest_frames_within_window(frames: list[dict[str, Any]], start_seconds: float, end_seconds: float) -> list[dict[str, Any]]:
@@ -732,12 +769,16 @@ def _summary_card(
     object_count: int,
     average_confidence: float,
     generation_time_seconds: float,
+    incident_headline: str,
+    incident_detail: str,
 ) -> np.ndarray:
     lines = [
         "Evidence Video Summary",
         f"Original video duration: {str(video_info.get('duration_text', '-'))}",
         f"Evidence video duration: {format_seconds_text(evidence_duration_seconds)}",
         f"Searchable events: {searchable_event_count}",
+        incident_headline,
+        incident_detail,
         f"Unique gallery frames: {gallery_frame_count} | VLM gallery frames: {vlm_gallery_frame_count}",
         f"Vehicles: {vehicle_count} | Persons: {person_count} | Plates: {plate_count} | Objects: {object_count}",
         f"Average confidence: {round(average_confidence, 3)} | Generation time: {round(generation_time_seconds, 2)}s",
@@ -1238,6 +1279,7 @@ def build_evidence_video(run_dir: Path, config: EvidenceVideoConfig) -> tuple[di
 
         evidence_duration_before_summary = evidence_cursor_seconds
         generation_time_seconds = time.perf_counter() - generation_started
+        incident_headline, incident_detail = _incident_summary(selected_events)
         summary_card = _summary_card(
             width=frame_width,
             height=frame_height,
@@ -1252,6 +1294,8 @@ def build_evidence_video(run_dir: Path, config: EvidenceVideoConfig) -> tuple[di
             object_count=len(unique_objects),
             average_confidence=(sum(confidence_values) / len(confidence_values)) if confidence_values else 0.0,
             generation_time_seconds=generation_time_seconds,
+            incident_headline=incident_headline,
+            incident_detail=incident_detail,
         )
         _write_repeated_frames(writer, summary_card, fps=config.clip_fps, seconds=config.summary_seconds)
     finally:
@@ -1266,10 +1310,11 @@ def build_evidence_video(run_dir: Path, config: EvidenceVideoConfig) -> tuple[di
         "vlm_input_gallery_frame_count": len(vlm_gallery_entries),
         "clips": index_entries,
     }
+    searchable_source_types = {"searchable_object_event", "scene_event", "scene_event_review"}
     searchable_ids = [
         str(item.get("searchable_event_id") or item.get("event_id") or "")
         for item in index_entries
-        if item.get("source_type") == "searchable_object_event" or item.get("source_type") == "scene_event"
+        if item.get("source_type") in searchable_source_types
     ]
     source_types = [str(item.get("source_type") or "") for item in index_entries]
     object_gallery_start = next((idx for idx, source_type in enumerate(source_types) if source_type == "object_detection_frame_gallery"), None)
@@ -1288,6 +1333,10 @@ def build_evidence_video(run_dir: Path, config: EvidenceVideoConfig) -> tuple[di
         "license_plates_detected": len(unique_plates),
         "objects_detected": len(unique_objects),
         "average_confidence": round((sum(confidence_values) / len(confidence_values)) if confidence_values else 0.0, 6),
+        "final_incident_summary": {
+            "headline": incident_headline,
+            "detail": incident_detail,
+        },
         "generation_time_seconds": round(generation_time_seconds, 3),
         "diagnostics": diagnostics,
         "object_detection_gallery_frame_count": len(object_frame_entries),
@@ -1322,7 +1371,7 @@ def build_evidence_video(run_dir: Path, config: EvidenceVideoConfig) -> tuple[di
                     (
                         (_safe_float(item.get("original_video_time_seconds"), 0.0), str(item.get("searchable_event_id") or item.get("event_id") or ""))
                         for item in index_entries
-                        if item.get("source_type") in {"searchable_object_event", "scene_event"}
+                        if item.get("source_type") in searchable_source_types
                     ),
                     key=lambda pair: pair[0],
                 )

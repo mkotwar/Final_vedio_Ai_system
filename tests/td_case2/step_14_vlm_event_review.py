@@ -57,6 +57,7 @@ REVIEW_PROMPT_TEMPLATE = (
     "Review only what is visibly present. Do not assume event truth from metadata. Candidate labels are only weak hints. "
     "If the Step 11.5 filter decision is fallback_normal_context or no, treat this as a normal review moment unless the image clearly contradicts it. "
     "Do not say collision or accident unless visible contact, clear aftermath, a fallen vehicle or person, a blocked lane, or clearly dangerous abnormal behavior is visible. "
+    "If a collision, crash, impact, rollover, fire, explosion, or dangerous aftermath is clearly visible, preserve it as a standalone high-priority event and do not relabel it as normal traffic. "
     "Normal traffic, normal riding, normal driving, brake lights alone, or vehicles close in traffic should be described as normal traffic, not an event. "
     "Return only JSON with keys vlm_input_id, review_decision, event_visible, event_type, risk_level, summary_caption, what_is_visible, why_decision, objects_seen, needs_human_review, confidence. "
     "review_decision must be one of event_visible, normal_context, uncertain. "
@@ -470,10 +471,29 @@ def _build_final_summary(
             }
         )
 
+    collision_like_events = [
+        item
+        for item in key_events
+        if str(item.get("event_type", "") or "").strip().lower() in {"collision", "near_miss", "sudden_stop"}
+    ]
+    headline = "Visible event evidence detected in reviewed moments"
+    summary = "One or more reviewed moments show visible event evidence that should be retained for follow-up review."
+    overall_status = "event_visible_in_reviewed_moments"
+    if collision_like_events:
+        event_label = "collision"
+        if any(str(item.get("event_type", "") or "").strip().lower() == "near_miss" for item in collision_like_events):
+            event_label = "collision / near-miss"
+        timestamps = ", ".join(str(item.get("timestamp") or "") for item in collision_like_events[:6] if str(item.get("timestamp") or ""))
+        headline = "Collision evidence detected in reviewed moments"
+        summary = (
+            f"The reviewed moments show visible {event_label} evidence. "
+            f"Key timestamps: {timestamps or 'see key events'}."
+        )
+        overall_status = "collision_detected_in_reviewed_moments"
     return {
-        "overall_status": "event_visible_in_reviewed_moments",
-        "headline": "Visible event evidence detected in reviewed moments",
-        "summary": "One or more reviewed moments show visible event evidence that should be retained for follow-up review.",
+        "overall_status": overall_status,
+        "headline": headline,
+        "summary": summary,
         "event_count": len(event_reviews),
         "normal_context_count": normal_count,
         "uncertain_count": uncertain_count,

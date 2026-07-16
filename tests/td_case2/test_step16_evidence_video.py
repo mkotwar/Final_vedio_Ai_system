@@ -138,6 +138,13 @@ class Step16EvidenceVideoTests(unittest.TestCase):
             temp_dir / "14_final_video_summary.json",
             {"overall_status": "normal_no_clear_event_detected"}
         )
+        write_json(
+            temp_dir / "15_searchable_events.json",
+            {
+                "status": "success",
+                "records": [],
+            },
+        )
         (temp_dir / "13_vlm_event_inputs").mkdir(parents=True, exist_ok=True)
         strip_image = np.full((90, 240, 3), (120, 160, 220), dtype=np.uint8)
         cv2.imwrite(str(temp_dir / "13_vlm_event_inputs" / "vlm_input_000001_strip.jpg"), strip_image)
@@ -279,6 +286,81 @@ class Step16EvidenceVideoTests(unittest.TestCase):
         self.assertIn("clip_content_start_seconds", saved_index["clips"][0])
         self.assertIn("object_detection_frame_gallery", [item["source_type"] for item in saved_index["clips"]])
         self.assertIn("vlm_input_gallery", [item["source_type"] for item in saved_index["clips"]])
+
+    def test_step16_prefers_step15_reviewed_collision_scene_events(self) -> None:
+        run_dir = self._make_run_dir()
+        write_json(
+            run_dir / "14_vlm_event_reviews.json",
+            {
+                "reviews": [
+                    {
+                        "vlm_input_id": "vlm_input_000001",
+                        "best_timestamp_text": "00:02",
+                        "best_timestamp_seconds": 2.0,
+                        "context_start_seconds": 0.5,
+                        "context_end_seconds": 2.5,
+                        "source_candidate_ids": ["scene_evt_000001"],
+                        "model_review": {
+                            "review_decision": "event_visible",
+                            "event_visible": True,
+                            "event_type": "collision",
+                            "risk_level": "high",
+                            "summary_caption": "A visible collision is present.",
+                            "confidence": 0.88,
+                        },
+                    }
+                ]
+            },
+        )
+        write_json(
+            run_dir / "14_final_video_summary.json",
+            {"overall_status": "collision_detected_in_reviewed_moments"}
+        )
+        write_json(
+            run_dir / "15_searchable_events.json",
+            {
+                "status": "success",
+                "records": [
+                    {
+                        "searchable_event_id": "scene_evt_000001",
+                        "event_id": "scene_evt_000001",
+                        "source_type": "scene_event_review",
+                        "source_candidate_ids": ["scene_evt_000001"],
+                        "event_type": "collision",
+                        "title": "Collision",
+                        "summary": "A visible collision is present.",
+                        "start_seconds": 0.5,
+                        "end_seconds": 2.5,
+                        "best_timestamp_seconds": 2.0,
+                        "best_timestamp_text": "00:02",
+                        "confidence": 0.88,
+                        "risk_level": "high",
+                        "priority_rank": 10,
+                        "critical_event": True,
+                        "track_ids": ["vehicle_track_0001"],
+                        "class_names": ["car"],
+                        "representative_frame_path": "frame_000002.jpg",
+                    }
+                ],
+            },
+        )
+        config = EvidenceVideoConfig(
+            clip_fps=2,
+            header_seconds=1.0,
+            summary_seconds=1.0,
+            object_context_before_seconds=0.5,
+            object_context_after_seconds=0.5,
+            max_object_events=10,
+            include_person_events=True,
+            include_normal_context_scene_events=False,
+        )
+
+        events, diagnostics = select_evidence_events(run_dir, config)
+
+        scene_event = next(item for item in events if item["source_type"] == "scene_event_review")
+        self.assertEqual(scene_event["event_type"], "collision")
+        self.assertTrue(scene_event["critical_event"])
+        self.assertEqual(diagnostics["step15_scene_events_loaded"], 1)
 
 
 if __name__ == "__main__":
