@@ -88,9 +88,9 @@ Primary sources:
 2. `CONFIRMED` Step 04B tracks the sparse Step 03 detections, which already came from Step 02A adaptive frames. It does not decode a separate dense tracking stream in the active path.
    Source: `tests/td_case2/run_td_case2_step03_yolo.py:139-179`; `tests/td_case2/step_03b_yolo_detection.py:100-107, 359-360`; `tests/td_case2/run_td_case2_step04b_tracking.py:108-114`; `tests/td_case2/step_04b_tracking.py:336-337`
 
-3. `MISMATCH` Step 11 still reads legacy `07_vehicle_search_index.json` when it exists, while the active search-ready pipeline produces `07B_traffic_object_search_index.json`.
-   Source: `tests/td_case2/step_11_full_scene_event_candidates.py:1168-1170`; `tests/td_case2/traffic_search_common.py:725-728`; `tests/td_case2/run_td_case2_search_ready_pipeline.py:142-172`
-   Impact: Step 11 optional search metadata enrichment is disconnected from the active `07B` branch unless legacy Step 07 was run separately.
+3. `CONFIRMED` Step 11 now prefers active `07B_traffic_object_search_index.json`, falls back to legacy `07_vehicle_search_index.json`, and continues safely without optional search enrichment when neither file exists.
+   Source: `tests/td_case2/step_11_full_scene_event_candidates.py`; `tests/td_case2/traffic_search_common.py:725-728`; `tests/td_case2/run_td_case2_search_ready_pipeline.py:142-172`
+   Impact: Step 11 optional search metadata enrichment is reconnected to the active `07B` branch while preserving legacy compatibility.
 
 4. `CONFIRMED` Step 11.5 sends one full-scene image per candidate, not a temporal strip or video sequence.
    Source: `tests/td_case2/step_11_5_lightweight_vlm_filter.py:106-140, 349-365, 452-509`
@@ -137,7 +137,8 @@ flowchart TD
     S03B -->|03_yolo_detections.json| S11[Step 11 Event candidates]
     S04B -->|04B_tracks.json| S11
     S05 -->|05_best_track_frames.json optional| S11
-    S07L -->|07_vehicle_search_index.json optional legacy enrichment| S11
+    S07B -->|07B_traffic_object_search_index.json optional preferred enrichment| S11
+    S07L -->|07_vehicle_search_index.json optional legacy fallback enrichment| S11
     S11 -->|11_full_scene_event_candidates.json| S115[Step 11.5 VLM filter]
     S115 -->|11_5_vlm_filtered_event_candidates.json| S12[Step 12 Ranking]
     S11 -->|fallback source when 11.5 missing/empty| S12

@@ -17,7 +17,7 @@
 | 08B | Dynamic search validation | `07B` payload + flat + report | deterministic query tests over active search index | `08B_dynamic_search_validation_results.json`, matches, report | 09B, UI | `run_td_case2_step08b_dynamic_search_validation.py` | runner-local logic |
 | 09B | Search-result cards | `07B` payload + report, `08B` results | package universal UI cards and schema | `09B_universal_search_cards.json`, flat file, schema, report | UI | `run_td_case2_step09b_universal_search_cards.py` | runner-local logic |
 | 10B | Universal search demo | `07B` payload + report | build demo response directly from active search index | `10B_universal_search_demo_response.json`, report | UI/demo terminal output | `run_td_case2_step10b_universal_search_demo.py` | runner-local logic |
-| 11 | Full-scene event candidates | `01_video_info.json`, `02A_adaptive_frames.json`, `03_yolo_detections.json`, `04B_tracks.json`, optional `04B_tracking_report.json`, optional `05_best_track_frames.json`, optional legacy `07_vehicle_search_index.json` | rule-based temporal event proposal from full-scene detections/tracks | `11_full_scene_event_candidates.json`, flat file, report, diagnostics | 11.5, 12 | `run_td_case2_step11_event_candidates.py` | `step_11_full_scene_event_candidates.py` |
+| 11 | Full-scene event candidates | `01_video_info.json`, `02A_adaptive_frames.json`, `03_yolo_detections.json`, `04B_tracks.json`, optional `04B_tracking_report.json`, optional `05_best_track_frames.json`, optional preferred `07B_traffic_object_search_index.json`, optional legacy fallback `07_vehicle_search_index.json` | rule-based temporal event proposal from full-scene detections/tracks with optional search enrichment | `11_full_scene_event_candidates.json`, flat file, report, diagnostics | 11.5, 12 | `run_td_case2_step11_event_candidates.py` | `step_11_full_scene_event_candidates.py` |
 | 11.5 | Lightweight VLM filter | `11_full_scene_event_candidates.json`, `01_video_info.json`, backend config | one-image Qwen filter or deterministic fallback | `11_5_vlm_filtered_event_candidates.json`, flat file, report, cache dir | 12 | `run_td_case2_step11_5_vlm_filter.py` | `step_11_5_lightweight_vlm_filter.py` |
 | 12 | Event-candidate ranking | `11_full_scene_event_candidate_report.json`, plus Step 11.5 filtered file when valid or else raw Step 11 files | deterministic ranking, clustering, top-k selection | `12_ranked_event_candidates.json`, `12_selected_top_event_candidates.json`, flat file, report | 13, 14 optional summary context, 16 fallback scene events | `run_td_case2_step12_event_ranking.py` | `step_12_event_candidate_ranking.py` |
 | 13 | VLM input generation | Step 12 selected/ranked outputs, `01_video_info.json`, `02_sampled_frames/`, Step 11 or Step 11.5 candidate file | build temporal strips, contact sheets, primary-frame packages | `13_vlm_event_inputs.json`, flat file, report, `13_vlm_event_inputs/` | 14, 16 VLM gallery | `run_td_case2_step13_vlm_inputs.py` | `step_13_vlm_input_generation.py` |
@@ -298,7 +298,7 @@
 - Downstream: UI/demo only.
 - Source: `tests/td_case2/run_td_case2_step10b_universal_search_demo.py:29-30, 43-102`
 
-### Step 11 `CONFIRMED with legacy optional enrichment`
+### Step 11 `CONFIRMED with optional active 07B enrichment`
 
 - Inputs:
   - `01_video_info.json`
@@ -307,11 +307,12 @@
   - `04B_tracks.json`
   - optional `04B_tracking_report.json`
   - optional `05_best_track_frames.json`
-  - optional legacy `07_vehicle_search_index.json`
+  - optional preferred `07B_traffic_object_search_index.json`
+  - optional legacy fallback `07_vehicle_search_index.json`
 - Processing:
   - rule-based temporal windows over full-scene detections and tracks
   - candidate scoring and merging
-  - optional legacy search metadata lookup by track id
+  - optional search metadata lookup by stable identifiers with active 07B preference and legacy fallback
 - Output fields in `11_full_scene_event_candidates.json`:
   - `candidate_events[]`
   - `candidate_event_id`
@@ -504,7 +505,7 @@
 | `05_selected_track_crops/` | Step 05 | chosen crops | 06 | Required for practical Step 06 |
 | `06_ocr_color_results_verified.json` | Step 06 | verified OCR/color records | 07, 07B preferred | Optional fallback chain |
 | `06_ocr_color_results.json` | Step 06 | raw OCR/color records | 07B fallback | Optional |
-| `07_vehicle_search_index.json` | Legacy Step 07 | legacy vehicle search records | Step 11 optional enrichment | `LEGACY` |
+| `07_vehicle_search_index.json` | Legacy Step 07 | legacy vehicle search records | Step 11 optional fallback enrichment | `LEGACY` |
 | `07B_traffic_object_search_index.json` | Step 07B | active traffic/object records | 08B, 09B, 10B, 16 | Required |
 | `08B_dynamic_search_validation_results.json` | Step 08B | dynamic validation results | 09B | Required for 09B |
 | `09B_universal_search_cards.json` | Step 09B | UI cards | UI | Terminal artifact |
@@ -554,7 +555,7 @@
 
 ## Broken Or Mismatched Connections
 
-- `MISMATCH` Step 11 optional search enrichment expects `07_vehicle_search_index.json`, but active search-ready produces `07B_traffic_object_search_index.json`.
-  Source: `tests/td_case2/step_11_full_scene_event_candidates.py:1170`; `tests/td_case2/traffic_search_common.py:725-728`
+- `CONFIRMED` Step 11 optional search enrichment now prefers `07B_traffic_object_search_index.json`, falls back to `07_vehicle_search_index.json`, and does not block candidate generation when both are absent.
+  Source: `tests/td_case2/step_11_full_scene_event_candidates.py`; `tests/td_case2/traffic_search_common.py:725-728`
 - `OPTIONAL` Step 16 requires `07B_traffic_object_search_index.json` even if the user only wants reviewed scene-event export.
   Source: `tests/td_case2/run_td_case2_step16_evidence_video.py:82-89`

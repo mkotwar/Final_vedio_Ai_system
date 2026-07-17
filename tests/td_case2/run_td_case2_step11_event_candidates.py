@@ -171,6 +171,24 @@ def _write_failed_reports(run_dir: Path, event_config: dict[str, Any], error_mes
         "candidate_events_created": 0,
         "event_type_counts": {},
         "confidence_counts": {"high": 0, "medium": 0, "low": 0},
+        "search_index": {
+            "requested": True,
+            "status": "load_failed",
+            "source_type": "none",
+            "source_filename": None,
+            "legacy_fallback_used": False,
+            "records_loaded": 0,
+            "records_normalized": 0,
+            "records_with_track_id": 0,
+            "records_with_verified_plate": 0,
+            "records_with_color": 0,
+            "candidate_events_total": 0,
+            "candidate_events_enriched": 0,
+            "candidate_events_without_enrichment": 0,
+            "matched_track_ids": 0,
+            "unmatched_candidate_track_ids": [],
+            "warnings": [error_message],
+        },
         "severity_counts": {"high": 0, "medium": 0, "low": 0},
         "top_candidates": [],
         "warnings": [],
@@ -229,6 +247,19 @@ def main() -> None:
         log(f"Raw triggers created: {report_payload['raw_triggers_created']}")
         log(f"Candidate events created: {report_payload['candidate_events_created']}")
         log(f"Event type counts: {report_payload['event_type_counts']}")
+        search_index = dict(report_payload.get("search_index", {}))
+        source_type = str(search_index.get("source_type", "none") or "none")
+        if search_index.get("legacy_fallback_used"):
+            log("[step11] Search enrichment: active 07B missing; using legacy Step 07 index.")
+        elif source_type == "none":
+            log("[step11] Search enrichment unavailable; continuing without search index.")
+        else:
+            log(
+                "[step11] Search enrichment: "
+                f"source={source_type}, records={search_index.get('records_normalized', 0)}, "
+                f"enriched_candidates={search_index.get('candidate_events_enriched', 0)}/"
+                f"{search_index.get('candidate_events_total', 0)}"
+            )
         log(
             "Output paths: "
             f"{config.run_dir / '11_full_scene_event_candidates.json'} | "

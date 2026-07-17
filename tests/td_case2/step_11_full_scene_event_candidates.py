@@ -53,6 +53,371 @@ TRACK_QUALITY_ORDER = {"good": 3, "fragmented": 2, "single_frame": 1, "weak": 0}
 KNOWN_TRACK_QUALITIES = {"good", "fragmented", "single_frame", "weak"}
 
 
+def _clean_string(value: Any) -> str | None:
+    """Return a trimmed string or None."""
+
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _clean_list_strings(values: Any) -> list[str]:
+    """Normalize a heterogeneous value into a compact string list."""
+
+    if values is None:
+        return []
+    if isinstance(values, (str, int, float)):
+        single_value = _clean_string(values)
+        return [single_value] if single_value else []
+    if not isinstance(values, list):
+        return []
+
+    cleaned: list[str] = []
+    for item in values:
+        if isinstance(item, dict):
+            candidate = _clean_string(item.get("text"))
+        else:
+            candidate = _clean_string(item)
+        if candidate:
+            cleaned.append(candidate)
+    return cleaned
+
+
+def _dedupe_keep_order(values: list[str]) -> list[str]:
+    """Deduplicate while preserving deterministic order."""
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = _clean_string(value)
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        ordered.append(cleaned)
+    return ordered
+
+
+def _is_placeholder_value(value: str | None) -> bool:
+    """Return whether a string is effectively missing."""
+
+    if value is None:
+        return True
+    return value.strip().lower() in {"", "none", "null", "nil", "unknown", "not_visible", "not visible"}
+
+
+def _normalized_verified_plate(value: Any) -> str | None:
+    """Keep only plausible verified plate values."""
+
+    candidate = _clean_string(value)
+    if _is_placeholder_value(candidate):
+        return None
+    return candidate
+
+
+def _normalize_legacy_possible_plate_text(record: dict[str, Any]) -> list[str]:
+    """Extract possible plate strings from the legacy Step 07 schema."""
+
+    possible_values: list[str] = []
+    possible_values.extend(_clean_list_strings(record.get("possible_license_plate_candidates")))
+    possible_values.extend(_clean_list_strings(record.get("weak_ocr_text")))
+    return _dedupe_keep_order(possible_values)
+
+
+def normalize_search_index_records(
+    payload: Any,
+    *,
+    source_type: str,
+) -> list[dict[str, Any]]:
+    """Normalize active Step 07B and legacy Step 07 records for Step 11."""
+
+    if isinstance(payload, dict):
+        raw_records = payload.get("records", [])
+    elif isinstance(payload, list):
+        raw_records = payload
+    else:
+        raw_records = []
+
+    if not isinstance(raw_records, list):
+        return []
+
+    normalized_records: list[dict[str, Any]] = []
+    for raw_record in raw_records:
+        if not isinstance(raw_record, dict):
+            continue
+        if source_type == "active_07B":
+            normalized_records.append(
+                {
+                    "object_record_id": _clean_string(raw_record.get("object_record_id")),
+                    "track_id": _clean_string(raw_record.get("track_id")),
+                    "detection_id": _clean_string(raw_record.get("detection_id")),
+                    "class_name": _clean_string(raw_record.get("class_name")),
+                    "class_group": _clean_string(raw_record.get("object_type")),
+                    "verified_vehicle_color": _clean_string(raw_record.get("verified_vehicle_color")),
+                    "verified_license_plate": _normalized_verified_plate(raw_record.get("verified_license_plate")),
+                    "possible_plate_text": _dedupe_keep_order(_clean_list_strings(raw_record.get("possible_plate_text"))),
+                    "searchable_tokens": _dedupe_keep_order(_clean_list_strings(raw_record.get("searchable_tokens"))),
+                    "crop_path": _clean_string(raw_record.get("crop_path")),
+                    "full_frame_path": _clean_string(raw_record.get("full_frame_path")),
+                    "start_timestamp_seconds": raw_record.get("first_seen_seconds"),
+                    "end_timestamp_seconds": raw_record.get("last_seen_seconds"),
+                    "source_payload": raw_record,
+                }
+            )
+            continue
+
+        if source_type == "legacy_07":
+            normalized_records.append(
+                {
+                    "object_record_id": _clean_string(raw_record.get("search_record_id")),
+                    "track_id": _clean_string(raw_record.get("track_id")),
+                    "detection_id": _clean_string(raw_record.get("detection_id")),
+                    "class_name": _clean_string(raw_record.get("vehicle_class") or raw_record.get("dominant_class_name")),
+                    "class_group": _clean_string(raw_record.get("track_type")),
+                    "verified_vehicle_color": _clean_string(raw_record.get("vehicle_color")),
+                    "verified_license_plate": (
+                        _normalized_verified_plate(raw_record.get("verified_license_plate"))
+                        if bool(raw_record.get("verified_license_plate_valid"))
+                        else None
+                    ),
+                    "possible_plate_text": _normalize_legacy_possible_plate_text(raw_record),
+                    "searchable_tokens": _dedupe_keep_order(
+                        _clean_list_strings(raw_record.get("search_terms"))
+                        or _clean_list_strings(raw_record.get("searchable_tokens"))
+                    ),
+                    "crop_path": _clean_string(raw_record.get("best_crop_path")),
+                    "full_frame_path": _clean_string(raw_record.get("best_full_frame_path")),
+                    "start_timestamp_seconds": raw_record.get("start_timestamp_seconds"),
+                    "end_timestamp_seconds": raw_record.get("end_timestamp_seconds"),
+                    "source_payload": raw_record,
+                }
+            )
+
+    return normalized_records
+
+
+def resolve_step11_search_index(run_dir: Path) -> dict[str, Any]:
+    """Resolve the optional Step 11 search enrichment source."""
+
+    active_path = run_dir / "07B_traffic_object_search_index.json"
+    legacy_path = run_dir / "07_vehicle_search_index.json"
+    warnings: list[str] = []
+
+    def _result(
+        *,
+        status: str,
+        source_type: str,
+        source_path: Path | None,
+        payload: dict[str, Any] | None,
+        legacy_fallback_used: bool,
+    ) -> dict[str, Any]:
+        records = list(payload.get("records", [])) if isinstance(payload, dict) and isinstance(payload.get("records", []), list) else []
+        normalized_records = normalize_search_index_records(payload or {}, source_type=source_type) if source_type in {"active_07B", "legacy_07"} else []
+        return {
+            "status": status,
+            "source_type": source_type,
+            "source_filename": source_path.name if source_path is not None else None,
+            "source_path": str(source_path) if source_path is not None else None,
+            "legacy_fallback_used": legacy_fallback_used,
+            "records_loaded": len(records),
+            "records_normalized": len(normalized_records),
+            "records": normalized_records,
+            "warnings": warnings,
+        }
+
+    if active_path.exists():
+        try:
+            payload = read_json(active_path)
+            return _result(
+                status="loaded",
+                source_type="active_07B",
+                source_path=active_path,
+                payload=payload,
+                legacy_fallback_used=False,
+            )
+        except Exception as exc:
+            warnings.append(f"Failed to load active Step 07B search index: {active_path.name} ({exc})")
+            if legacy_path.exists():
+                try:
+                    payload = read_json(legacy_path)
+                    return _result(
+                        status="loaded",
+                        source_type="legacy_07",
+                        source_path=legacy_path,
+                        payload=payload,
+                        legacy_fallback_used=True,
+                    )
+                except Exception as legacy_exc:
+                    warnings.append(f"Failed to load legacy Step 07 search index: {legacy_path.name} ({legacy_exc})")
+                    return _result(
+                        status="load_failed",
+                        source_type="none",
+                        source_path=None,
+                        payload=None,
+                        legacy_fallback_used=False,
+                    )
+            return _result(
+                status="load_failed",
+                source_type="none",
+                source_path=None,
+                payload=None,
+                legacy_fallback_used=False,
+            )
+
+    if legacy_path.exists():
+        try:
+            payload = read_json(legacy_path)
+            return _result(
+                status="loaded",
+                source_type="legacy_07",
+                source_path=legacy_path,
+                payload=payload,
+                legacy_fallback_used=True,
+            )
+        except Exception as exc:
+            warnings.append(f"Failed to load legacy Step 07 search index: {legacy_path.name} ({exc})")
+            return _result(
+                status="load_failed",
+                source_type="none",
+                source_path=None,
+                payload=None,
+                legacy_fallback_used=False,
+            )
+
+    warnings.append("Search enrichment index not found; Step 11 will continue without optional search metadata.")
+    return _result(
+        status="missing",
+        source_type="none",
+        source_path=None,
+        payload=None,
+        legacy_fallback_used=False,
+    )
+
+
+def _build_search_record_indexes(
+    records: list[dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    """Index normalized search records by stable identifiers."""
+
+    by_track_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    by_detection_id: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        track_id = _clean_string(record.get("track_id"))
+        detection_id = _clean_string(record.get("detection_id"))
+        if track_id:
+            by_track_id[track_id].append(record)
+        if detection_id:
+            by_detection_id[detection_id].append(record)
+    return dict(by_track_id), dict(by_detection_id)
+
+
+def _build_candidate_search_enrichment(
+    *,
+    involved_track_ids: list[str],
+    involved_detection_ids: list[str],
+    search_records_by_track_id: dict[str, list[dict[str, Any]]],
+    search_records_by_detection_id: dict[str, list[dict[str, Any]]],
+    source_type: str,
+) -> dict[str, Any]:
+    """Attach stable Step 07/07B enrichment to one Step 11 candidate."""
+
+    matched_records: list[dict[str, Any]] = []
+    matched_keys: set[str] = set()
+
+    for track_id in involved_track_ids:
+        for record in search_records_by_track_id.get(track_id, []):
+            record_key = _clean_string(record.get("object_record_id")) or f"track:{track_id}:{len(matched_records)}"
+            if record_key not in matched_keys:
+                matched_keys.add(record_key)
+                matched_records.append(record)
+
+    for detection_id in involved_detection_ids:
+        for record in search_records_by_detection_id.get(detection_id, []):
+            record_key = _clean_string(record.get("object_record_id")) or f"detection:{detection_id}:{len(matched_records)}"
+            if record_key not in matched_keys:
+                matched_keys.add(record_key)
+                matched_records.append(record)
+
+    object_record_ids: list[str] = []
+    track_ids: list[str] = []
+    classes: list[str] = []
+    colors: list[str] = []
+    verified_plates: list[str] = []
+    possible_plate_texts: list[str] = []
+    searchable_tokens: list[str] = []
+    crop_paths: list[str] = []
+    full_frame_paths: list[str] = []
+
+    for record in matched_records:
+        object_record_ids.extend(_clean_list_strings(record.get("object_record_id")))
+        track_ids.extend(_clean_list_strings(record.get("track_id")))
+        classes.extend(_clean_list_strings(record.get("class_name")))
+        colors.extend(_clean_list_strings(record.get("verified_vehicle_color")))
+        verified_plate = _normalized_verified_plate(record.get("verified_license_plate"))
+        if verified_plate:
+            verified_plates.append(verified_plate)
+        possible_plate_texts.extend(_clean_list_strings(record.get("possible_plate_text")))
+        searchable_tokens.extend(_clean_list_strings(record.get("searchable_tokens")))
+        crop_paths.extend(_clean_list_strings(record.get("crop_path")))
+        full_frame_paths.extend(_clean_list_strings(record.get("full_frame_path")))
+
+    return {
+        "matched": bool(matched_records),
+        "source_type": source_type,
+        "matched_record_count": len(matched_records),
+        "object_record_ids": _dedupe_keep_order(object_record_ids),
+        "track_ids": _dedupe_keep_order(track_ids),
+        "classes": _dedupe_keep_order(classes),
+        "colors": _dedupe_keep_order(colors),
+        "verified_plates": _dedupe_keep_order(verified_plates),
+        "possible_plate_texts": _dedupe_keep_order(possible_plate_texts),
+        "searchable_tokens": _dedupe_keep_order(searchable_tokens),
+        "crop_paths": _dedupe_keep_order(crop_paths),
+        "full_frame_paths": _dedupe_keep_order(full_frame_paths),
+    }
+
+
+def _build_step11_search_index_report(
+    *,
+    search_index_info: dict[str, Any],
+    candidate_events: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Summarize Step 11 search enrichment diagnostics for the report."""
+
+    records = list(search_index_info.get("records", []))
+    candidate_track_ids = _dedupe_keep_order(
+        [track_id for candidate in candidate_events for track_id in list(candidate.get("involved_track_ids", []))]
+    )
+    matched_track_ids = _dedupe_keep_order(
+        [
+            track_id
+            for candidate in candidate_events
+            for track_id in list(candidate.get("search_enrichment", {}).get("track_ids", []))
+        ]
+    )
+    candidate_events_enriched = sum(1 for candidate in candidate_events if bool(candidate.get("search_enrichment", {}).get("matched")))
+    unmatched_candidate_track_ids = [track_id for track_id in candidate_track_ids if track_id not in set(matched_track_ids)]
+
+    return {
+        "requested": True,
+        "status": search_index_info.get("status", "missing"),
+        "source_type": search_index_info.get("source_type", "none"),
+        "source_filename": search_index_info.get("source_filename"),
+        "legacy_fallback_used": bool(search_index_info.get("legacy_fallback_used")),
+        "records_loaded": int(search_index_info.get("records_loaded", 0) or 0),
+        "records_normalized": int(search_index_info.get("records_normalized", 0) or 0),
+        "records_with_track_id": sum(1 for record in records if _clean_string(record.get("track_id"))),
+        "records_with_verified_plate": sum(1 for record in records if _normalized_verified_plate(record.get("verified_license_plate"))),
+        "records_with_color": sum(1 for record in records if _clean_string(record.get("verified_vehicle_color"))),
+        "candidate_events_total": len(candidate_events),
+        "candidate_events_enriched": candidate_events_enriched,
+        "candidate_events_without_enrichment": len(candidate_events) - candidate_events_enriched,
+        "matched_track_ids": len(matched_track_ids),
+        "unmatched_candidate_track_ids": unmatched_candidate_track_ids,
+        "warnings": list(search_index_info.get("warnings", [])),
+    }
+
+
 def _safe_divide(numerator: float, denominator: float) -> float:
     """Divide safely with a zero fallback."""
 
@@ -318,10 +683,11 @@ def _track_detection_at_time(track: dict[str, Any], center_timestamp: float, tol
     return best_item
 
 
-def _search_record_enrichment(record_by_track_id: dict[str, dict[str, Any]], track_id: str) -> dict[str, Any]:
-    """Return optional Step 07 enrichment for one track."""
+def _search_record_enrichment(record_by_track_id: dict[str, list[dict[str, Any]]], track_id: str) -> dict[str, Any]:
+    """Return optional Step 07/07B enrichment for one track."""
 
-    return record_by_track_id.get(track_id, {})
+    matches = record_by_track_id.get(track_id, [])
+    return matches[0] if matches else {}
 
 
 def _candidate_score_label(score: float) -> str:
@@ -864,7 +1230,9 @@ def _merge_triggers_into_candidates(
     raw_triggers: list[dict[str, Any]],
     selected_frames: list[dict[str, Any]],
     track_by_id: dict[str, dict[str, Any]],
-    record_by_track_id: dict[str, dict[str, Any]],
+    record_by_track_id: dict[str, list[dict[str, Any]]],
+    record_by_detection_id: dict[str, list[dict[str, Any]]],
+    search_source_type: str,
     context_before_seconds: float,
     context_after_seconds: float,
     merge_gap_seconds: float,
@@ -898,6 +1266,13 @@ def _merge_triggers_into_candidates(
             context_end_seconds,
         )
         involved_track_ids = sorted({track_id for trigger in trigger_group for track_id in trigger.get("involved_track_ids", [])})
+        involved_detection_ids = sorted(
+            {
+                _clean_string(track_by_id.get(track_id, {}).get("best_detection_id"))
+                for track_id in involved_track_ids
+                if _clean_string(track_by_id.get(track_id, {}).get("best_detection_id"))
+            }
+        )
         involved_classes = sorted({class_name for trigger in trigger_group for class_name in trigger.get("involved_classes", [])})
         merged_score = _clamp(
             max(float(trigger["score"]) for trigger in trigger_group)
@@ -918,17 +1293,25 @@ def _merge_triggers_into_candidates(
 
         involved_objects: list[dict[str, Any]] = []
         for track_id in involved_track_ids:
-            search_record = record_by_track_id.get(track_id, {})
+            search_record = _search_record_enrichment(record_by_track_id, track_id)
             object_item = {
                 "track_id": track_id,
-                "class_name": str(search_record.get("vehicle_class", search_record.get("dominant_class_name", "unknown")) or "unknown"),
+                "class_name": str(search_record.get("class_name", "unknown") or "unknown"),
             }
             if include_search_metadata:
-                object_item["vehicle_color"] = str(search_record.get("vehicle_color", "unknown") or "unknown")
+                object_item["vehicle_color"] = str(search_record.get("verified_vehicle_color", "unknown") or "unknown")
                 object_item["verified_license_plate"] = str(search_record.get("verified_license_plate", "not_visible") or "not_visible")
-                object_item["search_record_id"] = search_record.get("search_record_id")
-                object_item["best_full_frame_path"] = search_record.get("best_full_frame_path")
+                object_item["search_record_id"] = search_record.get("object_record_id")
+                object_item["best_full_frame_path"] = search_record.get("full_frame_path")
             involved_objects.append(object_item)
+
+        search_enrichment = _build_candidate_search_enrichment(
+            involved_track_ids=involved_track_ids,
+            involved_detection_ids=involved_detection_ids,
+            search_records_by_track_id=record_by_track_id,
+            search_records_by_detection_id=record_by_detection_id,
+            source_type=search_source_type,
+        )
 
         event_type = str(best_trigger["event_type"])
         candidate_events.append(
@@ -953,6 +1336,7 @@ def _merge_triggers_into_candidates(
                 "involved_track_qualities": _track_quality_counts(involved_track_ids, track_by_id),
                 "involved_classes": involved_classes,
                 "involved_objects": involved_objects,
+                "search_enrichment": search_enrichment,
                 "scene_evidence": scene_evidence,
                 "representative_frame": {
                     "frame_id": representative_frame.get("frame_id") if representative_frame else None,
@@ -1167,12 +1551,12 @@ def run_full_scene_event_candidate_generation(
     tracks_payload = read_json(run_dir / "04B_tracks.json")
     tracking_report_payload = read_json(run_dir / "04B_tracking_report.json") if (run_dir / "04B_tracking_report.json").exists() else {}
     best_frames_payload = read_json(run_dir / "05_best_track_frames.json") if (run_dir / "05_best_track_frames.json").exists() else {}
-    search_index_payload = read_json(run_dir / "07_vehicle_search_index.json") if (run_dir / "07_vehicle_search_index.json").exists() else {}
+    search_index_info = resolve_step11_search_index(run_dir)
 
     selected_frames = list(step02a_payload.get("selected_frames", []))
     tracks = list(tracks_payload.get("tracks", []))
-    search_records = list(search_index_payload.get("records", []))
-    record_by_track_id = {str(record.get("track_id", "") or ""): record for record in search_records}
+    search_records = list(search_index_info.get("records", []))
+    record_by_track_id, record_by_detection_id = _build_search_record_indexes(search_records)
     track_by_id = {str(track.get("track_id", "") or ""): track for track in tracks}
 
     fps = float(video_info.get("fps", 0.0) or 0.0)
@@ -1207,6 +1591,8 @@ def run_full_scene_event_candidate_generation(
         selected_frames=selected_frames,
         track_by_id=track_by_id,
         record_by_track_id=record_by_track_id,
+        record_by_detection_id=record_by_detection_id,
+        search_source_type=str(search_index_info.get("source_type", "none") or "none"),
         context_before_seconds=float(event_config["context_before_seconds"]),
         context_after_seconds=float(event_config["context_after_seconds"]),
         merge_gap_seconds=float(event_config["merge_gap_seconds"]),
@@ -1232,6 +1618,11 @@ def run_full_scene_event_candidate_generation(
         candidate_events=candidate_events,
         track_by_id=track_by_id,
     )
+    search_index_report = _build_step11_search_index_report(
+        search_index_info=search_index_info,
+        candidate_events=candidate_events,
+    )
+    diagnostics_payload["search_index"] = search_index_report
 
     summary = {
         "raw_triggers_created": len(raw_triggers),
@@ -1251,7 +1642,7 @@ def run_full_scene_event_candidate_generation(
             "tracks": "04B_tracks.json",
             "tracking_report": "04B_tracking_report.json" if tracking_report_payload else None,
             "best_track_frames": "05_best_track_frames.json" if best_frames_payload else None,
-            "search_index": "07_vehicle_search_index.json" if search_index_payload else None,
+            "search_index": search_index_info.get("source_filename"),
         },
         "config": event_config,
         "summary": summary,
@@ -1286,6 +1677,7 @@ def run_full_scene_event_candidate_generation(
             "medium": confidence_counts.get("medium", 0),
             "low": confidence_counts.get("low", 0),
         },
+        "search_index": search_index_report,
         "severity_counts": {
             "high": severity_counts.get("high", 0),
             "medium": severity_counts.get("medium", 0),
