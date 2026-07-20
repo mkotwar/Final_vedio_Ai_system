@@ -12,7 +12,7 @@ from typing import Any
 from PIL import Image, ImageDraw
 
 from .anpr_artifacts import read_selected_crop_jobs
-from .config import FlorenceConfig, PlateDetectionConfig, PlateDiagnosticConfig
+from .config import FlorenceConfig, PipelineConfig, PlateDetectionConfig, PlateDiagnosticConfig
 from .crop_selection import SelectedCropJob
 from .florence_inference import FlorenceInferenceEngine, FlorenceModelBundle
 from .plate_detection import UltralyticsPlateDetectionStage
@@ -21,6 +21,7 @@ from .plate_diagnostic_metrics import build_plate_diagnostic_metrics
 from .plate_diagnostics import PlateDiagnosticProcessor, model_class_names
 from .plate_retry import BoundedPlateRetryController, group_selected_jobs_by_track
 from .serialization import write_json
+from .vision_backends.factory import create_vision_backend
 
 
 DEFAULT_STEP6_ARTIFACT_RUN = Path(
@@ -225,6 +226,7 @@ def _copy_step6_context(step6_run_dir: Path, run_dir: Path) -> None:
 
 
 def _run_jobs(args: argparse.Namespace, jobs: list[SelectedCropJob], run_dir: Path, *, fake: bool, source_path: str | None = None) -> dict[str, Any]:
+    env_config = PipelineConfig.from_env()
     plate_config = _plate_config(args)
     diagnostic_config = _diagnostic_config(args)
     detector = UltralyticsPlateDetectionStage(
@@ -235,7 +237,12 @@ def _run_jobs(args: argparse.Namespace, jobs: list[SelectedCropJob], run_dir: Pa
     )
     florence_engine = FakeOcrEngine() if fake and args.run_ocr else None
     if not fake and args.run_ocr:
-        florence_engine = FlorenceInferenceEngine(_florence_config(args), run_dir=run_dir)
+        florence_engine = create_vision_backend(
+            vision_config=env_config.vision,
+            florence_config=_florence_config(args),
+            gemini_config=env_config.gemini,
+            run_dir=run_dir,
+        )
     controller = BoundedPlateRetryController(detector, florence_engine, diagnostic_config)
     results = controller.process_job_groups(group_selected_jobs_by_track(jobs))
     processor_metrics = dict(controller.processor.metrics)

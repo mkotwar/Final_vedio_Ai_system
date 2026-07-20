@@ -18,10 +18,13 @@ from .config import (
     CropCollectionConfig,
     DetectionConfig,
     FlorenceConfig,
+    GeminiConfig,
+    PipelineConfig,
     PlateDetectionConfig,
     PlateDiagnosticConfig,
     TrackLifecycleConfig,
     TrackingConfig,
+    VisionBackendConfig,
 )
 from .crop_artifacts import CropArtifactSink, CropImageWriter
 from .crop_collector import CropCandidateCollector
@@ -29,7 +32,6 @@ from .crop_pipeline import SequentialCropCollectionPipeline, finalize_step5_arti
 from .crop_selection import FinalBestCropSelector, SelectedCropJob
 from .crop_selection_artifacts import CropSelectionArtifactSink
 from .crop_selection_pipeline import finalize_step6_artifacts, run_selection_for_existing_bundles
-from .florence_inference import FlorenceInferenceEngine
 from .lifecycle import TrackLifecycleManager
 from .lifecycle_pipeline import LifecycleArtifactSink
 from .plate_detection import UltralyticsPlateDetectionStage
@@ -39,6 +41,8 @@ from .plate_diagnostics import TrackPlateDiagnosticResult, model_class_names
 from .plate_retry import BoundedPlateRetryController, group_selected_jobs_by_track
 from .serialization import to_json_safe, write_json, write_jsonl
 from .video_source import OpenCvVideoSource
+from .vision_backends.base import VisionInferenceBackend
+from .vision_backends.factory import create_vision_backend
 from .yolo_stage import UltralyticsYoloDetectionStage
 
 
@@ -88,6 +92,19 @@ def _resolve_required_path(path_value: str, label: str) -> Path:
         if candidate.exists():
             return candidate.resolve()
     raise FileNotFoundError(f"{label} does not exist: {path_value}")
+
+
+def _resolve_optional_existing_path(path_value: str | None) -> Path | None:
+    if path_value is None or not str(path_value).strip():
+        return None
+    path = Path(path_value).expanduser()
+    candidates = [path]
+    if not path.is_absolute():
+        candidates.append(_repo_root() / path)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate.resolve()
+    return None
 
 
 def _resolve_vehicle_model(requested: str, fallback: str) -> tuple[Path, str | None]:
@@ -355,29 +372,92 @@ def _preload_plate_stage(
 def _preload_florence_engine(
     config: FlorenceConfig,
     *,
+    vision_config: VisionBackendConfig,
+    gemini_config: GeminiConfig,
     run_dir: Path,
     plan: RuntimeDevicePlan,
-) -> tuple[FlorenceInferenceEngine, RuntimeDevicePlan]:
-    engine = FlorenceInferenceEngine(config, run_dir=run_dir)
+) -> tuple[VisionInferenceBackend, RuntimeDevicePlan]:
+    mode = vision_config.backend_mode
+    if mode == "disabled":
+        return create_vision_backend(
+            vision_config=vision_config,
+            florence_config=config,
+            gemini_config=gemini_config,
+            run_dir=run_dir,
+        ), plan
+    if mode == "gemini":
+        return create_vision_backend(
+            vision_config=vision_config,
+            florence_config=config,
+            gemini_config=gemini_config,
+            run_dir=run_dir,
+        ), plan
+    engine = create_vision_backend(
+        vision_config=VisionBackendConfig(backend_mode="florence"),
+        florence_config=config,
+        gemini_config=gemini_config,
+        run_dir=run_dir,
+    )
     if config.device != "cuda":
-        engine.load()
+        try:
+            engine.load()
+        except Exception:
+            if mode == "florence":
+                raise
+        if mode == "auto":
+            return create_vision_backend(
+                vision_config=vision_config,
+                florence_config=config,
+                gemini_config=gemini_config,
+                run_dir=run_dir,
+            ), plan
         return engine, plan
     try:
         engine.load()
+        if mode == "auto":
+            return create_vision_backend(
+                vision_config=vision_config,
+                florence_config=config,
+                gemini_config=gemini_config,
+                run_dir=run_dir,
+            ), plan
         return engine, plan
     except Exception as exc:
         if not _is_cuda_memory_error(exc):
-            raise
-        engine.bundle = None
+            if mode == "florence":
+                raise
+            return create_vision_backend(
+                vision_config=vision_config,
+                florence_config=config,
+                gemini_config=gemini_config,
+                run_dir=run_dir,
+            ), plan
+        if hasattr(getattr(engine, "engine", None), "bundle"):
+            engine.engine.bundle = None
         _clear_cuda_cache()
         try:
             engine.load()
+            if mode == "auto":
+                return create_vision_backend(
+                    vision_config=vision_config,
+                    florence_config=config,
+                    gemini_config=gemini_config,
+                    run_dir=run_dir,
+                ), plan
             return engine, plan
         except Exception as retry_exc:
             if not _is_cuda_memory_error(retry_exc):
-                raise
+                if mode == "florence":
+                    raise
+                return create_vision_backend(
+                    vision_config=vision_config,
+                    florence_config=config,
+                    gemini_config=gemini_config,
+                    run_dir=run_dir,
+                ), plan
             reason = f"Florence CUDA load failed after retry: {retry_exc}"
-            engine.bundle = None
+            if hasattr(getattr(engine, "engine", None), "bundle"):
+                engine.engine.bundle = None
             _clear_cuda_cache()
             cpu_config = FlorenceConfig(
                 enabled=config.enabled,
@@ -395,9 +475,22 @@ def _preload_florence_engine(
                 ocr_task_prompt=config.ocr_task_prompt,
                 colour_task_prompt=config.colour_task_prompt,
             )
-            cpu_engine = FlorenceInferenceEngine(cpu_config, run_dir=run_dir)
+            cpu_engine = create_vision_backend(
+                vision_config=VisionBackendConfig(backend_mode="florence"),
+                florence_config=cpu_config,
+                gemini_config=gemini_config,
+                run_dir=run_dir,
+            )
             cpu_engine.load()
-            return cpu_engine, _with_device_fallback(plan, component="florence", reason=reason)
+            next_plan = _with_device_fallback(plan, component="florence", reason=reason)
+            if mode == "auto":
+                return create_vision_backend(
+                    vision_config=vision_config,
+                    florence_config=cpu_config,
+                    gemini_config=gemini_config,
+                    run_dir=run_dir,
+                ), next_plan
+            return cpu_engine, next_plan
 
 
 def _release_model(value: Any) -> None:
@@ -557,12 +650,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     started_total = time.perf_counter()
+    env_config = PipelineConfig.from_env()
     if args.florence_load_in_4bit or args.florence_load_in_8bit:
         raise ValueError("Quantization is disabled for ANPR video validation; do not pass 4-bit or 8-bit flags.")
     video_path = _resolve_required_path(args.video, "video")
     plate_model = _resolve_required_path(args.plate_detector_model, "plate detector model")
-    florence_model = _resolve_required_path(args.florence_model, "Florence model")
-    florence_adapter = _resolve_required_path(args.florence_adapter, "Florence adapter")
+    florence_model = _resolve_optional_existing_path(env_config.florence.base_model_path or args.florence_model)
+    florence_adapter = _resolve_optional_existing_path(env_config.florence.adapter_path or args.florence_adapter)
     vehicle_model, fallback_reason = _resolve_vehicle_model(args.vehicle_detector_model, args.vehicle_detector_fallback_model)
     cuda = _cuda_available()
     gpu_name = _gpu_name()
@@ -675,14 +769,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     write_jsonl(run_dir / "07_anpr" / "anpr_job_eligibility.jsonl", eligibility_records)
 
     florence_config = FlorenceConfig(
-        base_model_path=str(florence_model),
-        adapter_path=str(florence_adapter),
+        enabled=env_config.vision.backend_mode != "disabled",
+        base_model_path=str(florence_model) if florence_model is not None else None,
+        adapter_path=str(florence_adapter) if florence_adapter is not None else None,
         device=device_plan.actual_florence_device,
         dtype=device_plan.actual_florence_dtype,
         load_in_4bit=False,
         load_in_8bit=False,
     )
-    florence_engine, device_plan = _preload_florence_engine(florence_config, run_dir=run_dir, plan=device_plan)
+    florence_engine, device_plan = _preload_florence_engine(
+        florence_config,
+        vision_config=env_config.vision,
+        gemini_config=env_config.gemini,
+        run_dir=run_dir,
+        plan=device_plan,
+    )
     plate_config = PlateDetectionConfig(
         model_path=str(plate_model),
         confidence_threshold=args.normal_plate_confidence,
@@ -757,10 +858,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "plate_detector_requested_device": device_plan.requested_plate_device,
         "plate_detector_device": device_plan.actual_plate_device,
         "plate_detector_device_fallback_reason": device_plan.plate_fallback_reason,
-        "florence_model": str(florence_model),
-        "florence_adapter": str(florence_adapter),
+        "florence_model": str(florence_model) if florence_model is not None else None,
+        "florence_adapter": str(florence_adapter) if florence_adapter is not None else None,
+        "vision_backend_mode": env_config.vision.backend_mode,
         "florence_requested_device": device_plan.requested_florence_device,
-        "florence_device": florence_engine.bundle.device if florence_engine.bundle is not None else device_plan.actual_florence_device,
+        "florence_device": device_plan.actual_florence_device,
         "florence_device_fallback_reason": device_plan.florence_fallback_reason,
         "florence_requested_dtype": device_plan.requested_florence_dtype,
         "florence_dtype": device_plan.actual_florence_dtype,
@@ -824,6 +926,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             }
             for result in colour_results
         ],
+        "vision_backend_metrics": florence_engine.metrics,
         "detection_runtime_sec": detection_metrics.get("runtime_sec"),
         "tracking_runtime_sec": tracker_metrics.get("runtime_sec"),
         "crop_selection_runtime_sec": selection_report.runtime_sec,

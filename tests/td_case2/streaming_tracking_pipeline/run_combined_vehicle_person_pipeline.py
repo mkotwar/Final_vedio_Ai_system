@@ -18,6 +18,7 @@ from .config import (
     CropCollectionConfig,
     DetectionConfig,
     FlorenceConfig,
+    PipelineConfig,
     PlateDetectionConfig,
     PlateDiagnosticConfig,
     TrackLifecycleConfig,
@@ -56,6 +57,7 @@ from .run_anpr_video_10fps_validation import (
     _preload_vehicle_stage,
     _release_model,
     _reset_cuda_peak_memory,
+    _resolve_optional_existing_path,
     _resolve_required_path,
     _resolve_vehicle_model,
     _split_csv,
@@ -168,6 +170,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
     started_total = time.perf_counter()
+    env_config = PipelineConfig.from_env()
     if args.florence_load_in_4bit or args.florence_load_in_8bit:
         raise ValueError("Quantization is disabled; do not pass 4-bit or 8-bit flags.")
     args.vehicle_device = args.vehicle_device or args.device
@@ -178,8 +181,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     video_path = _resolve_required_path(args.video, "video")
     person_model = _resolve_required_path(args.person_detector_model, "person detector model")
     plate_model = _resolve_required_path(args.plate_detector_model, "plate detector model")
-    florence_model = _resolve_required_path(args.florence_model, "Florence model")
-    florence_adapter = _resolve_required_path(args.florence_adapter, "Florence adapter")
+    florence_model = _resolve_optional_existing_path(env_config.florence.base_model_path or args.florence_model)
+    florence_adapter = _resolve_optional_existing_path(env_config.florence.adapter_path or args.florence_adapter)
     vehicle_model, vehicle_fallback_reason = _resolve_vehicle_model(args.vehicle_detector_model, args.vehicle_detector_fallback_model)
     cuda = _cuda_available()
     gpu_name = _gpu_name()
@@ -312,14 +315,21 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _clear_cuda_cache()
 
     florence_config = FlorenceConfig(
-        base_model_path=str(florence_model),
-        adapter_path=str(florence_adapter),
+        enabled=env_config.vision.backend_mode != "disabled",
+        base_model_path=str(florence_model) if florence_model is not None else None,
+        adapter_path=str(florence_adapter) if florence_adapter is not None else None,
         device=device_plan.actual_florence_device,
         dtype=device_plan.actual_florence_dtype,
         load_in_4bit=False,
         load_in_8bit=False,
     )
-    florence_engine, device_plan = _preload_florence_engine(florence_config, run_dir=run_dir, plan=device_plan)
+    florence_engine, device_plan = _preload_florence_engine(
+        florence_config,
+        vision_config=env_config.vision,
+        gemini_config=env_config.gemini,
+        run_dir=run_dir,
+        plan=device_plan,
+    )
     plate_config = PlateDetectionConfig(
         model_path=str(plate_model),
         confidence_threshold=args.normal_plate_confidence,
@@ -383,12 +393,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "vehicle_model_actual": str(vehicle_model),
         "person_model_actual": str(person_model),
         "plate_model": str(plate_model),
-        "florence_model": str(florence_model),
-        "florence_adapter": str(florence_adapter),
+        "florence_model": str(florence_model) if florence_model is not None else None,
+        "florence_adapter": str(florence_adapter) if florence_adapter is not None else None,
+        "vision_backend_mode": env_config.vision.backend_mode,
         "vehicle_detector_device": device_plan.actual_vehicle_device,
         "person_detector_device": getattr(person_stage.config, "device", None) if person_stage is not None else None,
         "plate_detector_device": device_plan.actual_plate_device,
-        "florence_device": florence_engine.bundle.device if florence_engine.bundle is not None else device_plan.actual_florence_device,
+        "florence_device": device_plan.actual_florence_device,
         "florence_dtype": device_plan.actual_florence_dtype,
         "cuda_available": device_plan.cuda_available,
         "gpu_name": device_plan.gpu_name,
@@ -411,6 +422,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "anpr_eligible_crop_jobs": len(eligible_jobs),
         "plate_metrics": plate_metrics,
         "colour_calls": len(colour_results),
+        "vision_backend_metrics": florence_engine.metrics,
         "runtime_device_policy": {
             "vehicle_yolo": "cuda if available else cpu",
             "person_yolo": "cuda if available else cpu",

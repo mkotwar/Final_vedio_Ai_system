@@ -28,6 +28,7 @@ SUPPORTED_CROP_RETENTION_POLICIES = ("highest_preliminary_score", "uniform_tempo
 SUPPORTED_PRIMARY_SELECTION_POLICIES = ("quality_only", "quality_with_temporal_diversity", "quality_with_visual_diversity", "hybrid")
 SUPPORTED_FALLBACK_SELECTION_POLICIES = ("best_available", "earliest_valid", "largest_valid", "sharpest_valid")
 SUPPORTED_DETECTION_MODES = ("combined", "dual")
+SUPPORTED_VISION_BACKEND_MODES = ("auto", "florence", "gemini", "disabled")
 
 
 @dataclass(frozen=True)
@@ -397,6 +398,34 @@ class FlorenceConfig:
 
 
 @dataclass(frozen=True)
+class VisionBackendConfig:
+    backend_mode: str = "auto"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "backend_mode",
+            validate_allowed_value(self.backend_mode, SUPPORTED_VISION_BACKEND_MODES, "vision.backend_mode"),
+        )
+
+
+@dataclass(frozen=True)
+class GeminiConfig:
+    enabled: bool = True
+    api_key: str | None = None
+    model_name: str = "gemini-2.5-flash"
+    timeout_seconds: int = 60
+    max_retries: int = 2
+    min_confidence: float = 0.75
+
+    def __post_init__(self) -> None:
+        validate_non_empty_string(self.model_name, "gemini.model_name")
+        validate_positive_int(self.timeout_seconds, "gemini.timeout_seconds")
+        validate_non_negative_int(self.max_retries, "gemini.max_retries")
+        validate_probability(self.min_confidence, "gemini.min_confidence")
+
+
+@dataclass(frozen=True)
 class Step7InferenceConfig:
     process_primary_crops: bool = True
     process_fallback_crops: bool = True
@@ -509,7 +538,9 @@ class PipelineConfig:
     best_crop_score: BestCropScoreConfig = BestCropScoreConfig()
     best_crop_selection: BestCropSelectionConfig = BestCropSelectionConfig()
     plate_detection: PlateDetectionConfig = PlateDetectionConfig()
+    vision: VisionBackendConfig = VisionBackendConfig()
     florence: FlorenceConfig = FlorenceConfig()
+    gemini: GeminiConfig = GeminiConfig()
     step7_inference: Step7InferenceConfig = Step7InferenceConfig()
     plate_diagnostics: PlateDiagnosticConfig = PlateDiagnosticConfig()
     retry: RetryConfig = RetryConfig()
@@ -629,6 +660,8 @@ def _convert_group_values(group_value: Any, overrides: dict[str, Any]) -> dict[s
             "minimum_contrast_for_primary",
         } and value is not None:
             converted[name] = _parse_float(value, name) if isinstance(value, str) else float(value)
+        elif current_value is None and name in {"source_path", "model_path", "base_model_path", "adapter_path", "api_key"}:
+            converted[name] = None if value is None else str(value)
         else:
             converted[name] = value
     return converted
@@ -690,7 +723,9 @@ def _env_overrides(environ: os._Environ[str]) -> dict[str, Any]:
         "TD_CASE2_STREAM_PLATE_MINIMUM_HEIGHT": ("plate_detection", "minimum_plate_height", "int"),
         "TD_CASE2_STREAM_PLATE_CROP_PADDING_RATIO": ("plate_detection", "crop_padding_ratio", "float"),
         "TD_CASE2_STREAM_PLATE_SAVE_CROPS": ("plate_detection", "save_plate_crops", "bool"),
+        "TD_CASE2_VISION_BACKEND": ("vision", "backend_mode", "str"),
         "TD_CASE2_STREAM_FLORENCE_MODEL_PATH": ("florence", "base_model_path", "str"),
+        "TD_CASE2_FLORENCE_MODEL_PATH": ("florence", "base_model_path", "str"),
         "TD_CASE2_STREAM_FLORENCE_ADAPTER_PATH": ("florence", "adapter_path", "str"),
         "TD_CASE2_STREAM_FLORENCE_ENABLED": ("florence", "enabled", "bool"),
         "TD_CASE2_STREAM_FLORENCE_DEVICE": ("florence", "device", "str"),
@@ -704,6 +739,11 @@ def _env_overrides(environ: os._Environ[str]) -> dict[str, Any]:
         "TD_CASE2_STREAM_FLORENCE_DO_SAMPLE": ("florence", "do_sample", "bool"),
         "TD_CASE2_STREAM_FLORENCE_OCR_TASK_PROMPT": ("florence", "ocr_task_prompt", "str"),
         "TD_CASE2_STREAM_FLORENCE_COLOUR_TASK_PROMPT": ("florence", "colour_task_prompt", "str"),
+        "TD_CASE2_STREAM_GEMINI_ENABLED": ("gemini", "enabled", "bool"),
+        "TD_CASE2_GEMINI_MODEL": ("gemini", "model_name", "str"),
+        "TD_CASE2_GEMINI_TIMEOUT_SECONDS": ("gemini", "timeout_seconds", "int"),
+        "TD_CASE2_GEMINI_MAX_RETRIES": ("gemini", "max_retries", "int"),
+        "TD_CASE2_GEMINI_MIN_CONFIDENCE": ("gemini", "min_confidence", "float"),
         "TD_CASE2_STREAM_STEP7_PROCESS_PRIMARY_CROPS": ("step7_inference", "process_primary_crops", "bool"),
         "TD_CASE2_STREAM_STEP7_PROCESS_FALLBACK_CROPS": ("step7_inference", "process_fallback_crops", "bool"),
         "TD_CASE2_STREAM_STEP7_MAXIMUM_VEHICLE_CROPS_PER_TRACK": ("step7_inference", "maximum_vehicle_crops_per_track", "int"),
@@ -747,4 +787,6 @@ def _env_overrides(environ: os._Environ[str]) -> dict[str, Any]:
         else:
             parsed = raw_value
         _set_nested(overrides, group_name, field_name, parsed)
+    if "GEMINI_API_KEY" in environ:
+        _set_nested(overrides, "gemini", "api_key", environ.get("GEMINI_API_KEY"))
     return overrides

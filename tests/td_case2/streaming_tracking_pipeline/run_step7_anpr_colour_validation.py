@@ -16,6 +16,7 @@ from .crop_selection import SelectedCropJob
 from .florence_inference import FlorenceInferenceEngine
 from .plate_detection import UltralyticsPlateDetectionStage
 from .serialization import write_json
+from .vision_backends.factory import create_vision_backend
 
 
 DEFAULT_STEP6_ARTIFACT_RUN = Path(
@@ -158,6 +159,7 @@ def _synthetic_jobs(run_dir: Path) -> list[SelectedCropJob]:
 
 
 def _run_jobs(args: argparse.Namespace, jobs: list[SelectedCropJob], *, run_dir: Path, fake_models: bool = False) -> dict[str, Any]:
+    env_config = PipelineConfig.from_env()
     plate_config = _plate_config_from_args(args)
     florence_config = _florence_config_from_args(args)
     step7_config = _step7_config_from_args(args)
@@ -170,13 +172,20 @@ def _run_jobs(args: argparse.Namespace, jobs: list[SelectedCropJob], *, run_dir:
     if fake_models:
         from .florence_inference import FlorenceModelBundle
 
-        florence_engine = FlorenceInferenceEngine(
-            florence_config,
-            bundle=FlorenceModelBundle(model=_FakeModel(), processor=_FakeProcessor(), device="cpu"),
+        florence_engine = create_vision_backend(
+            vision_config=env_config.vision,
+            florence_config=florence_config,
+            gemini_config=env_config.gemini,
             run_dir=run_dir,
+            florence_bundle=FlorenceModelBundle(model=_FakeModel(), processor=_FakeProcessor(), device="cpu"),
         )
     else:
-        florence_engine = FlorenceInferenceEngine(florence_config, run_dir=run_dir)
+        florence_engine = create_vision_backend(
+            vision_config=env_config.vision,
+            florence_config=florence_config,
+            gemini_config=env_config.gemini,
+            run_dir=run_dir,
+        )
     pipeline = SequentialAnprColourPipeline(step7_config, plate_detector=plate_stage, florence_engine=florence_engine)
     results = pipeline.process_job_groups(group_jobs_by_track(jobs))
     sink = AnprArtifactSink(run_dir)
@@ -185,16 +194,19 @@ def _run_jobs(args: argparse.Namespace, jobs: list[SelectedCropJob], *, run_dir:
             sink.write_result(result)
         summary = build_step7_metrics(
             results,
-            extra_metrics={"plate_detection": plate_stage.metrics, "florence": florence_engine.metrics},
+            extra_metrics={"plate_detection": plate_stage.metrics, "vision_backend": florence_engine.metrics},
         )
         summary.update(
             {
                 "mode": args.mode,
                 "run_dir": str(run_dir),
+                "vision_backend_mode": env_config.vision.backend_mode,
                 "input_selected_crop_jobs": len(jobs),
                 "config": {
                     "plate_detection": plate_config.to_dict() if hasattr(plate_config, "to_dict") else plate_config.__dict__,
                     "florence": florence_config.to_dict() if hasattr(florence_config, "to_dict") else florence_config.__dict__,
+                    "gemini": env_config.gemini.__dict__,
+                    "vision": env_config.vision.__dict__,
                     "step7_inference": step7_config.__dict__,
                 },
             }

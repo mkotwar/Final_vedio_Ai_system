@@ -5,9 +5,9 @@ from typing import Iterable, Sequence
 
 from .config import PlateDiagnosticConfig
 from .crop_selection import SelectedCropJob, SelectedTrackCropSet
-from .florence_inference import FlorenceInferenceEngine
 from .plate_detection import UltralyticsPlateDetectionStage
 from .plate_diagnostics import PlateAttemptStatus, PlateDiagnosticProcessor, TrackPlateDiagnosticResult
+from .vision_backends.base import VisionInferenceBackend
 
 
 def group_selected_jobs_by_track(jobs: Iterable[SelectedCropJob]) -> list[list[SelectedCropJob]]:
@@ -21,7 +21,7 @@ class BoundedPlateRetryController:
     def __init__(
         self,
         plate_detector: UltralyticsPlateDetectionStage,
-        florence_engine: FlorenceInferenceEngine | None,
+        florence_engine: VisionInferenceBackend | None,
         config: PlateDiagnosticConfig,
     ) -> None:
         self.plate_detector = plate_detector

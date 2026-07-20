@@ -9,11 +9,11 @@ from typing import Any, Iterable
 from .anpr_schemas import FlorenceOcrResult, PlateDetectionCandidate
 from .config import PlateDetectionConfig, PlateDiagnosticConfig
 from .crop_selection import SelectedCropJob
-from .florence_inference import FlorenceInferenceEngine
 from .plate_detection import _cv2, resolve_image_path
 from .schemas import BoundingBox
 from .serialization import dataclass_to_dict
 from .validation import validate_allowed_value, validate_non_empty_string, validate_non_negative_int, validate_probability
+from .vision_backends.base import VisionInferenceBackend
 
 
 class PlateAttemptStatus(str, Enum):
@@ -284,7 +284,7 @@ class PlateDiagnosticProcessor:
         plate_config: PlateDetectionConfig,
         diagnostic_config: PlateDiagnosticConfig,
         output_dir: str | Path,
-        florence_engine: FlorenceInferenceEngine | None = None,
+        florence_engine: VisionInferenceBackend | None = None,
     ) -> None:
         self.detector_stage = detector_stage
         self.plate_config = plate_config

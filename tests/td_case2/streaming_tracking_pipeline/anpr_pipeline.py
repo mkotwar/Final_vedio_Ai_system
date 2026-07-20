@@ -6,8 +6,8 @@ from typing import Iterable
 from .anpr_schemas import TrackAnprColourResult
 from .config import Step7InferenceConfig
 from .crop_selection import SelectedCropJob, SelectedTrackCropSet
-from .florence_inference import FlorenceInferenceEngine
 from .plate_detection import UltralyticsPlateDetectionStage
+from .vision_backends.base import VisionInferenceBackend
 
 
 def track_key(job: SelectedCropJob) -> tuple[str, int, int]:
@@ -29,7 +29,7 @@ class SequentialAnprColourPipeline:
         config: Step7InferenceConfig,
         *,
         plate_detector: UltralyticsPlateDetectionStage,
-        florence_engine: FlorenceInferenceEngine,
+        florence_engine: VisionInferenceBackend,
     ) -> None:
         self.config = config
         self.plate_detector = plate_detector
@@ -107,7 +107,22 @@ class SequentialAnprColourPipeline:
             normalized_plate_texts=normalized_texts,
             normalized_colour=colour_result.normalized_colour if colour_result is not None else "unknown",
             failure_reasons=failures,
-            metadata={"configured_job_count": len(ordered_jobs)},
+            metadata={
+                "configured_job_count": len(ordered_jobs),
+                "vision_backend_mode": getattr(self.florence_engine, "backend_name", "unknown"),
+                "vision_backends_used": sorted(
+                    {
+                        str(item.metadata.get("vision_backend"))
+                        for item in ([colour_result] if colour_result is not None else []) + list(ocr_results)
+                        if getattr(item, "metadata", None) and item.metadata.get("vision_backend")
+                    }
+                ),
+                "vision_fallback_count": sum(
+                    1
+                    for item in ([colour_result] if colour_result is not None else []) + list(ocr_results)
+                    if getattr(item, "metadata", None) and item.metadata.get("vision_fallback_from")
+                ),
+            },
         )
 
     def _order_jobs(self, jobs: list[SelectedCropJob]) -> list[SelectedCropJob]:
