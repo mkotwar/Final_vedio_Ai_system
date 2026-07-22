@@ -81,6 +81,31 @@ class ConfigTests(unittest.TestCase):
         self.assertIsInstance(payload["detection"]["allowed_class_names"], list)
         json.dumps(payload)
 
+    def test_google_api_key_is_used_when_gemini_api_key_is_absent(self) -> None:
+        with patch.dict(os.environ, {"GOOGLE_API_KEY": "google-only-key"}, clear=True):
+            config = PipelineConfig.from_env()
+        self.assertEqual(config.gemini.api_key, "google-only-key")
+
+    def test_gemini_api_key_takes_priority_over_google_api_key(self) -> None:
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "gemini-key", "GOOGLE_API_KEY": "google-key"}, clear=True):
+            config = PipelineConfig.from_env()
+        self.assertEqual(config.gemini.api_key, "gemini-key")
+
+    def test_new_gemini_timeout_and_backoff_env_overrides(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                "TD_CASE2_GEMINI_TIMEOUT_SEC": "90",
+                "TD_CASE2_GEMINI_MAX_RETRIES": "1",
+                "TD_CASE2_GEMINI_RETRY_BACKOFF_SEC": "2.5",
+            },
+            clear=True,
+        ):
+            config = PipelineConfig.from_env()
+        self.assertEqual(config.gemini.timeout_seconds, 90)
+        self.assertEqual(config.gemini.max_retries, 1)
+        self.assertEqual(config.gemini.retry_backoff_seconds, 2.5)
+
 
 if __name__ == "__main__":
     unittest.main()

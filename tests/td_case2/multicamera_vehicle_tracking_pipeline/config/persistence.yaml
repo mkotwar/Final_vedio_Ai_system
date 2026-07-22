@@ -1,0 +1,10 @@
+persistence:
+  enabled: false
+  sync_cameras: true
+  write_completed_tracks_only: true
+  include_discarded_tracks: false
+  observation_mode: all
+  observation_batch_size: 100
+  observation_sample_every_n: 5
+  dry_run: false
+  fail_on_database_error: true

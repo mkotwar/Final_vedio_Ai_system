@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import mimetypes
+import re
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
@@ -17,6 +21,161 @@ from .schemas import GeminiStructuredColour, GeminiStructuredOcr
 
 OCR_SCHEMA_VERSION = "gemini_ocr_v1"
 COLOUR_SCHEMA_VERSION = "gemini_colour_v1"
+OCR_PROMPT = "Return JSON only with keys raw_text, confidence, notes for the vehicle number plate visible in this image."
+COLOUR_PROMPT = "Return JSON only with keys raw_text, normalized_colour, confidence, notes for the primary vehicle body colour in this image."
+RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+SAFE_IMAGE_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@dataclass(frozen=True)
+class PreparedGeminiImage:
+    part: Any
+    width: int
+    height: int
+    image_bytes: int
+    mime_type: str
+    resized: bool
+    source_path: str
+
+
+class GeminiBackendRequestError(RuntimeError):
+    def __init__(self, message: str, *, metadata: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.metadata = metadata
+
+
+def prepare_gemini_image(
+    image_path: str | Path,
+    *,
+    max_long_edge: int | None = None,
+    jpeg_quality: int = 85,
+) -> PreparedGeminiImage:
+    from google.genai import types  # type: ignore
+
+    path = Path(image_path).expanduser()
+    with Image.open(path) as image:
+        image.load()
+        original_width, original_height = image.size
+        resized = False
+        mime_type = (mimetypes.guess_type(path.name)[0] or "").lower()
+        if max_long_edge is not None and max(original_width, original_height) > max_long_edge:
+            resized = True
+            working = image.convert("RGB")
+            if original_width >= original_height:
+                new_width = max_long_edge
+                new_height = max(1, round(original_height * (max_long_edge / original_width)))
+            else:
+                new_height = max_long_edge
+                new_width = max(1, round(original_width * (max_long_edge / original_height)))
+            working = working.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            working.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+            payload = buffer.getvalue()
+            mime_type = "image/jpeg"
+            final_width, final_height = working.size
+        elif mime_type in SAFE_IMAGE_MIME_TYPES:
+            payload = path.read_bytes()
+            final_width, final_height = original_width, original_height
+        else:
+            working = image.convert("RGB")
+            buffer = io.BytesIO()
+            working.save(buffer, format="JPEG", quality=jpeg_quality, optimize=True)
+            payload = buffer.getvalue()
+            mime_type = "image/jpeg"
+            final_width, final_height = working.size
+        part = types.Part.from_bytes(data=payload, mime_type=mime_type or "image/jpeg")
+    return PreparedGeminiImage(
+        part=part,
+        width=int(final_width),
+        height=int(final_height),
+        image_bytes=len(payload),
+        mime_type=mime_type or "image/jpeg",
+        resized=resized,
+        source_path=str(path),
+    )
+
+
+def _status_code_from_exception(exc: Exception) -> int | None:
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if isinstance(status_code, int):
+        return status_code
+    return None
+
+
+def _sanitize_error_message(message: str, api_key: str | None) -> str:
+    sanitized = str(message or "")
+    if api_key:
+        sanitized = sanitized.replace(api_key, "[REDACTED_API_KEY]")
+    sanitized = re.sub(r"(?i)(authorization['\"]?\s*[:=]\s*['\"]?bearer\s+)[^'\",\s]+", r"\1[REDACTED]", sanitized)
+    sanitized = re.sub(r"(?i)(api[_-]?key['\"]?\s*[:=]\s*['\"]?)[^'\",\s]+", r"\1[REDACTED]", sanitized)
+    return sanitized[:500]
+
+
+def _exception_chain(exc: Exception, api_key: str | None) -> list[dict[str, str]]:
+    chain: list[dict[str, str]] = []
+    seen: set[int] = set()
+    current: Exception | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(
+            {
+                "type": type(current).__name__,
+                "message": _sanitize_error_message(str(current), api_key),
+            }
+        )
+        next_exc = getattr(current, "__cause__", None)
+        if next_exc is None:
+            next_exc = getattr(current, "__context__", None)
+        current = next_exc if isinstance(next_exc, Exception) else None
+    return chain
+
+
+def _error_category(exc: Exception) -> str:
+    try:
+        import httpx  # type: ignore
+    except Exception:  # pragma: no cover
+        httpx = None
+
+    status_code = _status_code_from_exception(exc)
+    if httpx is not None and isinstance(exc, httpx.ReadTimeout):
+        return "timeout"
+    if httpx is not None and isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if httpx is not None and isinstance(exc, httpx.NetworkError):
+        return "network"
+    if status_code == 401:
+        return "authentication"
+    if status_code == 403:
+        return "permission_denied"
+    if status_code == 404:
+        return "invalid_model"
+    if status_code == 429:
+        return "rate_limited"
+    if status_code in {400, 422}:
+        return "malformed_request"
+    if status_code in {500, 502, 503, 504}:
+        return "server_error"
+    if isinstance(exc, ValueError):
+        return "schema_validation"
+    return "unexpected"
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    try:
+        import httpx  # type: ignore
+    except Exception:  # pragma: no cover
+        httpx = None
+
+    if httpx is not None and isinstance(exc, (httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.ReadError, httpx.WriteError, httpx.RemoteProtocolError)):
+        return True
+    status_code = _status_code_from_exception(exc)
+    if status_code in RETRYABLE_STATUS_CODES:
+        return True
+    return False
 
 
 class GeminiVisionBackend(VisionInferenceBackend):
@@ -72,15 +231,15 @@ class GeminiVisionBackend(VisionInferenceBackend):
         except Exception as exc:
             self._metrics["gemini_load_errors"] += 1
             raise RuntimeError("google-genai is required for the Gemini backend.") from exc
-        timeout_seconds = max(1, int(getattr(self.config, "timeout_seconds", 60) or 60))
+        timeout_seconds = max(1, int(getattr(self.config, "timeout_seconds", 90) or 90))
         self._client = genai.Client(
             api_key=api_key,
-            http_options=genai.types.HttpOptions(timeout=timeout_seconds),
+            http_options=genai.types.HttpOptions(timeout=timeout_seconds * 1000),
         )
         return self._client
 
     def run_ocr(self, candidate: Any) -> FlorenceOcrResult:
-        prompt = "Return JSON only with keys raw_text, confidence, notes for the vehicle number plate visible in this image."
+        prompt = OCR_PROMPT
         image_path = getattr(candidate, "plate_crop_path", None)
         if not image_path:
             return self._ocr_result(candidate, "", "input_missing", prompt, {"vision_backend": "gemini"})
@@ -88,8 +247,9 @@ class GeminiVisionBackend(VisionInferenceBackend):
         if not resolved.exists():
             return self._ocr_result(candidate, "", "input_missing", prompt, {"vision_backend": "gemini"})
         try:
+            prepared = prepare_gemini_image(resolved)
             payload, latency_sec, cache_hit = self._request_json(
-                image_path=resolved,
+                prepared_image=prepared,
                 task_name="ocr",
                 schema_version=OCR_SCHEMA_VERSION,
                 prompt=prompt,
@@ -110,17 +270,22 @@ class GeminiVisionBackend(VisionInferenceBackend):
             "gemini_notes": str(payload.get("notes", "") or ""),
             "latency_sec": latency_sec,
             "cache_hit": cache_hit,
+            "image_width": prepared.width,
+            "image_height": prepared.height,
+            "image_bytes": prepared.image_bytes,
+            "image_mime_type": prepared.mime_type,
         }
         return self._ocr_result(candidate, raw_text, status, prompt, metadata)
 
     def run_colour(self, job: SelectedCropJob) -> FlorenceColourResult:
-        prompt = "Return JSON only with keys raw_text, normalized_colour, confidence, notes for the primary vehicle body colour in this image."
+        prompt = COLOUR_PROMPT
         resolved = resolve_image_path(job.vehicle_crop_path, run_dir=self.run_dir)
         if not resolved.exists():
             return self._colour_result(job, "", "input_missing", prompt, {"vision_backend": "gemini"})
         try:
+            prepared = prepare_gemini_image(resolved)
             payload, latency_sec, cache_hit = self._request_json(
-                image_path=resolved,
+                prepared_image=prepared,
                 task_name="colour",
                 schema_version=COLOUR_SCHEMA_VERSION,
                 prompt=prompt,
@@ -143,59 +308,115 @@ class GeminiVisionBackend(VisionInferenceBackend):
             "gemini_notes": str(payload.get("notes", "") or ""),
             "latency_sec": latency_sec,
             "cache_hit": cache_hit,
+            "image_width": prepared.width,
+            "image_height": prepared.height,
+            "image_bytes": prepared.image_bytes,
+            "image_mime_type": prepared.mime_type,
         }
         return self._colour_result(job, raw_text or normalized_colour, status, prompt, metadata)
 
     def _request_json(
         self,
         *,
-        image_path: Path,
+        prepared_image: PreparedGeminiImage,
         task_name: str,
         schema_version: str,
         prompt: str,
         response_schema: Any,
     ) -> tuple[dict[str, Any], float, bool]:
-        cache_key = self._cache_key(image_path, task_name, schema_version)
+        cache_key = self._cache_key(Path(prepared_image.source_path), task_name, schema_version)
         cached = self._response_cache.get(cache_key)
         if cached is not None:
             self._metrics["gemini_cache_hits"] += 1
             return dict(cached), 0.0, True
         client = self.load()
-        started = time.perf_counter()
+        started_total = time.perf_counter()
+        max_attempts = int(getattr(self.config, "max_retries", 1) or 1) + 1
+        backoff_seconds = float(getattr(self.config, "retry_backoff_seconds", 2.0) or 0.0)
         last_exc: Exception | None = None
-        for attempt in range(int(getattr(self.config, "max_retries", 2) or 2) + 1):
+        last_metadata: dict[str, Any] | None = None
+        for attempt_number in range(1, max_attempts + 1):
             self._metrics["gemini_requests"] += 1
-            if attempt:
+            if attempt_number > 1:
                 self._metrics["gemini_retries"] += 1
+            attempt_started = time.perf_counter()
             try:
                 response = client.models.generate_content(
                     model=str(getattr(self.config, "model_name", "") or "gemini-2.5-flash"),
-                    contents=[Image.open(image_path).convert("RGB"), prompt],
+                    contents=[prepared_image.part, prompt],
                     config=self._generate_config(response_schema),
                 )
                 payload = self._response_to_dict(response)
-                latency_sec = round(time.perf_counter() - started, 6)
-                self._metrics["gemini_total_latency_sec"] += latency_sec
+                elapsed_sec = round(time.perf_counter() - started_total, 6)
+                self._metrics["gemini_total_latency_sec"] += elapsed_sec
                 self._remember(cache_key, payload)
-                return payload, latency_sec, False
+                return payload, elapsed_sec, False
             except Exception as exc:
                 last_exc = exc
-        assert last_exc is not None
-        raise last_exc
+                attempt_elapsed = round(time.perf_counter() - attempt_started, 6)
+                total_elapsed = round(time.perf_counter() - started_total, 6)
+                last_metadata = {
+                    "vision_backend": "gemini",
+                    "backend_model": getattr(self.config, "model_name", None),
+                    "error_type": type(exc).__name__,
+                    "error_message": _sanitize_error_message(str(exc), str(getattr(self.config, "api_key", "") or "")),
+                    "error_category": _error_category(exc),
+                    "attempt_number": attempt_number,
+                    "max_attempts": max_attempts,
+                    "elapsed_sec": total_elapsed,
+                    "attempt_elapsed_sec": attempt_elapsed,
+                    "model": getattr(self.config, "model_name", None),
+                    "image_width": prepared_image.width,
+                    "image_height": prepared_image.height,
+                    "image_bytes": prepared_image.image_bytes,
+                    "image_mime_type": prepared_image.mime_type,
+                    "prompt_chars": len(prompt),
+                    "schema_enabled": response_schema is not None,
+                    "exception_chain": _exception_chain(exc, str(getattr(self.config, "api_key", "") or "")),
+                }
+                if not _is_retryable_exception(exc) or attempt_number >= max_attempts:
+                    break
+                if backoff_seconds > 0:
+                    time.sleep(backoff_seconds)
+        elapsed_sec = round(time.perf_counter() - started_total, 6)
+        self._metrics["gemini_total_latency_sec"] += elapsed_sec
+        if last_metadata is None:
+            last_metadata = {
+                "vision_backend": "gemini",
+                "backend_model": getattr(self.config, "model_name", None),
+                "error_type": "RuntimeError",
+                "error_message": "Gemini request failed without an exception.",
+                "error_category": "unexpected",
+                "attempt_number": 0,
+                "max_attempts": max_attempts,
+                "elapsed_sec": elapsed_sec,
+                "model": getattr(self.config, "model_name", None),
+                "image_width": prepared_image.width,
+                "image_height": prepared_image.height,
+                "image_bytes": prepared_image.image_bytes,
+                "image_mime_type": prepared_image.mime_type,
+                "prompt_chars": len(prompt),
+                "schema_enabled": response_schema is not None,
+                "exception_chain": [],
+            }
+        last_metadata["elapsed_sec"] = elapsed_sec
+        raise GeminiBackendRequestError("Gemini request failed.", metadata=last_metadata) from last_exc
 
     def _generate_config(self, response_schema: Any) -> Any:
         from google import genai  # type: ignore
 
         return genai.types.GenerateContentConfig(
             temperature=0.0,
-            candidateCount=1,
-            responseMimeType="application/json",
-            responseSchema=response_schema,
+            candidate_count=1,
+            response_mime_type="application/json",
+            response_schema=response_schema,
         )
 
     def _response_to_dict(self, response: Any) -> dict[str, Any]:
         parsed = getattr(response, "parsed", None)
         if parsed is not None:
+            if hasattr(parsed, "model_dump"):
+                return dict(parsed.model_dump(exclude_none=True))
             if hasattr(parsed, "__dict__"):
                 return dict(parsed.__dict__)
             if isinstance(parsed, dict):
@@ -237,10 +458,15 @@ class GeminiVisionBackend(VisionInferenceBackend):
         self._response_cache[cache_key] = dict(payload)
 
     def _safe_error_metadata(self, exc: Exception) -> dict[str, Any]:
+        if isinstance(exc, GeminiBackendRequestError):
+            return dict(exc.metadata)
         return {
             "vision_backend": "gemini",
             "backend_model": getattr(self.config, "model_name", None),
             "error_type": type(exc).__name__,
+            "error_message": _sanitize_error_message(str(exc), str(getattr(self.config, "api_key", "") or "")),
+            "error_category": _error_category(exc),
+            "exception_chain": _exception_chain(exc, str(getattr(self.config, "api_key", "") or "")),
         }
 
     def _ocr_result(self, candidate: Any, raw_text: str, status: str, prompt: str, metadata: dict[str, Any]) -> FlorenceOcrResult:

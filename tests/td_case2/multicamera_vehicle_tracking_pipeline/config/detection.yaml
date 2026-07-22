@@ -1,0 +1,13 @@
+vehicle_detector:
+  model_path: object/vehical_detection/best_old.pt
+  fallback_model_path: yolov8n.pt
+  allow_fallback: true
+  device: auto
+  confidence_threshold: 0.25
+  iou_threshold: 0.45
+  image_size: 640
+  allowed_classes:
+    - car
+    - bus
+    - truck
+    - motorcycle

@@ -414,14 +414,17 @@ class GeminiConfig:
     enabled: bool = True
     api_key: str | None = None
     model_name: str = "gemini-2.5-flash"
-    timeout_seconds: int = 60
-    max_retries: int = 2
+    timeout_seconds: int = 90
+    max_retries: int = 1
+    retry_backoff_seconds: float = 2.0
     min_confidence: float = 0.75
 
     def __post_init__(self) -> None:
         validate_non_empty_string(self.model_name, "gemini.model_name")
         validate_positive_int(self.timeout_seconds, "gemini.timeout_seconds")
         validate_non_negative_int(self.max_retries, "gemini.max_retries")
+        if float(self.retry_backoff_seconds) < 0.0:
+            raise ValueError("gemini.retry_backoff_seconds must be non-negative.")
         validate_probability(self.min_confidence, "gemini.min_confidence")
 
 
@@ -741,8 +744,10 @@ def _env_overrides(environ: os._Environ[str]) -> dict[str, Any]:
         "TD_CASE2_STREAM_FLORENCE_COLOUR_TASK_PROMPT": ("florence", "colour_task_prompt", "str"),
         "TD_CASE2_STREAM_GEMINI_ENABLED": ("gemini", "enabled", "bool"),
         "TD_CASE2_GEMINI_MODEL": ("gemini", "model_name", "str"),
+        "TD_CASE2_GEMINI_TIMEOUT_SEC": ("gemini", "timeout_seconds", "int"),
         "TD_CASE2_GEMINI_TIMEOUT_SECONDS": ("gemini", "timeout_seconds", "int"),
         "TD_CASE2_GEMINI_MAX_RETRIES": ("gemini", "max_retries", "int"),
+        "TD_CASE2_GEMINI_RETRY_BACKOFF_SEC": ("gemini", "retry_backoff_seconds", "float"),
         "TD_CASE2_GEMINI_MIN_CONFIDENCE": ("gemini", "min_confidence", "float"),
         "TD_CASE2_STREAM_STEP7_PROCESS_PRIMARY_CROPS": ("step7_inference", "process_primary_crops", "bool"),
         "TD_CASE2_STREAM_STEP7_PROCESS_FALLBACK_CROPS": ("step7_inference", "process_fallback_crops", "bool"),
@@ -789,4 +794,6 @@ def _env_overrides(environ: os._Environ[str]) -> dict[str, Any]:
         _set_nested(overrides, group_name, field_name, parsed)
     if "GEMINI_API_KEY" in environ:
         _set_nested(overrides, "gemini", "api_key", environ.get("GEMINI_API_KEY"))
+    elif "GOOGLE_API_KEY" in environ:
+        _set_nested(overrides, "gemini", "api_key", environ.get("GOOGLE_API_KEY"))
     return overrides

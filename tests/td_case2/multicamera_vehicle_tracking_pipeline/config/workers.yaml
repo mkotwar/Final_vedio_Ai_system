@@ -1,0 +1,18 @@
+workers:
+  enabled: false
+  frame_queue_size: 20
+  detection_queue_size: 20
+  completed_track_queue_size: 50
+  error_queue_size: 50
+  camera_reader_daemon: false
+  detection_worker_daemon: false
+  tracking_worker_daemon: false
+  persistence_worker_daemon: false
+  queue_put_timeout_seconds: 5.0
+  queue_get_timeout_seconds: 1.0
+  shutdown_timeout_seconds: 30.0
+  stop_on_camera_error: false
+  stop_on_detector_error: true
+  stop_on_tracking_error: true
+  stop_on_persistence_error: false
+  persist_completed_tracks: false

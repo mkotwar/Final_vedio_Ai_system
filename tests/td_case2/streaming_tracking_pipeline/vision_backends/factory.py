@@ -94,12 +94,17 @@ def create_vision_backend(
     gemini_client_factory: Any = None,
 ) -> VisionInferenceBackend:
     mode = str(getattr(vision_config, "backend_mode", "auto") or "auto").strip().lower()
-    florence_backend = FlorenceVisionBackend(FlorenceInferenceEngine(florence_config, bundle=florence_bundle, run_dir=run_dir))
-    gemini_backend = GeminiVisionBackend(config=gemini_config, run_dir=run_dir, client_factory=gemini_client_factory)
+
+    def _florence_backend() -> FlorenceVisionBackend:
+        return FlorenceVisionBackend(FlorenceInferenceEngine(florence_config, bundle=florence_bundle, run_dir=run_dir))
+
+    def _gemini_backend() -> GeminiVisionBackend:
+        return GeminiVisionBackend(config=gemini_config, run_dir=run_dir, client_factory=gemini_client_factory)
+
     if mode == "disabled":
-        return DisabledVisionBackend(florence_backend.engine)
+        return DisabledVisionBackend()
     if mode == "florence":
-        return florence_backend
+        return _florence_backend()
     if mode == "gemini":
-        return gemini_backend
-    return FallbackVisionBackend(florence_backend, gemini_backend)
+        return _gemini_backend()
+    return FallbackVisionBackend(_florence_backend(), _gemini_backend())

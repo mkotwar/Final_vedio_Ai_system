@@ -1,0 +1,10 @@
+[project]
+name = "multicamera-vehicle-tracking-pipeline"
+version = "0.1.0"
+description = "Small proof-of-concept multi-camera vehicle tracking database layer"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+supabase = ["supabase>=2.6.0"]
+
