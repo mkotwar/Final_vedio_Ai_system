@@ -48,18 +48,17 @@ class CameraReaderWorker(threading.Thread):
                     try:
                         duration = self.frame_queue.put(packet, timeout=self.worker_config.queue_put_timeout_seconds)
                         self.metrics.frames_read += 1
+                        self.metrics.first_frame_number = packet.frame_number if self.metrics.first_frame_number is None else self.metrics.first_frame_number
+                        self.metrics.last_frame_number = packet.frame_number
                         self.metrics.queue_put_count += 1
-                        if duration > 0.001:
-                            self.metrics.queue_block_count += 1
-                            self.metrics.queue_block_time_seconds += duration
+                        self.metrics.queue_wait_seconds += duration
                         break
                     except queue.Full:
-                        self.metrics.queue_block_count += 1
-                        self.metrics.queue_block_time_seconds += self.worker_config.queue_put_timeout_seconds
+                        self.metrics.queue_wait_seconds += self.worker_config.queue_put_timeout_seconds
             self._emit_end_of_camera()
             sent_end = True
         except Exception as exc:
-            self.metrics.read_errors += 1
+            self.metrics.errors += 1
             self._emit_error(exc, fatal=self.worker_config.stop_on_camera_error)
             if self.worker_config.stop_on_camera_error:
                 self.shutdown_event.set()

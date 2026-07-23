@@ -26,6 +26,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--new-track-thresh", type=float, default=None)
     parser.add_argument("--match-thresh", type=float, default=None)
     parser.add_argument("--track-buffer", type=int, default=None)
+    parser.add_argument("--track-activation-threshold", type=float, default=None)
+    parser.add_argument("--lost-track-buffer", type=int, default=None)
+    parser.add_argument("--minimum-matching-threshold", type=float, default=None)
+    parser.add_argument("--frame-rate", type=float, default=None)
+    parser.add_argument("--minimum-consecutive-frames", type=int, default=None)
     parser.add_argument("--min-confirmed-observations", type=int, default=None)
     parser.add_argument("--max-lost-frames", type=int, default=None)
     parser.add_argument("--persist-to-supabase", action="store_true")
@@ -66,6 +71,11 @@ def main() -> None:
             "new_track_thresh": args.new_track_thresh,
             "match_thresh": args.match_thresh,
             "track_buffer": args.track_buffer,
+            "track_activation_threshold": args.track_activation_threshold,
+            "lost_track_buffer": args.lost_track_buffer,
+            "minimum_matching_threshold": args.minimum_matching_threshold,
+            "frame_rate": args.frame_rate,
+            "minimum_consecutive_frames": args.minimum_consecutive_frames,
             "min_confirmed_observations": args.min_confirmed_observations,
             "max_lost_frames": args.max_lost_frames,
         }.items()

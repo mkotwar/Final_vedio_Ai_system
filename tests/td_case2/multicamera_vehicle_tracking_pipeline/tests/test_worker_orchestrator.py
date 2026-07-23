@@ -73,7 +73,7 @@ class WorkerOrchestratorTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (root / "config" / "workers.yaml").write_text(
-                'workers:\n  enabled: true\n  frame_queue_size: 10\n  detection_queue_size: 10\n  completed_track_queue_size: 10\n  error_queue_size: 10\n  queue_put_timeout_seconds: 0.1\n  queue_get_timeout_seconds: 0.1\n  shutdown_timeout_seconds: 5.0\n  stop_on_camera_error: false\n  stop_on_detector_error: true\n  stop_on_tracking_error: true\n  stop_on_persistence_error: false\n  persist_completed_tracks: false\n',
+                'workers:\n  enabled: true\n  frame_queue_size: 10\n  detection_queue_size: 10\n  completed_track_queue_size: 10\n  error_queue_size: 10\n  queue_put_timeout_seconds: 0.1\n  queue_get_timeout_seconds: 0.1\n  shutdown_timeout_seconds: 5.0\n  stop_on_camera_error: false\n  stop_on_detector_error: true\n  stop_on_tracking_error: true\n  stop_on_persistence_error: false\n  enable_persistence_worker: false\n',
                 encoding="utf-8",
             )
             orchestrator = WorkerMultiCameraTrackingOrchestrator(
@@ -88,6 +88,8 @@ class WorkerOrchestratorTests(unittest.TestCase):
             result = orchestrator.run(output_report=root / "report.json")
             self.assertEqual(result.report["execution_mode"], "workers")
             self.assertIn("workers", result.report)
+            self.assertEqual(result.report["total_frames_processed"], 4)
+            self.assertIn("thread_shutdown", result.report["workers"])
             loaded = json.loads((root / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(loaded["detector"]["actual_model"], "fake.pt")
 

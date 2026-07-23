@@ -15,12 +15,17 @@ class TrackingConfigError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class TrackingConfig:
-    backend: str = "ultralytics_bytetrack"
-    track_high_thresh: float = 0.30
+    backend: str = "supervision_bytetrack"
+    track_high_thresh: float = 0.15
     track_low_thresh: float = 0.10
     new_track_thresh: float = 0.30
     match_thresh: float = 0.80
     track_buffer: int = 30
+    track_activation_threshold: float = 0.15
+    lost_track_buffer: int = 30
+    minimum_matching_threshold: float = 0.80
+    frame_rate: float | None = None
+    minimum_consecutive_frames: int = 1
     min_confirmed_observations: int = 3
     max_lost_frames: int = 30
     preserve_state_per_camera: bool = True
@@ -34,6 +39,12 @@ class TrackingConfig:
                 raise TrackingConfigError(f"{field_name} must be between 0 and 1.")
         if int(self.track_buffer) <= 0:
             raise TrackingConfigError("track_buffer must be positive.")
+        if int(self.lost_track_buffer) <= 0:
+            raise TrackingConfigError("lost_track_buffer must be positive.")
+        if self.frame_rate is not None and float(self.frame_rate) <= 0.0:
+            raise TrackingConfigError("frame_rate must be positive when provided.")
+        if int(self.minimum_consecutive_frames) <= 0:
+            raise TrackingConfigError("minimum_consecutive_frames must be positive.")
         if int(self.min_confirmed_observations) <= 0:
             raise TrackingConfigError("min_confirmed_observations must be positive.")
         if int(self.max_lost_frames) < 0:
@@ -83,6 +94,17 @@ def _load_yaml_text(text: str) -> dict[str, Any]:
     return payload
 
 
+def _normalize_tracking_overrides(overrides: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(overrides)
+    if "track_activation_threshold" not in normalized and "track_high_thresh" in normalized:
+        normalized["track_activation_threshold"] = normalized["track_high_thresh"]
+    if "lost_track_buffer" not in normalized and "track_buffer" in normalized:
+        normalized["lost_track_buffer"] = normalized["track_buffer"]
+    if "minimum_matching_threshold" not in normalized and "match_thresh" in normalized:
+        normalized["minimum_matching_threshold"] = normalized["match_thresh"]
+    return normalized
+
+
 def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] | None = None) -> TrackingConfig:
     path = Path(config_path).expanduser().resolve()
     if not path.exists():
@@ -92,17 +114,23 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
     if not isinstance(raw_config, dict):
         raise TrackingConfigError("Tracking config must contain a 'tracking' mapping.")
     config = TrackingConfig(
-        backend=str(raw_config.get("backend", "ultralytics_bytetrack")),
-        track_high_thresh=float(raw_config.get("track_high_thresh", 0.30)),
+        backend=str(raw_config.get("backend", "supervision_bytetrack")),
+        track_high_thresh=float(raw_config.get("track_high_thresh", raw_config.get("track_activation_threshold", 0.15))),
         track_low_thresh=float(raw_config.get("track_low_thresh", 0.10)),
         new_track_thresh=float(raw_config.get("new_track_thresh", 0.30)),
         match_thresh=float(raw_config.get("match_thresh", 0.80)),
         track_buffer=int(raw_config.get("track_buffer", 30)),
+        track_activation_threshold=float(raw_config.get("track_activation_threshold", raw_config.get("track_high_thresh", 0.15))),
+        lost_track_buffer=int(raw_config.get("lost_track_buffer", raw_config.get("track_buffer", 30))),
+        minimum_matching_threshold=float(raw_config.get("minimum_matching_threshold", raw_config.get("match_thresh", 0.80))),
+        frame_rate=float(raw_config["frame_rate"]) if raw_config.get("frame_rate") is not None else None,
+        minimum_consecutive_frames=int(raw_config.get("minimum_consecutive_frames", 1)),
         min_confirmed_observations=int(raw_config.get("min_confirmed_observations", 3)),
         max_lost_frames=int(raw_config.get("max_lost_frames", 30)),
         preserve_state_per_camera=bool(raw_config.get("preserve_state_per_camera", True)),
     )
     if overrides:
+        overrides = _normalize_tracking_overrides(overrides)
         config = replace(
             config,
             backend=str(overrides.get("backend", config.backend)),
@@ -111,6 +139,11 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
             new_track_thresh=float(overrides.get("new_track_thresh", config.new_track_thresh)),
             match_thresh=float(overrides.get("match_thresh", config.match_thresh)),
             track_buffer=int(overrides.get("track_buffer", config.track_buffer)),
+            track_activation_threshold=float(overrides.get("track_activation_threshold", config.track_activation_threshold)),
+            lost_track_buffer=int(overrides.get("lost_track_buffer", config.lost_track_buffer)),
+            minimum_matching_threshold=float(overrides.get("minimum_matching_threshold", config.minimum_matching_threshold)),
+            frame_rate=float(overrides["frame_rate"]) if overrides.get("frame_rate") is not None else config.frame_rate,
+            minimum_consecutive_frames=int(overrides.get("minimum_consecutive_frames", config.minimum_consecutive_frames)),
             min_confirmed_observations=int(overrides.get("min_confirmed_observations", config.min_confirmed_observations)),
             max_lost_frames=int(overrides.get("max_lost_frames", config.max_lost_frames)),
             preserve_state_per_camera=bool(overrides.get("preserve_state_per_camera", config.preserve_state_per_camera)),
@@ -127,6 +160,11 @@ def tracking_overrides_from_env() -> dict[str, Any]:
         "TD_CASE2_MULTICAM_NEW_TRACK_THRESH": ("new_track_thresh", float),
         "TD_CASE2_MULTICAM_MATCH_THRESH": ("match_thresh", float),
         "TD_CASE2_MULTICAM_TRACK_BUFFER": ("track_buffer", int),
+        "TD_CASE2_MULTICAM_TRACK_ACTIVATION_THRESHOLD": ("track_activation_threshold", float),
+        "TD_CASE2_MULTICAM_LOST_TRACK_BUFFER": ("lost_track_buffer", int),
+        "TD_CASE2_MULTICAM_MINIMUM_MATCHING_THRESHOLD": ("minimum_matching_threshold", float),
+        "TD_CASE2_MULTICAM_FRAME_RATE": ("frame_rate", float),
+        "TD_CASE2_MULTICAM_MINIMUM_CONSECUTIVE_FRAMES": ("minimum_consecutive_frames", int),
         "TD_CASE2_MULTICAM_MIN_CONFIRMED_OBSERVATIONS": ("min_confirmed_observations", int),
         "TD_CASE2_MULTICAM_MAX_LOST_FRAMES": ("max_lost_frames", int),
     }

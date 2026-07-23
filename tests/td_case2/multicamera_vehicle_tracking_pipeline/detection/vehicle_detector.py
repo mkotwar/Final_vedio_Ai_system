@@ -200,6 +200,7 @@ class SharedVehicleDetector:
             camera_name=frame_packet.camera_name,
             source_path=frame_packet.source_path,
             frame_number=frame_packet.frame_number,
+            source_fps=frame_packet.source_fps,
             video_time_seconds=frame_packet.video_time_seconds,
             camera_timestamp=frame_packet.camera_timestamp,
             frame_width=int(frame_width),

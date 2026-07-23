@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import Any
 
 from ..detection.detection_models import DetectionPacket
 from .track_lifecycle import LocalTrackLifecycle
+from .supervision_conversion import build_supervision_debug_snapshot, to_supervision_detections
 from .tracker_factory import TrackerFactory
 from .tracking_config import TrackingConfig
 from .tracking_models import LocalVehicleTrack
 from .tracking_models import TrackObservation
+
+LOGGER = logging.getLogger(__name__)
 
 
 class _ResultsLike:
@@ -66,11 +70,21 @@ class CameraTracker:
         self.tracker_factory = tracker_factory
         self.lifecycle = lifecycle
         self._labels_by_track_id: dict[int, tuple[str, float]] = {}
+        self._supervision_debug_frames_remaining = 5
+        self._metrics = {
+            "frames_with_input_detections": 0,
+            "frames_with_tracker_output": 0,
+            "detections_without_tracker_id": 0,
+            "tracker_output_rows": 0,
+            "resolved_frame_rate": None,
+        }
 
     def update(self, packet: DetectionPacket) -> CameraTrackingResult:
         if packet.camera_code != self.camera_code:
             raise ValueError(f"CameraTracker for {self.camera_code} received packet for {packet.camera_code}")
-        tracker = self.tracker_factory.get_or_create(self.camera_code)
+        tracker = self.tracker_factory.get_or_create(self.camera_code, frame_rate=packet.source_fps or self.tracking_config.frame_rate)
+        if self._metrics["resolved_frame_rate"] is None:
+            self._metrics["resolved_frame_rate"] = float(packet.source_fps or self.tracking_config.frame_rate or 0.0)
         if hasattr(tracker, "update_with_detections"):
             raw_observations = self._update_with_supervision_tracker(tracker, packet)
         else:
@@ -86,21 +100,38 @@ class CameraTracker:
         result = self.lifecycle.flush_camera(self.camera_code)
         return CameraTrackingResult(observations=[], completed_tracks=result.completed_tracks, active_tracks=result.active_tracks)
 
-    def _update_with_supervision_tracker(self, tracker: Any, packet: DetectionPacket) -> list[TrackObservation]:
-        import numpy as np
-        import supervision as sv  # type: ignore
+    def diagnostics(self) -> dict[str, int | float | None]:
+        return dict(self._metrics)
 
-        detections = sv.Detections(
-            xyxy=np.asarray([item.bbox_xyxy for item in packet.detections], dtype=np.float32) if packet.detections else np.empty((0, 4), dtype=np.float32),
-            confidence=np.asarray([item.confidence for item in packet.detections], dtype=np.float32) if packet.detections else np.empty((0,), dtype=np.float32),
-            class_id=np.asarray([item.class_id for item in packet.detections], dtype=np.int32) if packet.detections else np.empty((0,), dtype=np.int32),
-        )
+    def _update_with_supervision_tracker(self, tracker: Any, packet: DetectionPacket) -> list[TrackObservation]:
+        detections = to_supervision_detections(packet)
+        debug_snapshot = build_supervision_debug_snapshot(packet)
+        if debug_snapshot.input_detection_count > 0:
+            self._metrics["frames_with_input_detections"] += 1
         tracked = tracker.update_with_detections(detections)
         raw_observations: list[TrackObservation] = []
         tracker_ids = list(tracked.tracker_id) if getattr(tracked, "tracker_id", None) is not None else []
         xyxy_rows = list(tracked.xyxy) if getattr(tracked, "xyxy", None) is not None else []
         confidence_rows = list(tracked.confidence) if getattr(tracked, "confidence", None) is not None else []
         class_rows = list(tracked.class_id) if getattr(tracked, "class_id", None) is not None else []
+        output_detection_count = len(xyxy_rows)
+        self._metrics["tracker_output_rows"] += output_detection_count
+        if output_detection_count > 0:
+            self._metrics["frames_with_tracker_output"] += 1
+        self._metrics["detections_without_tracker_id"] += max(0, debug_snapshot.input_detection_count - len(tracker_ids))
+        if self._supervision_debug_frames_remaining > 0:
+            LOGGER.debug(
+                "Supervision ByteTrack update camera_code=%s frame_number=%s input_detection_count=%s input_boxes=%s input_confidences=%s input_class_ids=%s output_detection_count=%s output_tracker_ids=%s",
+                packet.camera_code,
+                packet.frame_number,
+                debug_snapshot.input_detection_count,
+                debug_snapshot.input_boxes,
+                debug_snapshot.input_confidences,
+                debug_snapshot.input_class_ids,
+                output_detection_count,
+                tracker_ids,
+            )
+            self._supervision_debug_frames_remaining -= 1
         for index, tracker_id in enumerate(tracker_ids):
             if tracker_id is None:
                 continue

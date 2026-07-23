@@ -22,10 +22,11 @@ class WorkerConfigTests(unittest.TestCase):
     def test_yaml_loads(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "workers.yaml"
-            path.write_text("workers:\n  enabled: true\n  frame_queue_size: 5\n", encoding="utf-8")
+            path.write_text("workers:\n  enabled: true\n  frame_queue_size: 5\n  enable_persistence_worker: true\n", encoding="utf-8")
             config = load_worker_config(path)
             self.assertTrue(config.enabled)
             self.assertEqual(config.frame_queue_size, 5)
+            self.assertTrue(config.enable_persistence_worker)
 
 
 if __name__ == "__main__":

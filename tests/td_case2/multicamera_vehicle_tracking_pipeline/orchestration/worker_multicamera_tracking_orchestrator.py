@@ -78,7 +78,7 @@ class WorkerMultiCameraTrackingOrchestrator:
         output_dir = Path(output_report).resolve().parent if output_report else self._default_output_dir()
         output_dir.mkdir(parents=True, exist_ok=True)
         persistence_service = None
-        if self.worker_config.persist_completed_tracks and self.persistence_config.enabled:
+        if self.worker_config.enable_persistence_worker and self.persistence_config.enabled:
             repository = self.repository or self._build_repository()
             persistence_service = TrackingPersistenceService(repository, self.persistence_config)
             if self.persistence_config.sync_cameras:
@@ -103,13 +103,18 @@ class WorkerMultiCameraTrackingOrchestrator:
         total_frames_read = sum(item["frames_read"] for item in result.camera_reader_metrics.values())
         total_completed_tracks = int(tracking_metrics["completed_tracks"])
         total_discarded_tracks = int(tracking_metrics["discarded_tracks"])
-        total_track_observations = int(tracking_metrics["track_observations_created"])
+        total_track_observations = int(tracking_metrics["track_observations"])
         per_camera: dict[str, dict[str, object]] = {}
         for camera_code in sorted(result.camera_reader_metrics):
             per_camera[camera_code] = {
+                "camera_name": next((config.camera_name for config in camera_configs if config.camera_code == camera_code), camera_code),
                 "frames_read": result.camera_reader_metrics[camera_code]["frames_read"],
+                "first_frame_number": result.camera_reader_metrics[camera_code]["first_frame_number"],
+                "last_frame_number": result.camera_reader_metrics[camera_code]["last_frame_number"],
                 "detections": tracking_metrics["per_camera_detections"].get(camera_code, 0),
                 "track_observations": tracking_metrics["per_camera_track_observations"].get(camera_code, 0),
+                "unique_local_track_ids": len(tracking_metrics["unique_track_ids_by_camera"].get(camera_code, [])),
+                "unique_track_ids": tracking_metrics["unique_track_ids_by_camera"].get(camera_code, []),
                 "completed_tracks": tracking_metrics["per_camera_completed_tracks"].get(camera_code, 0),
                 "discarded_tracks": tracking_metrics["per_camera_discarded_tracks"].get(camera_code, 0),
                 "first_frame": tracking_metrics["per_camera_first_frame"].get(camera_code),
@@ -131,6 +136,7 @@ class WorkerMultiCameraTrackingOrchestrator:
             },
             "worker_config": asdict(self.worker_config),
             "total_frames_read": total_frames_read,
+            "total_frames_processed": int(detection_metrics["frames_processed"]),
             "total_frames_detected": int(detection_metrics["frames_received"]),
             "total_detections": int(detection_metrics["detections_produced"]),
             "total_track_observations": total_track_observations,
@@ -143,6 +149,7 @@ class WorkerMultiCameraTrackingOrchestrator:
                 "detection_worker": result.detection_worker_metrics,
                 "tracking_worker": result.tracking_worker_metrics,
                 "persistence_worker": result.persistence_worker_metrics or {},
+                "thread_shutdown": result.thread_metrics,
             },
             "queues": result.queue_metrics,
             "cameras": per_camera,

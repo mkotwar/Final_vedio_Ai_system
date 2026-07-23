@@ -34,3 +34,6 @@ class CameraDetectionRouter:
 
     def configured_camera_codes(self) -> tuple[str, ...]:
         return tuple(sorted(self._camera_trackers))
+
+    def diagnostics_by_camera(self) -> dict[str, dict[str, int | float | None]]:
+        return {camera_code: tracker.diagnostics() for camera_code, tracker in sorted(self._camera_trackers.items())}

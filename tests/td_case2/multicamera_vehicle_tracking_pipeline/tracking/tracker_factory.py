@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import types
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any, Callable
 
@@ -41,15 +42,19 @@ def _install_lap_shim() -> None:
 class TrackerFactory:
     """Create one native tracker instance per camera code."""
 
-    def __init__(self, config: TrackingConfig, *, tracker_creator: Callable[[TrackingConfig], Any] | None = None) -> None:
+    def __init__(self, config: TrackingConfig, *, tracker_creator: Callable[..., Any] | None = None) -> None:
         self.config = config
         self._tracker_creator = tracker_creator or self._default_tracker_creator
         self._trackers: dict[str, Any] = {}
 
-    def get_or_create(self, camera_code: str) -> Any:
+    def get_or_create(self, camera_code: str, *, frame_rate: float | None = None) -> Any:
         tracker = self._trackers.get(camera_code)
         if tracker is None:
-            tracker = self._tracker_creator(self.config)
+            tracker_config = self.config if frame_rate is None else replace(self.config, frame_rate=float(frame_rate))
+            try:
+                tracker = self._tracker_creator(tracker_config, camera_code=camera_code)
+            except TypeError:
+                tracker = self._tracker_creator(tracker_config)
             self._trackers[camera_code] = tracker
         return tracker
 
@@ -65,10 +70,11 @@ class TrackerFactory:
             import supervision as sv  # type: ignore
 
             return sv.ByteTrack(
-                lost_track_buffer=max(1, int(config.track_buffer)),
-                track_activation_threshold=float(config.track_high_thresh),
-                minimum_matching_threshold=float(config.match_thresh),
-                minimum_consecutive_frames=max(1, int(config.min_confirmed_observations)),
+                track_activation_threshold=float(config.track_activation_threshold),
+                lost_track_buffer=max(1, int(config.lost_track_buffer)),
+                minimum_matching_threshold=float(config.minimum_matching_threshold),
+                frame_rate=float(config.frame_rate) if config.frame_rate is not None else 30.0,
+                minimum_consecutive_frames=max(1, int(config.minimum_consecutive_frames)),
             )
         if config.backend == "ultralytics_bytetrack":
             _install_lap_shim()

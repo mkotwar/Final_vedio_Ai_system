@@ -28,4 +28,5 @@ class DetectionPacket:
     inference_time_ms: float
     detector_model: str
     detector_device: str
+    source_fps: float | None = None
     frame: Any | None = None

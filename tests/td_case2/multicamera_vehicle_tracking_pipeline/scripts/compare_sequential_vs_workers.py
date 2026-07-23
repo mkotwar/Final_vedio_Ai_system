@@ -21,9 +21,9 @@ def main() -> None:
     sequential = _load(args.sequential_report)
     worker = _load(args.worker_report)
     comparison = {
-        "frames_processed": {
+        "frames": {
             "sequential": sequential.get("total_frames_processed"),
-            "workers": worker.get("total_frames_read"),
+            "workers": worker.get("total_frames_processed", worker.get("total_frames_read")),
         },
         "detections": {
             "sequential": sequential.get("total_detections", sequential.get("total_vehicle_detections")),
@@ -50,8 +50,32 @@ def main() -> None:
             "workers": worker.get("processing_fps"),
         },
         "errors": {
-            "sequential": sequential.get("persistence", {}).get("errors", []) if isinstance(sequential.get("persistence"), dict) else [],
+            "sequential": sequential.get("errors", []) if isinstance(sequential.get("errors"), list) else [],
             "workers": worker.get("errors", []),
+        },
+        "per_camera_unique_tracks": {
+            "sequential": {
+                camera_code: details.get("unique_local_track_ids")
+                for camera_code, details in (sequential.get("cameras", {}) or {}).items()
+            },
+            "workers": {
+                camera_code: details.get("unique_local_track_ids")
+                for camera_code, details in (worker.get("cameras", {}) or {}).items()
+            },
+        },
+        "classes": {
+            "sequential": {
+                camera_code: details.get("class_counts", {})
+                for camera_code, details in (sequential.get("cameras", {}) or {}).items()
+            },
+            "workers": {
+                camera_code: {
+                    item.get("class_name"): item.get("observation_count")
+                    for item in worker.get("completed_tracks", [])
+                    if item.get("camera_code") == camera_code
+                }
+                for camera_code in (worker.get("cameras", {}) or {})
+            },
         },
         "per_camera": {
             "sequential": sequential.get("cameras", {}),

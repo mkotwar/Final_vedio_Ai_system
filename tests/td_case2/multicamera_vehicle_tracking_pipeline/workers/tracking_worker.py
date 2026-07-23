@@ -64,14 +64,17 @@ class TrackingWorker(threading.Thread):
                     continue
                 self._validate_order(item)
                 result = self.router.route(item)
-                self.metrics.detection_packets_received += 1
-                self.metrics.track_observations_created += len(result.observations)
+                self.metrics.packets_received += 1
+                self.metrics.track_observations += len(result.observations)
                 camera_code = item.camera_code
                 self.metrics.per_camera_frames[camera_code] = self.metrics.per_camera_frames.get(camera_code, 0) + 1
                 self.metrics.per_camera_detections[camera_code] = self.metrics.per_camera_detections.get(camera_code, 0) + len(item.detections)
                 self.metrics.per_camera_track_observations[camera_code] = self.metrics.per_camera_track_observations.get(camera_code, 0) + len(result.observations)
                 self.metrics.per_camera_first_frame.setdefault(camera_code, item.frame_number)
                 self.metrics.per_camera_last_frame[camera_code] = item.frame_number
+                track_ids = {observation.local_track_id for observation in result.observations}
+                previous_ids = set(self.metrics.unique_track_ids_by_camera.get(camera_code, []))
+                self.metrics.unique_track_ids_by_camera[camera_code] = sorted(previous_ids | track_ids)
                 if self.save_sample_frames:
                     self._save_sample_frame(item, result.observations, len(result.active_tracks))
                 self._emit_tracks(camera_code, result.completed_tracks)
@@ -95,12 +98,12 @@ class TrackingWorker(threading.Thread):
 
     def _flush_camera(self, camera_code: str) -> None:
         result = self.router.flush_camera(camera_code)
-        self.metrics.camera_flush_count += 1
+        self.metrics.camera_flushes += 1
         self._emit_tracks(camera_code, result.completed_tracks)
 
     def _flush_all(self) -> None:
         result = self.router.flush_all()
-        self.metrics.camera_flush_count += 1
+        self.metrics.camera_flushes += 1
         for track in result.completed_tracks:
             self._emit_tracks(track.camera_code, [track])
 

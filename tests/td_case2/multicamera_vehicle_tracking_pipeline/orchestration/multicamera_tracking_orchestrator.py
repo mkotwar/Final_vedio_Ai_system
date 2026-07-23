@@ -192,6 +192,9 @@ class MultiCameraTrackingOrchestrator:
             completed_count = sum(1 for track in flush_result.completed_tracks if track.camera_code == camera_code)
             stats["completed_tracks"] = int(stats["completed_tracks"]) + completed_count
             stats["active_tracks_at_flush"] = active_counts_before_flush[camera_code]
+        tracker_diagnostics = self.router.diagnostics_by_camera() if hasattr(self.router, "diagnostics_by_camera") else {}
+        for camera_code, stats in camera_stats.items():
+            stats["tracking_diagnostics"] = tracker_diagnostics.get(camera_code, {})
 
         wall_runtime = time.perf_counter() - wall_started
         deduped_completed_tracks = list(finalized_tracks_by_uuid.values())
@@ -211,9 +214,19 @@ class MultiCameraTrackingOrchestrator:
                 "new_track_thresh": self.tracking_config.new_track_thresh,
                 "match_thresh": self.tracking_config.match_thresh,
                 "track_buffer": self.tracking_config.track_buffer,
+                "track_activation_threshold": self.tracking_config.track_activation_threshold,
+                "lost_track_buffer": self.tracking_config.lost_track_buffer,
+                "minimum_matching_threshold": self.tracking_config.minimum_matching_threshold,
+                "frame_rate": self.tracking_config.frame_rate,
+                "minimum_consecutive_frames": self.tracking_config.minimum_consecutive_frames,
                 "min_confirmed_observations": self.tracking_config.min_confirmed_observations,
                 "max_lost_frames": self.tracking_config.max_lost_frames,
                 "preserve_state_per_camera": self.tracking_config.preserve_state_per_camera,
+                "compatibility_mapping": {
+                    "track_high_thresh": "track_activation_threshold",
+                    "track_buffer": "lost_track_buffer",
+                    "match_thresh": "minimum_matching_threshold",
+                },
             },
             "total_frames_processed": total_frames_processed,
             "total_detections": total_detections,

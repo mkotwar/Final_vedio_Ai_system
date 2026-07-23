@@ -67,6 +67,8 @@ class WorkerSupervisorTests(unittest.TestCase):
             result = supervisor.run()
             self.assertTrue(result.shutdown_clean)
             self.assertEqual(sum(item["frames_read"] for item in result.camera_reader_metrics.values()), 4)
+            self.assertIn("shared_detection_worker", result.thread_metrics)
+            self.assertTrue(result.thread_metrics["shared_detection_worker"]["joined_successfully"])
 
 
 if __name__ == "__main__":

@@ -59,6 +59,7 @@ class DetectionWorker(threading.Thread):
                     continue
                 detection_packet = self.detector.detect(item)
                 self.metrics.frames_received += 1
+                self.metrics.frames_processed += 1
                 self.metrics.detections_produced += len(detection_packet.detections)
                 if not detection_packet.detections:
                     self.metrics.empty_detection_frames += 1

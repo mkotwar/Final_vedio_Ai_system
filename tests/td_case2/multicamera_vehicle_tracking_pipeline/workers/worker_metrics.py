@@ -20,7 +20,7 @@ class QueueMetrics:
 
     def to_dict(self) -> dict[str, int]:
         return {
-            "max_size": self.max_size,
+            "configured_max_size": self.max_size,
             "maximum_observed_size": self.maximum_observed_size,
             "put_timeouts": self.put_timeouts,
             "get_timeouts": self.get_timeouts,
@@ -68,10 +68,11 @@ class TrackedQueue:
 class CameraReaderMetrics:
     camera_code: str
     frames_read: int = 0
+    first_frame_number: int | None = None
+    last_frame_number: int | None = None
     queue_put_count: int = 0
-    queue_block_count: int = 0
-    queue_block_time_seconds: float = 0.0
-    read_errors: int = 0
+    queue_wait_seconds: float = 0.0
+    errors: int = 0
     start_time: float | None = None
     end_time: float | None = None
 
@@ -82,6 +83,7 @@ class CameraReaderMetrics:
 @dataclass(slots=True)
 class DetectionWorkerMetrics:
     frames_received: int = 0
+    frames_processed: int = 0
     detections_produced: int = 0
     empty_detection_frames: int = 0
     average_inference_time_ms: float = 0.0
@@ -96,12 +98,12 @@ class DetectionWorkerMetrics:
 
 @dataclass(slots=True)
 class TrackingWorkerMetrics:
-    detection_packets_received: int = 0
-    track_observations_created: int = 0
+    packets_received: int = 0
+    track_observations: int = 0
     completed_tracks: int = 0
     discarded_tracks: int = 0
     out_of_order_packets: int = 0
-    camera_flush_count: int = 0
+    camera_flushes: int = 0
     tracking_errors: int = 0
     per_camera_frames: dict[str, int] = field(default_factory=dict)
     per_camera_detections: dict[str, int] = field(default_factory=dict)
@@ -110,6 +112,7 @@ class TrackingWorkerMetrics:
     per_camera_discarded_tracks: dict[str, int] = field(default_factory=dict)
     per_camera_first_frame: dict[str, int] = field(default_factory=dict)
     per_camera_last_frame: dict[str, int] = field(default_factory=dict)
+    unique_track_ids_by_camera: dict[str, list[int]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -127,4 +130,14 @@ class PersistenceWorkerMetrics:
     errors: int = 0
 
     def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class ThreadLifecycleMetrics:
+    started: bool = False
+    stopped: bool = False
+    joined_successfully: bool = False
+
+    def to_dict(self) -> dict[str, bool]:
         return asdict(self)

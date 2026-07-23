@@ -14,20 +14,20 @@ class WorkerConfig:
     enabled: bool = False
     frame_queue_size: int = 20
     detection_queue_size: int = 20
-    completed_track_queue_size: int = 50
-    error_queue_size: int = 50
+    completed_track_queue_size: int = 20
+    error_queue_size: int = 20
     camera_reader_daemon: bool = False
     detection_worker_daemon: bool = False
     tracking_worker_daemon: bool = False
     persistence_worker_daemon: bool = False
-    queue_put_timeout_seconds: float = 5.0
+    queue_put_timeout_seconds: float = 2.0
     queue_get_timeout_seconds: float = 1.0
     shutdown_timeout_seconds: float = 30.0
     stop_on_camera_error: bool = False
     stop_on_detector_error: bool = True
     stop_on_tracking_error: bool = True
     stop_on_persistence_error: bool = False
-    persist_completed_tracks: bool = False
+    enable_persistence_worker: bool = False
 
     def __post_init__(self) -> None:
         for field_name in ("frame_queue_size", "detection_queue_size", "completed_track_queue_size", "error_queue_size"):
@@ -100,7 +100,7 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
         stop_on_detector_error=bool(raw.get("stop_on_detector_error", True)),
         stop_on_tracking_error=bool(raw.get("stop_on_tracking_error", True)),
         stop_on_persistence_error=bool(raw.get("stop_on_persistence_error", False)),
-        persist_completed_tracks=bool(raw.get("persist_completed_tracks", False)),
+        enable_persistence_worker=bool(raw.get("enable_persistence_worker", raw.get("persist_completed_tracks", False))),
     )
     if overrides:
         config = replace(
@@ -121,6 +121,6 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
             stop_on_detector_error=bool(overrides.get("stop_on_detector_error", config.stop_on_detector_error)),
             stop_on_tracking_error=bool(overrides.get("stop_on_tracking_error", config.stop_on_tracking_error)),
             stop_on_persistence_error=bool(overrides.get("stop_on_persistence_error", config.stop_on_persistence_error)),
-            persist_completed_tracks=bool(overrides.get("persist_completed_tracks", config.persist_completed_tracks)),
+            enable_persistence_worker=bool(overrides.get("enable_persistence_worker", overrides.get("persist_completed_tracks", config.enable_persistence_worker))),
         )
     return config

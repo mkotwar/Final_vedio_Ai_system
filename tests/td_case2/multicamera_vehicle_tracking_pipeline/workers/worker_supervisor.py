@@ -17,7 +17,7 @@ from .persistence_worker import PersistenceWorker
 from .tracking_worker import TrackingWorker
 from .worker_config import WorkerConfig
 from .worker_messages import CompletedTrackMessage, EndOfInputMessage, WorkerErrorMessage
-from .worker_metrics import TrackedQueue
+from .worker_metrics import ThreadLifecycleMetrics, TrackedQueue
 
 
 @dataclass(slots=True)
@@ -30,6 +30,7 @@ class WorkerSupervisorResult:
     tracking_worker_metrics: dict[str, object]
     persistence_worker_metrics: dict[str, object] | None
     queue_metrics: dict[str, dict[str, int]]
+    thread_metrics: dict[str, dict[str, bool]]
     shutdown_clean: bool
 
 
@@ -108,6 +109,7 @@ class WorkerSupervisor:
         )
         self.collected_tracks: list[CompletedTrackMessage] = []
         self.errors: list[WorkerErrorMessage] = []
+        self.thread_metrics: dict[str, ThreadLifecycleMetrics] = {}
 
     def run(self) -> WorkerSupervisorResult:
         workers: list[threading.Thread] = []
@@ -115,14 +117,15 @@ class WorkerSupervisor:
             workers.append(self.persistence_worker)
         workers.extend([self.tracking_worker, self.detection_worker, *self.camera_workers])
         for worker in workers:
+            self.thread_metrics[worker.name] = ThreadLifecycleMetrics(started=True)
             worker.start()
         shutdown_clean = self._monitor()
         for worker in self.camera_workers:
-            worker.join(timeout=self.worker_config.shutdown_timeout_seconds)
-        self.detection_worker.join(timeout=self.worker_config.shutdown_timeout_seconds)
-        self.tracking_worker.join(timeout=self.worker_config.shutdown_timeout_seconds)
+            self._join_worker(worker)
+        self._join_worker(self.detection_worker)
+        self._join_worker(self.tracking_worker)
         if self.persistence_worker is not None:
-            self.persistence_worker.join(timeout=self.worker_config.shutdown_timeout_seconds)
+            self._join_worker(self.persistence_worker)
         shutdown_clean = shutdown_clean and all(not worker.is_alive() for worker in workers)
         finalized_tracks = self.persistence_worker.finalized_tracks if self.persistence_worker is not None else list(self.collected_tracks)
         persistence_results = self.persistence_worker.results_by_track_uuid if self.persistence_worker is not None else {}
@@ -140,6 +143,7 @@ class WorkerSupervisor:
                 "completed_track_queue": self.completed_track_queue.metrics.to_dict(),
                 "error_queue": self.error_queue.metrics.to_dict(),
             },
+            thread_metrics={name: metrics.to_dict() for name, metrics in sorted(self.thread_metrics.items())},
             shutdown_clean=shutdown_clean,
         )
 
@@ -154,6 +158,12 @@ class WorkerSupervisor:
         if self.persistence_worker is None:
             self._drain_completed_queue()
         return True
+
+    def _join_worker(self, worker: threading.Thread) -> None:
+        worker.join(timeout=self.worker_config.shutdown_timeout_seconds)
+        metrics = self.thread_metrics.setdefault(worker.name, ThreadLifecycleMetrics())
+        metrics.stopped = not worker.is_alive()
+        metrics.joined_successfully = not worker.is_alive()
 
     def _drain_error_queue(self) -> None:
         while True:

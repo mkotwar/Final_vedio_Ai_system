@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=getattr(logging, str(args.log_level).upper(), logging.INFO), format="%(levelname)s %(name)s %(message)s")
-    worker_overrides = {"enabled": True, "persist_completed_tracks": args.persist_to_supabase or args.dry_run_persistence}
+    worker_overrides = {"enabled": True, "enable_persistence_worker": args.persist_to_supabase or args.dry_run_persistence}
     persistence_overrides = {
         "enabled": args.persist_to_supabase or args.dry_run_persistence,
         "dry_run": args.dry_run_persistence,
