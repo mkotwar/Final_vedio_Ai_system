@@ -13,6 +13,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--detection-config", required=True)
     parser.add_argument("--tracking-config", required=True)
     parser.add_argument("--persistence-config", default=None)
+    parser.add_argument("--evidence-config", default=None)
     parser.add_argument("--mode", choices=("sequential", "round_robin"), default="round_robin")
     parser.add_argument("--max-frames-per-camera", type=int, default=None)
     parser.add_argument("--model", default=None)
@@ -51,6 +52,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     logging.basicConfig(level=getattr(logging, str(args.log_level).upper(), logging.INFO), format="%(levelname)s %(name)s %(message)s")
+    persistence_backend = "disabled"
+    if args.dry_run_persistence:
+        persistence_backend = "dry_run"
+    elif args.persist_to_supabase:
+        persistence_backend = "analytics_supabase"
     detection_overrides = {
         key: value
         for key, value in {
@@ -84,6 +90,7 @@ def main() -> None:
     persistence_overrides = {
         key: value
         for key, value in {
+            "backend": persistence_backend,
             "enabled": args.persist_to_supabase or args.dry_run_persistence,
             "dry_run": args.dry_run_persistence,
             "include_discarded_tracks": args.include_discarded_tracks,
@@ -98,6 +105,7 @@ def main() -> None:
         args.detection_config,
         args.tracking_config,
         args.persistence_config,
+        args.evidence_config,
         mode=args.mode,
         max_frames_per_camera=args.max_frames_per_camera,
         detection_overrides=detection_overrides,

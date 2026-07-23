@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from ..evidence.evidence_models import TrackEvidencePackage
+
 
 TRACK_STATES = ("tentative", "active", "temporarily_lost", "completed", "discarded")
 
@@ -50,7 +52,7 @@ class LocalVehicleTrack:
     camera_name: str | None = None
     source_path: Path | None = None
     lost_frame_count: int = 0
+    evidence_package: TrackEvidencePackage | None = None
 
     def __post_init__(self) -> None:
         self.state = validate_track_state(self.state)
-

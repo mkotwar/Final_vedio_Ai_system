@@ -5,7 +5,11 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.detection.detection_models import DetectionPacket, VehicleDetection
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.evidence_config import EvidenceConfig
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.track_evidence_collector import TrackEvidenceCollector
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracker_factory import TrackerFactory
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracking_config import TrackingConfig
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.workers.tracking_worker import TrackingWorker
@@ -35,7 +39,7 @@ def _packet(camera_code: str, frame_number: int) -> DetectionPacket:
         inference_time_ms=1.0,
         detector_model="fake.pt",
         detector_device="cpu",
-        frame=None,
+        frame=np.full((64, 64, 3), 127, dtype=np.uint8),
     )
 
 
@@ -55,6 +59,7 @@ class TrackingWorkerTests(unittest.TestCase):
             error_queue=error_queue,
             shutdown_event=threading.Event(),
             worker_config=WorkerConfig(queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+            expected_camera_codes=("CAM_001", "CAM_002"),
         )
         detection_queue.put(_packet("CAM_001", 0), timeout=0.1)
         detection_queue.put(_packet("CAM_002", 0), timeout=0.1)
@@ -68,6 +73,65 @@ class TrackingWorkerTests(unittest.TestCase):
         completed = [item for item in items if isinstance(item, CompletedTrackMessage)]
         self.assertTrue(any(item.track.track_uuid == "RUN_TEST:CAM_001:TRACK_1" for item in completed))
         self.assertTrue(any(item.track.track_uuid == "RUN_TEST:CAM_002:TRACK_1" for item in completed))
+
+    def test_unknown_camera_packet_is_rejected(self) -> None:
+        detection_queue = TrackedQueue(20)
+        completed_queue = TrackedQueue(20)
+        error_queue = TrackedQueue(20)
+        router_config = TrackingConfig(min_confirmed_observations=1)
+        from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.camera_detection_router import CameraDetectionRouter
+
+        router = CameraDetectionRouter(
+            router_config,
+            tracker_factory=TrackerFactory(router_config, tracker_creator=lambda config: _SharedIdTracker()),
+            run_id="RUN_TEST",
+            allowed_camera_codes=("CAM_001",),
+        )
+        worker = TrackingWorker(
+            router=router,
+            detection_queue=detection_queue,
+            completed_track_queue=completed_queue,
+            error_queue=error_queue,
+            shutdown_event=threading.Event(),
+            worker_config=WorkerConfig(queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+            expected_camera_codes=("CAM_001",),
+        )
+        detection_queue.put(_packet("CAM_999", 0), timeout=0.1)
+        worker.start()
+        worker.join(5)
+        self.assertFalse(error_queue.empty())
+
+    def test_attaches_evidence_package_when_enabled(self) -> None:
+        detection_queue = TrackedQueue(20)
+        completed_queue = TrackedQueue(20)
+        error_queue = TrackedQueue(20)
+        router_config = TrackingConfig(min_confirmed_observations=1)
+        from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.camera_detection_router import CameraDetectionRouter
+
+        router = CameraDetectionRouter(router_config, tracker_factory=TrackerFactory(router_config, tracker_creator=lambda config: _SharedIdTracker()), run_id="RUN_TEST")
+        worker = TrackingWorker(
+            router=router,
+            detection_queue=detection_queue,
+            completed_track_queue=completed_queue,
+            error_queue=error_queue,
+            shutdown_event=threading.Event(),
+            worker_config=WorkerConfig(queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+            expected_camera_codes=("CAM_001",),
+            evidence_collector=TrackEvidenceCollector(
+                EvidenceConfig(enabled=True, minimum_crop_width=2, minimum_crop_height=2, save_final_selected_crops=False),
+                run_id="RUN_TEST",
+            ),
+        )
+        detection_queue.put(_packet("CAM_001", 0), timeout=0.1)
+        detection_queue.put(EndOfInputMessage(), timeout=0.1)
+        worker.start()
+        worker.join(5)
+        items = []
+        while not completed_queue.empty():
+            items.append(completed_queue.get_nowait())
+        completed = [item for item in items if isinstance(item, CompletedTrackMessage)]
+        self.assertEqual(len(completed), 1)
+        self.assertIsNotNone(completed[0].track.evidence_package)
 
 
 if __name__ == "__main__":

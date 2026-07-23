@@ -7,12 +7,13 @@ from typing import Iterable
 from ..database.models import CameraRecord, VehicleObservationRecord, VehicleTrackRecord
 from ..database.repository import RepositoryConstraintError, VehicleRepository
 from ..ingestion.camera_config import CameraConfig
+from ..persistence.vehicle_class_mapping import RUNTIME_VEHICLE_CLASSES, is_supported_vehicle_class, normalize_runtime_vehicle_class
 from ..tracking.tracking_models import LocalVehicleTrack, TrackObservation
 from .persistence_config import PersistenceConfig
 from .persistence_models import PersistenceRunMetrics, TrackPersistenceResult
 
 
-SUPPORTED_VEHICLE_CLASSES = {"car", "bus", "truck", "motorcycle", "unknown"}
+SUPPORTED_VEHICLE_CLASSES = set(RUNTIME_VEHICLE_CLASSES)
 
 
 class PersistenceValidationError(ValueError):
@@ -80,10 +81,13 @@ class TrackingPersistenceService:
         if track.camera_code not in self.camera_id_by_code:
             raise PersistenceValidationError(f"Unknown camera_code for persistence: {track.camera_code}")
         camera_id = self.camera_id_by_code[track.camera_code]
+        runtime_class_name = normalize_runtime_vehicle_class(track.class_name)
+        if runtime_class_name is None:
+            raise PersistenceValidationError(f"Unsupported vehicle class: {track.class_name}")
         track_record = VehicleTrackRecord(
             camera_id=camera_id,
             local_track_id=track.local_track_id,
-            vehicle_class=track.class_name,
+            vehicle_class=runtime_class_name,
             track_uuid=track.track_uuid,
             first_seen_at=track.first_seen_at,
             last_seen_at=track.last_seen_at,
@@ -161,7 +165,7 @@ class TrackingPersistenceService:
             raise PersistenceValidationError(f"camera_code is not known: {track.camera_code}")
         if int(track.local_track_id) < 0:
             raise PersistenceValidationError("local_track_id must be non-negative.")
-        if track.class_name not in SUPPORTED_VEHICLE_CLASSES:
+        if not is_supported_vehicle_class(track.class_name):
             raise PersistenceValidationError(f"Unsupported vehicle class: {track.class_name}")
         if track.first_seen_at is None or track.last_seen_at is None:
             raise PersistenceValidationError("Track timestamps must be present.")

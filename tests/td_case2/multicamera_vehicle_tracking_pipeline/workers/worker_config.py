@@ -20,6 +20,7 @@ class WorkerConfig:
     detection_worker_daemon: bool = False
     tracking_worker_daemon: bool = False
     persistence_worker_daemon: bool = False
+    vehicle_colour_worker_daemon: bool = False
     queue_put_timeout_seconds: float = 2.0
     queue_get_timeout_seconds: float = 1.0
     shutdown_timeout_seconds: float = 30.0
@@ -28,9 +29,16 @@ class WorkerConfig:
     stop_on_tracking_error: bool = True
     stop_on_persistence_error: bool = False
     enable_persistence_worker: bool = False
+    enable_vehicle_colour_worker: bool = False
+    vehicle_colour_queue_size: int = 20
+    vehicle_colour_worker_count: int = 1
+    enable_anpr_worker: bool = False
+    anpr_queue_size: int = 20
+    anpr_worker_count: int = 1
+    anpr_worker_daemon: bool = False
 
     def __post_init__(self) -> None:
-        for field_name in ("frame_queue_size", "detection_queue_size", "completed_track_queue_size", "error_queue_size"):
+        for field_name in ("frame_queue_size", "detection_queue_size", "completed_track_queue_size", "error_queue_size", "vehicle_colour_queue_size", "vehicle_colour_worker_count", "anpr_queue_size", "anpr_worker_count"):
             if int(getattr(self, field_name)) <= 0:
                 raise WorkerConfigError(f"{field_name} must be positive.")
         for field_name in ("queue_put_timeout_seconds", "queue_get_timeout_seconds", "shutdown_timeout_seconds"):
@@ -93,6 +101,7 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
         detection_worker_daemon=bool(raw.get("detection_worker_daemon", False)),
         tracking_worker_daemon=bool(raw.get("tracking_worker_daemon", False)),
         persistence_worker_daemon=bool(raw.get("persistence_worker_daemon", False)),
+        vehicle_colour_worker_daemon=bool(raw.get("vehicle_colour_worker_daemon", False)),
         queue_put_timeout_seconds=float(raw.get("queue_put_timeout_seconds", 5.0)),
         queue_get_timeout_seconds=float(raw.get("queue_get_timeout_seconds", 1.0)),
         shutdown_timeout_seconds=float(raw.get("shutdown_timeout_seconds", 30.0)),
@@ -101,6 +110,13 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
         stop_on_tracking_error=bool(raw.get("stop_on_tracking_error", True)),
         stop_on_persistence_error=bool(raw.get("stop_on_persistence_error", False)),
         enable_persistence_worker=bool(raw.get("enable_persistence_worker", raw.get("persist_completed_tracks", False))),
+        enable_vehicle_colour_worker=bool(raw.get("enable_vehicle_colour_worker", False)),
+        vehicle_colour_queue_size=int(raw.get("vehicle_colour_queue_size", 20)),
+        vehicle_colour_worker_count=int(raw.get("vehicle_colour_worker_count", 1)),
+        enable_anpr_worker=bool(raw.get("enable_anpr_worker", False)),
+        anpr_queue_size=int(raw.get("anpr_queue_size", 20)),
+        anpr_worker_count=int(raw.get("anpr_worker_count", 1)),
+        anpr_worker_daemon=bool(raw.get("anpr_worker_daemon", False)),
     )
     if overrides:
         config = replace(
@@ -114,6 +130,7 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
             detection_worker_daemon=bool(overrides.get("detection_worker_daemon", config.detection_worker_daemon)),
             tracking_worker_daemon=bool(overrides.get("tracking_worker_daemon", config.tracking_worker_daemon)),
             persistence_worker_daemon=bool(overrides.get("persistence_worker_daemon", config.persistence_worker_daemon)),
+            vehicle_colour_worker_daemon=bool(overrides.get("vehicle_colour_worker_daemon", config.vehicle_colour_worker_daemon)),
             queue_put_timeout_seconds=float(overrides.get("queue_put_timeout_seconds", config.queue_put_timeout_seconds)),
             queue_get_timeout_seconds=float(overrides.get("queue_get_timeout_seconds", config.queue_get_timeout_seconds)),
             shutdown_timeout_seconds=float(overrides.get("shutdown_timeout_seconds", config.shutdown_timeout_seconds)),
@@ -122,5 +139,12 @@ def load_worker_config(config_path: str | Path, *, overrides: dict[str, Any] | N
             stop_on_tracking_error=bool(overrides.get("stop_on_tracking_error", config.stop_on_tracking_error)),
             stop_on_persistence_error=bool(overrides.get("stop_on_persistence_error", config.stop_on_persistence_error)),
             enable_persistence_worker=bool(overrides.get("enable_persistence_worker", overrides.get("persist_completed_tracks", config.enable_persistence_worker))),
+            enable_vehicle_colour_worker=bool(overrides.get("enable_vehicle_colour_worker", config.enable_vehicle_colour_worker)),
+            vehicle_colour_queue_size=int(overrides.get("vehicle_colour_queue_size", config.vehicle_colour_queue_size)),
+            vehicle_colour_worker_count=int(overrides.get("vehicle_colour_worker_count", config.vehicle_colour_worker_count)),
+            enable_anpr_worker=bool(overrides.get("enable_anpr_worker", config.enable_anpr_worker)),
+            anpr_queue_size=int(overrides.get("anpr_queue_size", config.anpr_queue_size)),
+            anpr_worker_count=int(overrides.get("anpr_worker_count", config.anpr_worker_count)),
+            anpr_worker_daemon=bool(overrides.get("anpr_worker_daemon", config.anpr_worker_daemon)),
         )
     return config

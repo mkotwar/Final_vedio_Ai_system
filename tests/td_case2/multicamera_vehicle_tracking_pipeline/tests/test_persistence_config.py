@@ -28,6 +28,7 @@ class PersistenceConfigTests(unittest.TestCase):
             path = Path(tmpdir) / "persistence.yaml"
             path.write_text(
                 "persistence:\n"
+                "  backend: analytics_supabase\n"
                 "  enabled: true\n"
                 "  observation_mode: sampled\n"
                 "  observation_batch_size: 25\n"
@@ -36,9 +37,26 @@ class PersistenceConfigTests(unittest.TestCase):
             )
             config = load_persistence_config(path)
             self.assertTrue(config.enabled)
+            self.assertEqual(config.backend, "analytics_supabase")
             self.assertEqual(config.observation_mode, "sampled")
             self.assertEqual(config.observation_batch_size, 25)
             self.assertEqual(config.observation_sample_every_n, 3)
+
+    def test_enabled_without_backend_defaults_to_old_public(self) -> None:
+        config = PersistenceConfig(enabled=True)
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.backend, "old_public")
+        self.assertFalse(config.dry_run)
+
+    def test_enabled_with_dry_run_defaults_to_dry_run_backend(self) -> None:
+        config = PersistenceConfig(enabled=True, dry_run=True)
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.backend, "dry_run")
+        self.assertTrue(config.dry_run)
+
+    def test_track_media_roles_are_normalized_and_deduplicated(self) -> None:
+        config = PersistenceConfig(track_media_roles=("best_overall", "BEST_OVERALL", "first"), persist_track_media=True)
+        self.assertEqual(config.track_media_roles, ("BEST_OVERALL", "FIRST"))
 
 
 if __name__ == "__main__":

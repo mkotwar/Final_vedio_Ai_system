@@ -81,12 +81,20 @@ class SharedVehicleDetectorTests(unittest.TestCase):
         detector = SharedVehicleDetector(
             DetectionConfig(model_path="yolov8n.pt"),
             model=_FakeModel(
-                {0: "car", 1: "person", 2: "motorbike"},
-                [_FakeResult(_FakeBoxes([[1, 2, 10, 12], [3, 4, 14, 18], [5, 6, 15, 20]], [0, 1, 2], [0.9, 0.95, 0.8]))],
+                {0: "car", 1: "person", 2: "motorbike", 3: "3Wheeler"},
+                [
+                    _FakeResult(
+                        _FakeBoxes(
+                            [[1, 2, 10, 12], [3, 4, 14, 18], [5, 6, 15, 20], [8, 9, 18, 22]],
+                            [0, 1, 2, 3],
+                            [0.9, 0.95, 0.8, 0.77],
+                        )
+                    )
+                ],
             ),
         )
         packet = detector.detect(self._frame_packet())
-        self.assertEqual([item.class_name for item in packet.detections], ["car", "motorcycle"])
+        self.assertEqual([item.class_name for item in packet.detections], ["car", "motorcycle", "3wheeler"])
 
     def test_no_detection_frame_works(self) -> None:
         detector = SharedVehicleDetector(DetectionConfig(model_path="yolov8n.pt"), model=_FakeModel({0: "car"}, []))

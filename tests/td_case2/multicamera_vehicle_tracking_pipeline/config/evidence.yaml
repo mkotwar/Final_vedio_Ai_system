@@ -1,0 +1,25 @@
+evidence:
+  enabled: true
+
+  output_root: artifacts
+
+  collect_first: true
+  collect_middle: true
+  collect_last: true
+  collect_highest_confidence: true
+  collect_largest: true
+  collect_sharpest: true
+  collect_best_overall: true
+
+  max_candidates_per_track: 7
+
+  minimum_crop_width: 40
+  minimum_crop_height: 40
+  minimum_detection_confidence: 0.20
+
+  bbox_padding_ratio: 0.05
+
+  save_candidate_crops: false
+  save_final_selected_crops: true
+
+  jpeg_quality: 90

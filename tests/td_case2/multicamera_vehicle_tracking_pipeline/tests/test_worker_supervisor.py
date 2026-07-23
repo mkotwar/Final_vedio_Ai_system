@@ -70,6 +70,31 @@ class WorkerSupervisorTests(unittest.TestCase):
             self.assertIn("shared_detection_worker", result.thread_metrics)
             self.assertTrue(result.thread_metrics["shared_detection_worker"]["joined_successfully"])
 
+    def test_dynamic_reader_count_ignores_disabled_cameras(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path1 = Path(tmpdir) / "cam1.avi"
+            path2 = Path(tmpdir) / "cam2.avi"
+            path3 = Path(tmpdir) / "cam3.avi"
+            _write_video(path1, 1)
+            _write_video(path2, 1)
+            _write_video(path3, 1)
+            configs = [
+                CameraConfig("CAM_001", "Cam1", path1, True, datetime(2026, 7, 22, 10, 0, 0)),
+                CameraConfig("CAM_002", "Cam2", path2, False, datetime(2026, 7, 22, 10, 0, 0)),
+                CameraConfig("CAM_003", "Cam3", path3, True, datetime(2026, 7, 22, 10, 0, 0)),
+            ]
+            supervisor = WorkerSupervisor(
+                camera_configs=[config for config in configs if config.enabled],
+                detector=_FakeDetector(),
+                tracking_config=TrackingConfig(min_confirmed_observations=1),
+                worker_config=WorkerConfig(enabled=True, queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+                max_frames_per_camera=1,
+                run_id="RUN_TEST",
+            )
+            result = supervisor.run()
+            self.assertEqual(result.runtime_worker_counts["camera_reader_count"], 2)
+            self.assertEqual(result.runtime_worker_counts["joined_reader_count"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

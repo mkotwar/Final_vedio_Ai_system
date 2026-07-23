@@ -1,0 +1,59 @@
+anpr:
+  enabled: false
+
+  plate_detector:
+    backend: yolo
+    model_path: null
+    model_path_env: PLATE_DETECTOR_MODEL_PATH
+    device: auto
+    confidence_threshold: 0.25
+    iou_threshold: 0.45
+    maximum_detections_per_vehicle_crop: 3
+
+  vehicle_evidence_roles:
+    - HIGHEST_CONFIDENCE
+    - SHARPEST
+    - BEST_OVERALL
+    - LARGEST
+    - MIDDLE
+    - FIRST
+    - LAST
+
+  maximum_vehicle_crops_per_track: 5
+
+  plate_selection:
+    minimum_width: 30
+    minimum_height: 10
+    minimum_area: 300
+    minimum_aspect_ratio: 1.5
+    maximum_aspect_ratio: 8.0
+    confidence_weight: 0.35
+    sharpness_weight: 0.30
+    size_weight: 0.20
+    aspect_ratio_weight: 0.10
+    edge_penalty_weight: 0.05
+
+  ocr:
+    backend: florence
+    minimum_confidence: 0.50
+    maximum_retries: 1
+    retry_with_preprocessing: true
+    fallback_to_other_plate_candidates: true
+    maximum_plate_candidates_for_ocr: 3
+    task_prompt: <OCR>
+
+  validation:
+    country_profile: INDIA
+    preserve_raw_text: true
+    minimum_normalized_length: 6
+    maximum_normalized_length: 12
+    allow_unverified_result: true
+    persist_only_verified_as_primary: true
+
+  media:
+    save_plate_crops: true
+    save_preprocessed_plate_crops: false
+    artifact_subdirectory: plate_evidence
+
+  persist_result: true
+  fail_pipeline_on_error: false

@@ -1,14 +1,13 @@
 """Persistence helpers for optional track writes into the simplified Supabase schema."""
 
 from .persistence_config import PersistenceConfig, PersistenceConfigError, load_persistence_config
-from .persistence_models import PersistenceRunMetrics, TrackPersistenceResult
-from .tracking_persistence_service import TrackingPersistenceService
+from .persistence_models import PersistenceRunMetrics, TrackMediaRecord, TrackPersistenceResult
 
 __all__ = [
     "PersistenceConfig",
     "PersistenceConfigError",
     "PersistenceRunMetrics",
+    "TrackMediaRecord",
     "TrackPersistenceResult",
-    "TrackingPersistenceService",
     "load_persistence_config",
 ]

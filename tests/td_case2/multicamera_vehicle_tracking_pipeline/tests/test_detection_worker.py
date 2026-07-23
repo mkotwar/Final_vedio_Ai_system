@@ -48,7 +48,7 @@ class DetectionWorkerTests(unittest.TestCase):
         detector = _FakeDetector()
         worker = DetectionWorker(
             detector=detector,
-            camera_count=1,
+            expected_camera_codes={"CAM_001"},
             frame_queue=frame_queue,
             detection_queue=detection_queue,
             error_queue=error_queue,
@@ -69,6 +69,47 @@ class DetectionWorkerTests(unittest.TestCase):
         self.assertEqual(first.camera_code, "CAM_001")
         self.assertIsInstance(second, EndOfCameraMessage)
         self.assertIsInstance(third, EndOfInputMessage)
+
+    def test_duplicate_end_message_is_ignored_safely(self) -> None:
+        frame_queue = TrackedQueue(10)
+        detection_queue = TrackedQueue(10)
+        error_queue = TrackedQueue(10)
+        worker = DetectionWorker(
+            detector=_FakeDetector(),
+            expected_camera_codes={"CAM_001"},
+            frame_queue=frame_queue,
+            detection_queue=detection_queue,
+            error_queue=error_queue,
+            shutdown_event=threading.Event(),
+            worker_config=WorkerConfig(queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+        )
+        frame_queue.put(EndOfCameraMessage("CAM_001"), timeout=0.1)
+        frame_queue.put(EndOfCameraMessage("CAM_001"), timeout=0.1)
+        worker.start()
+        worker.join(5)
+        items = []
+        while not detection_queue.empty():
+            items.append(detection_queue.get_nowait())
+        self.assertEqual(sum(1 for item in items if isinstance(item, EndOfCameraMessage)), 1)
+        self.assertEqual(sum(1 for item in items if isinstance(item, EndOfInputMessage)), 1)
+
+    def test_unknown_end_message_camera_is_reported(self) -> None:
+        frame_queue = TrackedQueue(10)
+        detection_queue = TrackedQueue(10)
+        error_queue = TrackedQueue(10)
+        worker = DetectionWorker(
+            detector=_FakeDetector(),
+            expected_camera_codes={"CAM_001"},
+            frame_queue=frame_queue,
+            detection_queue=detection_queue,
+            error_queue=error_queue,
+            shutdown_event=threading.Event(),
+            worker_config=WorkerConfig(queue_put_timeout_seconds=0.1, queue_get_timeout_seconds=0.1),
+        )
+        frame_queue.put(EndOfCameraMessage("CAM_999"), timeout=0.1)
+        worker.start()
+        worker.join(5)
+        self.assertFalse(error_queue.empty())
 
 
 if __name__ == "__main__":

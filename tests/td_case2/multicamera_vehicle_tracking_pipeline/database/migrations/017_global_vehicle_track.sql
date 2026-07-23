@@ -1,0 +1,20 @@
+create table if not exists analytics.global_vehicle_track (
+    id uuid primary key default gen_random_uuid(),
+    global_vehicle_id uuid not null,
+    vehicle_track_id uuid not null,
+    association_score numeric,
+    association_method varchar(100),
+    association_status varchar(30),
+    is_current boolean not null default true,
+    attached_at timestamptz not null default now(),
+    detached_at timestamptz,
+    metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint fk_global_vehicle_track_global_vehicle foreign key (global_vehicle_id) references analytics.global_vehicle(id),
+    constraint fk_global_vehicle_track_vehicle_track foreign key (vehicle_track_id) references analytics.vehicle_track(id),
+    constraint uq_global_vehicle_track_pair unique (global_vehicle_id, vehicle_track_id),
+    constraint chk_global_vehicle_track_association_score check (association_score is null or (association_score >= 0 and association_score <= 1)),
+    constraint chk_global_vehicle_track_status check (association_status is null or association_status in ('CANDIDATE', 'PROBABLE', 'CONFIRMED', 'AMBIGUOUS', 'REJECTED', 'DETACHED')),
+    constraint chk_global_vehicle_track_time_range check (detached_at is null or attached_at <= detached_at)
+);

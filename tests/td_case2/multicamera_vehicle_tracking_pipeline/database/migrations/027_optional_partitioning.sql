@@ -1,0 +1,7 @@
+-- Optional production partitioning template.
+-- Apply only when ingestion volume justifies range partitioning by observed_at.
+-- Example approach:
+-- 1. Create a partitioned replacement for analytics.track_observation.
+-- 2. Partition by RANGE (observed_at).
+-- 3. Start with monthly partitions, not daily partitions.
+-- 4. Migrate data in a controlled maintenance window.

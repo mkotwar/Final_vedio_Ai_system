@@ -5,9 +5,9 @@ import threading
 import time
 import traceback
 
-from ..persistence.tracking_persistence_service import TrackingPersistenceService
+from ..persistence.persistence_service_protocol import PersistenceServiceProtocol
 from .worker_config import WorkerConfig
-from .worker_messages import CompletedTrackMessage, EndOfInputMessage, WorkerErrorMessage
+from .worker_messages import AnprJobMessage, CompletedTrackMessage, EndOfInputMessage, VehicleColourJobMessage, WorkerErrorMessage
 from .worker_metrics import PersistenceWorkerMetrics, TrackedQueue
 
 
@@ -15,11 +15,13 @@ class PersistenceWorker(threading.Thread):
     def __init__(
         self,
         *,
-        persistence_service: TrackingPersistenceService,
+        persistence_service: PersistenceServiceProtocol,
         completed_track_queue: TrackedQueue,
         error_queue: TrackedQueue,
         shutdown_event: threading.Event,
         worker_config: WorkerConfig,
+        vehicle_colour_queue: TrackedQueue | None = None,
+        anpr_queue: TrackedQueue | None = None,
     ) -> None:
         super().__init__(name="persistence_worker", daemon=worker_config.persistence_worker_daemon)
         self.persistence_service = persistence_service
@@ -27,6 +29,8 @@ class PersistenceWorker(threading.Thread):
         self.error_queue = error_queue
         self.shutdown_event = shutdown_event
         self.worker_config = worker_config
+        self.vehicle_colour_queue = vehicle_colour_queue
+        self.anpr_queue = anpr_queue
         self.metrics = PersistenceWorkerMetrics()
         self.finalized_tracks: list[CompletedTrackMessage] = []
         self.results_by_track_uuid: dict[str, object] = {}
@@ -50,6 +54,32 @@ class PersistenceWorker(threading.Thread):
                 result = self.persistence_service.save_completed_track(item.track)
                 self.metrics.database_time_seconds += time.perf_counter() - started
                 self.results_by_track_uuid[item.track.track_uuid] = result
+                if (
+                    self.vehicle_colour_queue is not None
+                    and result.status in {"inserted", "already_exists", "dry_run"}
+                    and result.database_track_id is not None
+                ):
+                    self.vehicle_colour_queue.put(
+                        VehicleColourJobMessage(
+                            camera_code=item.camera_code,
+                            track=item.track,
+                            persistence_result=result,
+                        ),
+                        timeout=self.worker_config.queue_put_timeout_seconds,
+                    )
+                if (
+                    self.anpr_queue is not None
+                    and result.status in {"inserted", "already_exists", "dry_run"}
+                    and result.database_track_id is not None
+                ):
+                    self.anpr_queue.put(
+                        AnprJobMessage(
+                            camera_code=item.camera_code,
+                            track=item.track,
+                            persistence_result=result,
+                        ),
+                        timeout=self.worker_config.queue_put_timeout_seconds,
+                    )
                 if result.status == "inserted":
                     self.metrics.tracks_inserted += 1
                     self.metrics.observations_written += result.observations_written

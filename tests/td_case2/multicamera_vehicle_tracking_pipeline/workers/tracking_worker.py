@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import queue
 import threading
 import traceback
@@ -7,6 +8,7 @@ from pathlib import Path
 
 import cv2
 
+from ..evidence.track_evidence_collector import TrackEvidenceCollector
 from ..detection.detection_models import DetectionPacket
 from ..tracking.camera_detection_router import CameraDetectionRouter
 from ..tracking.tracking_models import LocalVehicleTrack, TrackObservation
@@ -25,6 +27,8 @@ class TrackingWorker(threading.Thread):
         error_queue: TrackedQueue,
         shutdown_event: threading.Event,
         worker_config: WorkerConfig,
+        expected_camera_codes: Iterable[str],
+        evidence_collector: TrackEvidenceCollector | None = None,
         save_sample_frames: bool = False,
         sample_frame_limit_per_camera: int = 1,
         sample_output_dir: str | Path | None = None,
@@ -40,9 +44,13 @@ class TrackingWorker(threading.Thread):
         self.sample_frame_limit_per_camera = sample_frame_limit_per_camera
         self.sample_output_dir = Path(sample_output_dir) if sample_output_dir is not None else None
         self.metrics = TrackingWorkerMetrics()
+        self.evidence_collector = evidence_collector
+        self.expected_camera_codes = tuple(expected_camera_codes)
+        self._expected_camera_code_set = set(self.expected_camera_codes)
         self._last_frame_number_by_camera: dict[str, int] = {}
         self._emitted_track_uuids: set[str] = set()
         self._sample_counts: dict[str, int] = {}
+        self._flushed_camera_codes: set[str] = set()
 
     def run(self) -> None:
         try:
@@ -62,8 +70,12 @@ class TrackingWorker(threading.Thread):
                     break
                 if not isinstance(item, DetectionPacket):
                     continue
+                if item.camera_code not in self._expected_camera_code_set:
+                    raise ValueError(f"Detection packet received for unknown or disabled camera: {item.camera_code}")
                 self._validate_order(item)
                 result = self.router.route(item)
+                if self.evidence_collector is not None:
+                    self.evidence_collector.update(item, result.observations)
                 self.metrics.packets_received += 1
                 self.metrics.track_observations += len(result.observations)
                 camera_code = item.camera_code
@@ -97,21 +109,28 @@ class TrackingWorker(threading.Thread):
         self._last_frame_number_by_camera[packet.camera_code] = packet.frame_number
 
     def _flush_camera(self, camera_code: str) -> None:
+        if camera_code not in self._expected_camera_code_set:
+            raise ValueError(f"Flush requested for unknown or disabled camera: {camera_code}")
+        if camera_code in self._flushed_camera_codes:
+            return
         result = self.router.flush_camera(camera_code)
         self.metrics.camera_flushes += 1
+        self._flushed_camera_codes.add(camera_code)
         self._emit_tracks(camera_code, result.completed_tracks)
+        if self.evidence_collector is not None:
+            self.evidence_collector.drop_camera(camera_code)
 
     def _flush_all(self) -> None:
-        result = self.router.flush_all()
-        self.metrics.camera_flushes += 1
-        for track in result.completed_tracks:
-            self._emit_tracks(track.camera_code, [track])
+        for camera_code in self.expected_camera_codes:
+            self._flush_camera(camera_code)
 
     def _emit_tracks(self, camera_code: str, tracks: list[LocalVehicleTrack]) -> None:
         for track in tracks:
             if track.track_uuid in self._emitted_track_uuids:
                 continue
             self._emitted_track_uuids.add(track.track_uuid)
+            if self.evidence_collector is not None:
+                track.evidence_package = self.evidence_collector.finalize_track(track)
             if track.state == "completed":
                 self.metrics.completed_tracks += 1
                 self.metrics.per_camera_completed_tracks[camera_code] = self.metrics.per_camera_completed_tracks.get(camera_code, 0) + 1

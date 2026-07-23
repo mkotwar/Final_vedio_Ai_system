@@ -7,6 +7,7 @@ vehicle_detector:
   iou_threshold: 0.45
   image_size: 640
   allowed_classes:
+    - 3wheeler
     - car
     - bus
     - truck

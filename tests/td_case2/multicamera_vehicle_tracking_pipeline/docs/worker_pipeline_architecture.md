@@ -17,6 +17,15 @@
 
 All queues are bounded and use blocking puts with timeouts. No frame dropping is used for the local-video worker path.
 
+## Fixed-Assumption Audit
+
+- `config/cameras.yaml` previously exposed only two example cameras. It now provides a five-camera local test layout using valid project video paths so worker scaling can be validated from configuration.
+- `workers/detection_worker.py` previously stopped on `len(ended_cameras) == camera_count`. It now validates an expected camera-code set and emits final input completion only after every expected camera code ends.
+- `workers/tracking_worker.py` previously accepted any camera code that arrived and could flush the same camera more than once. It now validates expected camera codes and tracks flushed cameras explicitly.
+- `workers/worker_supervisor.py` already created readers dynamically, but now also records dynamic reader-count shutdown metrics instead of relying on a fixed known set.
+- `orchestration/worker_multicamera_tracking_orchestrator.py` previously ran all enabled cameras without filter support and reported only one camera count. It now records configured, enabled, and disabled counts separately and supports config-backed camera selection filters.
+- `scripts/validate_worker_multicamera_tracking.py` previously had no camera filter flags. It now supports `--camera-code`, `--camera-codes`, and `--camera-limit` without inventing cameras outside `cameras.yaml`.
+
 ## Packet flow
 
 1. each camera reader opens its own `CameraSource`

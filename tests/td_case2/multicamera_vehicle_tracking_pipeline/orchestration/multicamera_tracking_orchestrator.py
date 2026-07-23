@@ -10,16 +10,19 @@ from pathlib import Path
 
 import cv2
 
-from ..database.client import create_backend_client
-from ..database.config import DatabaseConfig, DatabaseConfigError
-from ..database.repository import SimpleVehicleRepository, SupabaseVehicleRepository, VehicleRepository
+from ..database.repository import VehicleRepository
 from ..detection.detection_config import detection_overrides_from_env, load_detection_config
 from ..detection.vehicle_detector import SharedVehicleDetector
+from ..evidence.evidence_config import EvidenceConfig, load_evidence_config
+from ..evidence.track_evidence_collector import TrackEvidenceCollector
 from ..ingestion.multi_camera_reader import MultiCameraReader
 from ..orchestration.multi_camera_orchestrator import MultiCameraOrchestrator
+from ..persistence.analytics_database_client import AnalyticsDatabaseClient
+from ..persistence.persistence_backend_factory import build_persistence_service
 from ..persistence.persistence_config import PersistenceConfig, load_persistence_config, persistence_overrides_from_env
+from ..persistence.persistence_service_protocol import PersistenceServiceProtocol
 from ..persistence.persistence_models import TrackPersistenceResult
-from ..persistence.tracking_persistence_service import TrackingPersistenceService
+from ..persistence.vehicle_class_mapping import normalize_vehicle_class
 from ..tracking.annotation import annotate_tracking_frame
 from ..tracking.camera_detection_router import CameraDetectionRouter
 from ..tracking.tracking_config import TrackingConfig, load_tracking_config, tracking_overrides_from_env
@@ -41,6 +44,7 @@ class MultiCameraTrackingOrchestrator:
         detection_config_path: str | Path,
         tracking_config_path: str | Path,
         persistence_config_path: str | Path | None = None,
+        evidence_config_path: str | Path | None = None,
         *,
         mode: str = "round_robin",
         max_frames_per_camera: int | None = None,
@@ -50,9 +54,13 @@ class MultiCameraTrackingOrchestrator:
         detector: SharedVehicleDetector | None = None,
         router: CameraDetectionRouter | None = None,
         repository: VehicleRepository | None = None,
+        analytics_client: AnalyticsDatabaseClient | None = None,
+        persistence_service: PersistenceServiceProtocol | None = None,
         run_id: str | None = None,
     ) -> None:
         self.camera_orchestrator = MultiCameraOrchestrator(camera_config_path, mode=mode, max_frames_per_camera=max_frames_per_camera)
+        self.camera_config_path = Path(camera_config_path).expanduser().resolve()
+        self.evidence_config_path = Path(evidence_config_path).expanduser().resolve() if evidence_config_path is not None else self.camera_config_path.parent / "evidence.yaml"
         merged_detection_overrides = detection_overrides_from_env()
         if detection_overrides:
             merged_detection_overrides.update(detection_overrides)
@@ -69,11 +77,13 @@ class MultiCameraTrackingOrchestrator:
             if persistence_config_path is not None
             else PersistenceConfig(**merged_persistence_overrides) if merged_persistence_overrides else PersistenceConfig()
         )
+        self.evidence_config = load_evidence_config(self.evidence_config_path) if self.evidence_config_path.exists() else EvidenceConfig()
         self.detector = detector or SharedVehicleDetector(self.detection_config)
         self.run_id = run_id or f"RUN_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         self.router = router or CameraDetectionRouter(self.tracking_config, run_id=self.run_id)
         self.repository = repository
-        self.persistence_service: TrackingPersistenceService | None = None
+        self.analytics_client = analytics_client
+        self.persistence_service: PersistenceServiceProtocol | None = persistence_service
 
     def run(
         self,
@@ -88,7 +98,7 @@ class MultiCameraTrackingOrchestrator:
         persistence_results_by_uuid: dict[str, TrackPersistenceResult] = {}
         finalized_tracks_by_uuid: dict[str, LocalVehicleTrack] = {}
         if self.persistence_config.enabled:
-            self.persistence_service = TrackingPersistenceService(self._build_repository(), self.persistence_config)
+            self.persistence_service = self.persistence_service or self._build_persistence_service()
             if self.persistence_config.sync_cameras:
                 self.persistence_service.sync_cameras(camera_configs)
         reader = self.camera_orchestrator._build_reader(camera_configs) if hasattr(self.camera_orchestrator, "_build_reader") else MultiCameraReader(
@@ -115,6 +125,7 @@ class MultiCameraTrackingOrchestrator:
         }
         unique_track_ids: dict[str, set[int]] = {config.camera_code: set() for config in camera_configs}
         completed_tracks: list[LocalVehicleTrack] = []
+        evidence_collector = TrackEvidenceCollector(self.evidence_config, run_id=self.run_id) if self.evidence_config.enabled else None
         total_frames_processed = 0
         total_detections = 0
         total_track_observations = 0
@@ -126,6 +137,8 @@ class MultiCameraTrackingOrchestrator:
             for frame_packet in reader:
                 detection_packet = self.detector.detect(frame_packet)
                 tracking_result = self.router.route(detection_packet)
+                if evidence_collector is not None:
+                    evidence_collector.update(detection_packet, tracking_result.observations)
                 stats = camera_stats[frame_packet.camera_code]
                 total_frames_processed += 1
                 total_detections += len(detection_packet.detections)
@@ -143,6 +156,8 @@ class MultiCameraTrackingOrchestrator:
                 stats["completed_tracks"] = int(stats["completed_tracks"]) + len(tracking_result.completed_tracks)
                 completed_tracks.extend(tracking_result.completed_tracks)
                 for completed_track in tracking_result.completed_tracks:
+                    if evidence_collector is not None:
+                        completed_track.evidence_package = evidence_collector.finalize_track(completed_track)
                     finalized_tracks_by_uuid.setdefault(completed_track.track_uuid, completed_track)
                 if self.persistence_service is not None:
                     for completed_track in tracking_result.completed_tracks:
@@ -182,6 +197,8 @@ class MultiCameraTrackingOrchestrator:
         flush_result = self.router.flush_all()
         completed_tracks.extend(flush_result.completed_tracks)
         for completed_track in flush_result.completed_tracks:
+            if evidence_collector is not None:
+                completed_track.evidence_package = evidence_collector.finalize_track(completed_track)
             finalized_tracks_by_uuid.setdefault(completed_track.track_uuid, completed_track)
         if self.persistence_service is not None:
             for completed_track in flush_result.completed_tracks:
@@ -238,8 +255,10 @@ class MultiCameraTrackingOrchestrator:
             "cameras": camera_stats,
             "completed_tracks": [self._serialize_completed_track(track, persistence_results_by_uuid.get(track.track_uuid)) for track in deduped_completed_tracks],
             "persistence": self._build_persistence_report(),
+            "evidence": {"enabled": self.evidence_config.enabled},
             "generated_at": datetime.now().isoformat(),
         }
+        self._finalize_persistence(report)
         report_path = Path(output_report).resolve() if output_report else output_dir / "report.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -263,6 +282,7 @@ class MultiCameraTrackingOrchestrator:
             "camera_code": track.camera_code,
             "local_track_id": track.local_track_id,
             "class_name": track.class_name,
+            "canonical_class_name": normalize_vehicle_class(track.class_name).value,
             "first_frame_number": track.first_frame_number,
             "last_frame_number": track.last_frame_number,
             "first_seen_at": track.first_seen_at.isoformat() if track.first_seen_at is not None else None,
@@ -278,6 +298,9 @@ class MultiCameraTrackingOrchestrator:
             payload["database_track_id"] = persistence_result.database_track_id
             payload["observations_written"] = persistence_result.observations_written
             payload["persistence_error"] = persistence_result.error
+            payload["media_persistence"] = persistence_result.media_persistence
+        if track.evidence_package is not None:
+            payload["evidence"] = track.evidence_package.to_dict()
         return payload
 
     @staticmethod
@@ -285,25 +308,35 @@ class MultiCameraTrackingOrchestrator:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         return Path("debug_runs") / "multicamera_vehicle_tracking_pipeline" / f"tracking_validation_{timestamp}"
 
-    def _build_repository(self) -> VehicleRepository:
-        if self.repository is not None:
-            return self.repository
-        if self.persistence_config.dry_run:
-            return SimpleVehicleRepository()
-        try:
-            database_config = DatabaseConfig.from_env(require_backend_credentials=True)
-        except DatabaseConfigError:
-            if self.persistence_config.dry_run:
-                return SimpleVehicleRepository()
-            raise
-        client = create_backend_client(database_config)
-        return SupabaseVehicleRepository(client)
+    def _build_persistence_service(self) -> PersistenceServiceProtocol:
+        service = build_persistence_service(
+            config=self.persistence_config,
+            run_code=self.run_id,
+            detection_config=self.detection_config,
+            tracking_config=self.tracking_config,
+            execution_mode="SEQUENTIAL",
+            runtime_device=self.detector.device,
+            artifact_root=Path(self.evidence_config.output_root),
+            repository=self.repository,
+            analytics_client=self.analytics_client,
+        )
+        if service is None:
+            raise RuntimeError("Persistence service requested while backend is disabled.")
+        return service
+
+    def _finalize_persistence(self, report: dict[str, object]) -> None:
+        if self.persistence_service is None:
+            return
+        finalize = getattr(self.persistence_service, "finalize_run", None)
+        if callable(finalize):
+            finalize(report)
 
     def _build_persistence_report(self) -> dict[str, object]:
         if self.persistence_service is None:
             return {
                 "enabled": False,
                 "dry_run": bool(self.persistence_config.dry_run),
+                "backend": self.persistence_config.backend,
                 "cameras_synced": 0,
                 "tracks_considered": 0,
                 "tracks_inserted": 0,
@@ -318,5 +351,6 @@ class MultiCameraTrackingOrchestrator:
         metrics = self.persistence_service.get_metrics().to_dict()
         metrics["enabled"] = True
         metrics["dry_run"] = bool(self.persistence_config.dry_run)
+        metrics["backend"] = self.persistence_config.backend
         metrics["persistence_status"] = "dry_run" if self.persistence_config.dry_run else "enabled"
         return metrics

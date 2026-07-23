@@ -13,6 +13,7 @@ from tests.td_case2.multicamera_vehicle_tracking_pipeline.database.repository im
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.ingestion.frame_packet import FramePacket
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.orchestration.multicamera_tracking_orchestrator import MultiCameraTrackingOrchestrator
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_config import PersistenceConfig
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_models import PersistenceRunMetrics, TrackPersistenceResult
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.camera_detection_router import CameraDetectionRouter
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracker_factory import TrackerFactory
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracking_config import TrackingConfig
@@ -64,6 +65,30 @@ class _SharedIdTracker:
 class _ExplodingRepo(SimpleVehicleRepository):
     def add_vehicle_observations(self, observations):
         raise RepositoryConstraintError("boom")
+
+
+class _StubPersistenceService:
+    def __init__(self) -> None:
+        self.camera_id_by_code = {}
+        self.metrics = PersistenceRunMetrics(cameras_synced=0)
+        self.finalized_reports = []
+
+    def sync_cameras(self, camera_configs):
+        self.camera_id_by_code = {camera.camera_code: f"stub:{camera.camera_code}" for camera in camera_configs}
+        self.metrics.cameras_synced = len(camera_configs)
+        return dict(self.camera_id_by_code)
+
+    def save_completed_track(self, track):
+        self.metrics.tracks_considered += 1
+        self.metrics.tracks_inserted += 1
+        self.metrics.observations_written += track.observation_count
+        return TrackPersistenceResult(track_uuid=track.track_uuid, status="inserted", database_track_id="stub-track", observations_written=track.observation_count)
+
+    def get_metrics(self):
+        return self.metrics
+
+    def finalize_run(self, report):
+        self.finalized_reports.append(report)
 
 
 class TrackingOrchestratorTests(unittest.TestCase):
@@ -158,6 +183,8 @@ class TrackingOrchestratorTests(unittest.TestCase):
             self.assertEqual(result.report["cameras"]["CAM_002"]["active_tracks_at_flush"], 1)
             completed = result.report["completed_tracks"]
             self.assertEqual({item["track_uuid"] for item in completed}, {"RUN_TEST:CAM_001:TRACK_1", "RUN_TEST:CAM_002:TRACK_1"})
+            self.assertTrue(all("observation_count" in item for item in completed))
+            self.assertTrue(all(item["canonical_class_name"] == "CAR" for item in completed))
             self.assertTrue((root / "CAM_001" / "sample_000001.jpg").exists())
             self.assertTrue((root / "CAM_002" / "sample_000001.jpg").exists())
             loaded = json.loads((root / "report.json").read_text(encoding="utf-8"))
@@ -277,6 +304,33 @@ class TrackingOrchestratorTests(unittest.TestCase):
             result = orchestrator.run(output_report=root / "report.json")
             self.assertEqual(result.report["persistence"]["tracks_failed"], 2)
             self.assertEqual(len(result.report["persistence"]["errors"]), 2)
+
+    def test_explicit_analytics_backend_is_reported_and_finalized(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._build_case(root)
+            router = CameraDetectionRouter(
+                TrackingConfig(min_confirmed_observations=1),
+                tracker_factory=TrackerFactory(TrackingConfig(min_confirmed_observations=1), tracker_creator=lambda config: _SharedIdTracker()),
+                run_id="RUN_TEST",
+            )
+            stub_service = _StubPersistenceService()
+            orchestrator = MultiCameraTrackingOrchestrator(
+                root / "config" / "cameras.yaml",
+                root / "config" / "detection.yaml",
+                root / "config" / "tracking.yaml",
+                root / "config" / "persistence.yaml",
+                mode="round_robin",
+                detector=_FakeDetector(),
+                router=router,
+                run_id="RUN_TEST",
+                persistence_service=stub_service,
+                persistence_overrides={"backend": "analytics_supabase"},
+            )
+            result = orchestrator.run(output_report=root / "report.json")
+            self.assertTrue(result.report["persistence"]["enabled"])
+            self.assertEqual(result.report["persistence"]["backend"], "analytics_supabase")
+            self.assertEqual(len(stub_service.finalized_reports), 1)
 
 
 if __name__ == "__main__":

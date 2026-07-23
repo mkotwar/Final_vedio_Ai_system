@@ -146,6 +146,16 @@ class TrackingPersistenceServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             service.save_completed_track(_track(class_name="plane"))
 
+    def test_3wheeler_class_is_accepted(self) -> None:
+        repo = SimpleVehicleRepository()
+        service = TrackingPersistenceService(repo, PersistenceConfig())
+        service.sync_cameras([_camera_config()])
+        result = service.save_completed_track(_track(class_name="3Wheeler"))
+        self.assertEqual(result.status, "inserted")
+        stored = repo.get_track_by_uuid("CAM_001:TRACK_1")
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.vehicle_class, "3wheeler")
+
     def test_invalid_timestamps_rejected(self) -> None:
         repo = SimpleVehicleRepository()
         service = TrackingPersistenceService(repo, PersistenceConfig())

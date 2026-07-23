@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 import queue
 import threading
 import time
@@ -18,7 +19,7 @@ class DetectionWorker(threading.Thread):
         self,
         *,
         detector: SharedVehicleDetector,
-        camera_count: int,
+        expected_camera_codes: Iterable[str],
         frame_queue: TrackedQueue,
         detection_queue: TrackedQueue,
         error_queue: TrackedQueue,
@@ -27,7 +28,8 @@ class DetectionWorker(threading.Thread):
     ) -> None:
         super().__init__(name="shared_detection_worker", daemon=worker_config.detection_worker_daemon)
         self.detector = detector
-        self.camera_count = camera_count
+        self.expected_camera_codes = tuple(expected_camera_codes)
+        self._expected_camera_code_set = set(self.expected_camera_codes)
         self.frame_queue = frame_queue
         self.detection_queue = detection_queue
         self.error_queue = error_queue
@@ -48,15 +50,21 @@ class DetectionWorker(threading.Thread):
                     continue
                 self.metrics.frame_queue_wait_time_seconds += wait_time
                 if isinstance(item, EndOfCameraMessage):
+                    if item.camera_code not in self._expected_camera_code_set:
+                        raise ValueError(f"Received end-of-camera for unexpected camera: {item.camera_code}")
+                    if item.camera_code in ended_cameras:
+                        continue
                     ended_cameras.add(item.camera_code)
                     self._forward(item)
-                    if len(ended_cameras) == self.camera_count:
+                    if ended_cameras == self._expected_camera_code_set:
                         self._forward(EndOfInputMessage())
                         forwarded_end = True
                         break
                     continue
                 if not isinstance(item, FramePacket):
                     continue
+                if item.camera_code not in self._expected_camera_code_set:
+                    raise ValueError(f"Received frame for unexpected camera: {item.camera_code}")
                 detection_packet = self.detector.detect(item)
                 self.metrics.frames_received += 1
                 self.metrics.frames_processed += 1

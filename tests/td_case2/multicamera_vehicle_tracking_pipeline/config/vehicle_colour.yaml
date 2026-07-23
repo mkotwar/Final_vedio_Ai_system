@@ -1,0 +1,30 @@
+vehicle_colour:
+  enabled: false
+  backend: florence
+
+  source_media_type: BEST_VEHICLE_CROP
+  persist_result: true
+  fail_pipeline_on_error: false
+
+  minimum_crop_width: 100
+  minimum_crop_height: 80
+  minimum_confidence: 0.50
+
+  allowed_colours:
+    - BLACK
+    - WHITE
+    - SILVER
+    - GREY
+    - RED
+    - BLUE
+    - GREEN
+    - YELLOW
+    - ORANGE
+    - BROWN
+    - BEIGE
+    - PURPLE
+    - UNKNOWN
+
+  default_confidence_when_missing: 0.50
+  max_retries: 1
+  task_timeout_seconds: 60

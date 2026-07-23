@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..persistence.persistence_models import TrackPersistenceResult
 from ..tracking.tracking_models import LocalVehicleTrack
 
 
@@ -30,3 +31,17 @@ class WorkerErrorMessage:
 class CompletedTrackMessage:
     camera_code: str
     track: LocalVehicleTrack
+
+
+@dataclass(frozen=True, slots=True)
+class VehicleColourJobMessage:
+    camera_code: str
+    track: LocalVehicleTrack
+    persistence_result: TrackPersistenceResult
+
+
+@dataclass(frozen=True, slots=True)
+class AnprJobMessage:
+    camera_code: str
+    track: LocalVehicleTrack
+    persistence_result: TrackPersistenceResult

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-SUPPORTED_ALLOWED_CLASSES = ("car", "bus", "truck", "motorcycle")
+SUPPORTED_ALLOWED_CLASSES = ("3wheeler", "bus", "car", "motorcycle", "truck")
 SUPPORTED_DEVICE_PREFIXES = ("auto", "cpu", "cuda", "cuda:0")
 SUPPORTED_DOWNLOADABLE_MODELS = {"yolov8n.pt", "yolov8s.pt", "yolov8m.pt", "yolo11n.pt", "yolo11s.pt"}
 

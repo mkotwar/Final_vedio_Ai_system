@@ -16,6 +16,7 @@ from .models import (
     VehicleTrackRecord,
     utc_now,
 )
+from ..persistence.vehicle_class_mapping import RUNTIME_VEHICLE_CLASSES
 
 
 class RepositoryConstraintError(ValueError):
@@ -62,7 +63,7 @@ class SimpleVehicleRepository:
     def create_vehicle_track(self, track: VehicleTrackRecord) -> VehicleTrackRecord:
         if track.camera_id not in self._cameras:
             raise RepositoryConstraintError("Unknown camera_id")
-        if track.vehicle_class not in {"car", "bus", "truck", "motorcycle", "unknown"}:
+        if track.vehicle_class not in set(RUNTIME_VEHICLE_CLASSES):
             raise RepositoryConstraintError("Invalid vehicle_class")
         if track.last_seen_at < track.first_seen_at:
             raise RepositoryConstraintError("last_seen_at must be after first_seen_at")

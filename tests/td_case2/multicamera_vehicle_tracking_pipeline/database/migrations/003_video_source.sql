@@ -1,0 +1,21 @@
+create table if not exists analytics.video_source (
+    id uuid primary key default gen_random_uuid(),
+    camera_id uuid not null,
+    source_type varchar(30) not null,
+    external_recording_id varchar(255),
+    source_reference text not null,
+    source_start_at timestamptz,
+    source_end_at timestamptz,
+    source_fps numeric(8,3),
+    frame_width integer,
+    frame_height integer,
+    metadata jsonb not null default '{}'::jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    constraint fk_video_source_camera foreign key (camera_id) references analytics.camera(id),
+    constraint chk_video_source_type check (source_type in ('LOCAL_FILE', 'RTSP', 'LIVE_STREAM', 'VMS_RECORDING', 'PLAYBACK_API')),
+    constraint chk_video_source_fps check (source_fps is null or source_fps > 0),
+    constraint chk_video_source_frame_width check (frame_width is null or frame_width > 0),
+    constraint chk_video_source_frame_height check (frame_height is null or frame_height > 0),
+    constraint chk_video_source_time_range check (source_start_at is null or source_end_at is null or source_start_at <= source_end_at)
+);

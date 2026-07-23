@@ -1,12 +1,12 @@
 cameras:
   - camera_code: CAM_001
     camera_name: North Gate
-    source_path: data/camera_1.mp4
+    source_path: data/1test.mp4
     enabled: true
     start_time: "2026-07-22T10:00:00+05:30"
 
   - camera_code: CAM_002
     camera_name: Parking Entry
-    source_path: data/camera_2.mp4
+    source_path: data/2test.mp4
     enabled: true
     start_time: "2026-07-22T10:00:00+05:30"

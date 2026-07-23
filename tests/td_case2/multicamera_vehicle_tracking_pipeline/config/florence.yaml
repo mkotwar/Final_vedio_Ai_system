@@ -1,0 +1,27 @@
+florence:
+  enabled: false
+
+  model_path: null
+  adapter_path: null
+  processor_path: null
+
+  model_path_env: FLORENCE_MODEL_PATH
+  adapter_path_env: FLORENCE_ADAPTER_PATH
+  processor_path_env: FLORENCE_PROCESSOR_PATH
+
+  device: auto
+  dtype: auto
+  trust_remote_code: true
+  local_files_only: true
+  load_once: true
+  allow_cpu_fallback: true
+
+  task_timeout_seconds: 60
+  max_retries: 1
+
+  colour_prompt: >
+    Identify the primary exterior body colour of the vehicle in this crop.
+    Ignore windows, tyres, number plate, road, sky, shadows, reflections,
+    people, and background. Return JSON only with primary_colour,
+    secondary_colour, and confidence.
+

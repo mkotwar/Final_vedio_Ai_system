@@ -15,4 +15,11 @@ workers:
   stop_on_detector_error: true
   stop_on_tracking_error: true
   stop_on_persistence_error: false
-  enable_persistence_worker: false
+  enable_persistence_worker: true
+  enable_vehicle_colour_worker: false
+  vehicle_colour_queue_size: 20
+  vehicle_colour_worker_count: 1
+  enable_anpr_worker: false
+  anpr_queue_size: 20
+  anpr_worker_count: 1
+  anpr_worker_daemon: false

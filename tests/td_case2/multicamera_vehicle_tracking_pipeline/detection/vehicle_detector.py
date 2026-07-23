@@ -8,23 +8,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..ingestion.frame_packet import FramePacket
+from ..persistence.vehicle_class_mapping import normalize_runtime_vehicle_class
 from .detection_config import DetectionConfig
 from .detection_models import DetectionPacket, VehicleDetection
 
 LOGGER = logging.getLogger(__name__)
 
-NORMALIZED_CLASS_TO_ID = {"car": 0, "bus": 1, "truck": 2, "motorcycle": 3}
-CLASS_SYNONYMS = {
-    "car": "car",
-    "automobile": "car",
-    "auto": "car",
-    "bus": "bus",
-    "truck": "truck",
-    "lorry": "truck",
-    "motorcycle": "motorcycle",
-    "motorbike": "motorcycle",
-    "bike": "motorcycle",
-}
+NORMALIZED_CLASS_TO_ID = {"3wheeler": 0, "bus": 1, "car": 2, "motorcycle": 3, "truck": 4}
 
 
 class VehicleDetectorError(RuntimeError):
@@ -32,10 +22,7 @@ class VehicleDetectorError(RuntimeError):
 
 
 def normalize_vehicle_class(raw_class_name: str | None) -> str | None:
-    if raw_class_name is None:
-        return None
-    normalized = " ".join(str(raw_class_name).strip().lower().replace("_", " ").split())
-    return CLASS_SYNONYMS.get(normalized)
+    return normalize_runtime_vehicle_class(raw_class_name)
 
 
 def resolve_detector_device(requested_device: str) -> str:

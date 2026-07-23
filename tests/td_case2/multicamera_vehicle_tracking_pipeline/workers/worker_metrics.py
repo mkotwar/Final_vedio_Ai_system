@@ -134,6 +134,34 @@ class PersistenceWorkerMetrics:
 
 
 @dataclass(slots=True)
+class VehicleColourWorkerMetrics:
+    jobs_received: int = 0
+    results_persisted: int = 0
+    results_skipped: int = 0
+    results_failed: int = 0
+    queue_wait_seconds: float = 0.0
+    inference_time_seconds: float = 0.0
+    errors: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
+class AnprWorkerMetrics:
+    jobs_received: int = 0
+    results_persisted: int = 0
+    results_skipped: int = 0
+    results_failed: int = 0
+    queue_wait_seconds: float = 0.0
+    inference_time_seconds: float = 0.0
+    errors: int = 0
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+@dataclass(slots=True)
 class ThreadLifecycleMetrics:
     started: bool = False
     stopped: bool = False

@@ -1,10 +1,18 @@
 persistence:
-  enabled: false
+  backend: dry_run
+  database_schema: analytics
+  enabled: true
   sync_cameras: true
+  persist_completed_tracks: true
   write_completed_tracks_only: true
   include_discarded_tracks: false
   observation_mode: all
-  observation_batch_size: 100
+  persist_track_observations: true
+  observation_batch_size: 250
   observation_sample_every_n: 5
-  dry_run: false
+  dry_run: true
   fail_on_database_error: true
+  persist_track_media: true
+  track_media_roles:
+    - BEST_OVERALL
+  fail_pipeline_on_track_media_persistence_error: false
