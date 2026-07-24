@@ -1,0 +1,33 @@
+vehicle_body_type:
+  enabled: true
+  backend: florence
+
+  minimum_confidence: 0.50
+  default_confidence_when_missing: 0.50
+
+  allowed_body_types:
+    - HATCHBACK
+    - SEDAN
+    - SUV
+    - MUV
+    - COUPE
+    - CONVERTIBLE
+    - PICKUP
+    - VAN
+    - MINIVAN
+    - TRUCK
+    - BUS
+    - THREE_WHEELER
+    - MOTORCYCLE
+    - UNKNOWN
+
+  prompt: >
+    Classify the body type of the vehicle in this image.
+    Ignore vehicle colour, number plate, background, road, people,
+    reflections, logos, and brand badges.
+    Return exactly one label from:
+    HATCHBACK, SEDAN, SUV, MUV, COUPE, CONVERTIBLE, PICKUP, VAN,
+    MINIVAN, TRUCK, BUS, THREE_WHEELER, MOTORCYCLE, UNKNOWN.
+    Return only the label.
+
+  fail_pipeline_on_error: false
