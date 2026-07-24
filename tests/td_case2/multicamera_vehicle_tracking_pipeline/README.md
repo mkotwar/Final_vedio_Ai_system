@@ -147,6 +147,133 @@ Direct track lookup:
 .\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_persisted_tracks --track-uuid RUN_20260722_175158:CAM_001:TRACK_1
 ```
 
+Enrichment-run audit:
+
+```powershell
+$env:SUPABASE_URL = "https://<project-ref>.supabase.co"
+$env:SUPABASE_SERVICE_ROLE_KEY = "<service-role-key>"
+
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402
+```
+
+Enrichment-run audit with JSON output:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402 `
+  --json-output "debug_runs\multicamera_vehicle_tracking_pipeline\RUN_20260724_151402_audit.json"
+```
+
+Strict enrichment-run audit:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402 `
+  --strict
+```
+
+Camera-level enrichment audit:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402 `
+  --camera-code CAM_001
+```
+
+Track-level enrichment audit:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402 `
+  --track-uuid "RUN_20260724_151402:CAM_001:TRACK_4"
+```
+
+Track-level enrichment audit with JSON output:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_enrichment_run `
+  --run-code RUN_20260724_151402 `
+  --track-uuid "RUN_20260724_151402:CAM_001:TRACK_4" `
+  --json-output "debug_runs\multicamera_vehicle_tracking_pipeline\TRACK_4_audit.json"
+```
+
+Notes:
+
+- `verify_enrichment_run.py` remains read-only and only reports candidate hints.
+- `build_global_vehicle_objects.py` is the stage that persists auditable cross-camera matches and global vehicle objects.
+- The verifier stays read-only and does not fetch image bytes.
+
+Global-object build dry run:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.build_global_vehicle_objects `
+  --run-code RUN_20260724_151402 `
+  --global-match-config tests\td_case2\multicamera_vehicle_tracking_pipeline\config\global_matching.yaml `
+  --dry-run `
+  --json-output "debug_runs\multicamera_vehicle_tracking_pipeline\RUN_20260724_151402_global_match_dry_run.json"
+```
+
+Global-object persistence:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.build_global_vehicle_objects `
+  --run-code RUN_20260724_151402 `
+  --global-match-config tests\td_case2\multicamera_vehicle_tracking_pipeline\config\global_matching.yaml `
+  --persist `
+  --json-output "debug_runs\multicamera_vehicle_tracking_pipeline\RUN_20260724_151402_global_match_persisted.json"
+```
+
+Global-object verification:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_global_vehicle_objects `
+  --run-code RUN_20260724_151402 `
+  --strict `
+  --json-output "debug_runs\multicamera_vehicle_tracking_pipeline\RUN_20260724_151402_global_object_audit.json"
+```
+
+Further documentation:
+
+- [docs/GLOBAL_VEHICLE_MATCHING.md](/C:/Mukul%20K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/docs/GLOBAL_VEHICLE_MATCHING.md)
+- [docs/API.md](/C:/Mukul%20K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/docs/API.md)
+
+## Read-only backend API
+
+The pipeline now includes a read-only FastAPI backend under `api/` that reuses the existing `AnalyticsDatabaseClient` and a schema-scoped read repository.
+
+Current API scope:
+
+- run health and status
+- processing-run list and detail
+- camera list and detail inside a run
+- local track list, detail, observations, and media references
+- cross-camera match list and detail
+- global vehicle list, detail, and memberships
+- safe media-reference lookup
+
+Run the backend locally with:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn `
+  tests.td_case2.multicamera_vehicle_tracking_pipeline.api.main:app `
+  --host 127.0.0.1 `
+  --port 8000 `
+  --reload
+```
+
+Docs:
+
+- Swagger: `http://127.0.0.1:8000/docs`
+- OpenAPI: `http://127.0.0.1:8000/openapi.json`
+
+Notes:
+
+- The API is read-only in this stage.
+- The API uses the `analytics` schema only.
+- Sensitive metadata keys such as keys, tokens, and local model paths are stripped from responses.
+- Media delivery is currently reference-only; the API does not stream image bytes.
+
 ## Validation report location
 
 Tracking validation output:
@@ -165,7 +292,6 @@ debug_runs/multicamera_vehicle_tracking_pipeline/tracking_validation_<timestamp>
 - no plate OCR
 - no colour enrichment
 - no object search
-- no cross-camera matching
 - no RTSP
 - no VMS integration
 - no parallelism

@@ -1,5 +1,5 @@
 vehicle_colour:
-  enabled: false
+  enabled: true
   backend: florence
 
   source_media_type: BEST_VEHICLE_CROP

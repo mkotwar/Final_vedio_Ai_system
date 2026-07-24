@@ -411,6 +411,7 @@ create table if not exists analytics.plate_summary (
 
 create table if not exists analytics.cross_camera_match (
     id uuid primary key default gen_random_uuid(),
+    processing_run_id uuid,
     source_track_id uuid not null,
     candidate_track_id uuid not null,
     camera_relation_id uuid,
@@ -425,15 +426,19 @@ create table if not exists analytics.cross_camera_match (
     decision varchar(30) not null,
     decision_reason text,
     matcher_version varchar(100),
+    rule_version varchar(100),
     reviewed boolean not null default false,
+    created_global_vehicle_id uuid,
     metadata jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     track_pair_min uuid generated always as (least(source_track_id, candidate_track_id)) stored,
     track_pair_max uuid generated always as (greatest(source_track_id, candidate_track_id)) stored,
+    constraint fk_cross_camera_match_processing_run foreign key (processing_run_id) references analytics.processing_run(id),
     constraint fk_cross_camera_match_source_track foreign key (source_track_id) references analytics.vehicle_track(id),
     constraint fk_cross_camera_match_candidate_track foreign key (candidate_track_id) references analytics.vehicle_track(id),
     constraint fk_cross_camera_match_camera_relation foreign key (camera_relation_id) references analytics.camera_relation(id),
+    constraint fk_cross_camera_match_global_vehicle foreign key (created_global_vehicle_id) references analytics.global_vehicle(id),
     constraint uq_cross_camera_match_directed unique (source_track_id, candidate_track_id),
     constraint uq_cross_camera_match_pair unique (track_pair_min, track_pair_max),
     constraint chk_cross_camera_match_distinct_tracks check (source_track_id <> candidate_track_id),
@@ -445,7 +450,7 @@ create table if not exists analytics.cross_camera_match (
     constraint chk_cross_camera_match_route_score check (route_score is null or (route_score >= 0 and route_score <= 1)),
     constraint chk_cross_camera_match_appearance_score check (appearance_score is null or (appearance_score >= 0 and appearance_score <= 1)),
     constraint chk_cross_camera_match_overall_score check (overall_score >= 0 and overall_score <= 1),
-    constraint chk_cross_camera_match_decision check (decision in ('CANDIDATE', 'CONFIRMED', 'PROBABLE', 'AMBIGUOUS', 'REJECTED'))
+    constraint chk_cross_camera_match_decision check (decision in ('CANDIDATE', 'CONFIRMED', 'PROBABLE', 'AMBIGUOUS', 'REJECTED', 'POSSIBLE', 'INSUFFICIENT_EVIDENCE', 'REVIEW_REQUIRED'))
 );
 
 
@@ -453,7 +458,9 @@ create table if not exists analytics.cross_camera_match (
 
 create table if not exists analytics.global_vehicle (
     id uuid primary key default gen_random_uuid(),
+    processing_run_id uuid,
     global_vehicle_code varchar(120) not null,
+    object_type varchar(20) not null default 'VEHICLE',
     canonical_plate varchar(100),
     canonical_color varchar(50),
     canonical_vehicle_class varchar(40),
@@ -461,13 +468,19 @@ create table if not exists analytics.global_vehicle (
     last_seen_at timestamptz,
     identity_confidence numeric,
     status varchar(30) not null,
+    camera_count integer not null default 0,
+    track_count integer not null default 0,
+    creation_method varchar(40) not null default 'RULE_BASED',
     metadata jsonb not null default '{}'::jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
+    constraint fk_global_vehicle_processing_run foreign key (processing_run_id) references analytics.processing_run(id),
     constraint uq_global_vehicle_code unique (global_vehicle_code),
+    constraint uq_global_vehicle_processing_run_code unique (processing_run_id, global_vehicle_code),
     constraint chk_global_vehicle_class check (canonical_vehicle_class is null or canonical_vehicle_class in ('3WHEELER', 'BUS', 'CAR', 'MOTORCYCLE', 'TRUCK', 'UNKNOWN')),
     constraint chk_global_vehicle_confidence check (identity_confidence is null or (identity_confidence >= 0 and identity_confidence <= 1)),
-    constraint chk_global_vehicle_status check (status in ('CANDIDATE', 'PROBABLE', 'CONFIRMED', 'AMBIGUOUS', 'ARCHIVED')),
+    constraint chk_global_vehicle_status check (status in ('ACTIVE', 'CONFIRMED', 'POSSIBLE', 'REVIEW_REQUIRED', 'INVALIDATED', 'CANDIDATE', 'PROBABLE', 'AMBIGUOUS', 'ARCHIVED')),
+    constraint chk_global_vehicle_creation_method check (creation_method in ('VERIFIED_PLATE', 'RULE_BASED', 'MANUAL', 'SINGLE_TRACK')),
     constraint chk_global_vehicle_time_range check (first_seen_at is null or last_seen_at is null or first_seen_at <= last_seen_at)
 );
 
@@ -491,7 +504,7 @@ create table if not exists analytics.global_vehicle_track (
     constraint fk_global_vehicle_track_vehicle_track foreign key (vehicle_track_id) references analytics.vehicle_track(id),
     constraint uq_global_vehicle_track_pair unique (global_vehicle_id, vehicle_track_id),
     constraint chk_global_vehicle_track_association_score check (association_score is null or (association_score >= 0 and association_score <= 1)),
-    constraint chk_global_vehicle_track_status check (association_status is null or association_status in ('CANDIDATE', 'PROBABLE', 'CONFIRMED', 'AMBIGUOUS', 'REJECTED', 'DETACHED')),
+    constraint chk_global_vehicle_track_status check (association_status is null or association_status in ('CANDIDATE', 'PROBABLE', 'CONFIRMED', 'AMBIGUOUS', 'REJECTED', 'DETACHED', 'POSSIBLE', 'REVIEW_REQUIRED')),
     constraint chk_global_vehicle_track_time_range check (detached_at is null or attached_at <= detached_at)
 );
 
@@ -722,8 +735,17 @@ on analytics.cross_camera_match(candidate_track_id, overall_score desc);
 create index if not exists idx_cross_camera_match_decision
 on analytics.cross_camera_match(decision, overall_score desc);
 
+create index if not exists idx_cross_camera_match_processing_run
+on analytics.cross_camera_match(processing_run_id, decision, overall_score desc);
+
+create index if not exists idx_cross_camera_match_created_global_vehicle
+on analytics.cross_camera_match(created_global_vehicle_id);
+
 create index if not exists idx_global_vehicle_plate
 on analytics.global_vehicle(canonical_plate);
+
+create index if not exists idx_global_vehicle_processing_run
+on analytics.global_vehicle(processing_run_id, status, created_at desc);
 
 create index if not exists idx_global_vehicle_track_current
 on analytics.global_vehicle_track(global_vehicle_id, attached_at desc);
@@ -731,6 +753,9 @@ on analytics.global_vehicle_track(global_vehicle_id, attached_at desc);
 create unique index if not exists uq_global_vehicle_track_current_vehicle_track
 on analytics.global_vehicle_track(vehicle_track_id)
 where is_current = true;
+
+create index if not exists idx_global_vehicle_track_vehicle_track
+on analytics.global_vehicle_track(vehicle_track_id, is_current, attached_at desc);
 
 create index if not exists idx_ai_model_active
 on analytics.ai_model(model_type, active);

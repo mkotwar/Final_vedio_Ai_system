@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -41,7 +41,7 @@ class AnprMetrics:
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
-        return deepcopy(self.__dict__)
+        return deepcopy(asdict(self))
 
 
 @dataclass(frozen=True, slots=True)
@@ -272,18 +272,17 @@ class AnprEnrichmentService:
             detector_version=None,
             metadata={"source_vehicle_role": candidate.source_vehicle_role, "storage_uri": candidate.relative_storage_uri},
         )
-        reading_record = PlateReadingRecord(
-            plate_detection_id="DRYRUN:PLATE_DETECTION" if self.persistence_config.backend != "analytics_supabase" else "",
-            ocr_engine="FLORENCE",
-            ocr_version=ocr_result.model_name,
-            raw_text=ocr_result.raw_text,
-            normalized_text=ocr_result.normalized_text,
-            plate_pattern=str(ocr_result.metadata.get("matched_pattern")) if ocr_result.metadata.get("matched_pattern") else None,
-            confidence=ocr_result.confidence,
-            status=_plate_reading_status(ocr_result),
-            is_selected=True,
-            metadata=ocr_result.metadata,
-        )
+        reading_payload = {
+            "ocr_engine": "FLORENCE",
+            "ocr_version": ocr_result.model_name,
+            "raw_text": ocr_result.raw_text,
+            "normalized_text": ocr_result.normalized_text,
+            "plate_pattern": str(ocr_result.metadata.get("matched_pattern")) if ocr_result.metadata.get("matched_pattern") else None,
+            "confidence": ocr_result.confidence,
+            "status": _plate_reading_status(ocr_result),
+            "is_selected": True,
+            "metadata": ocr_result.metadata,
+        }
         summary_record = PlateSummaryRecord(
             vehicle_track_id=persisted_vehicle_track_id,
             selected_plate_reading_id="DRYRUN:PLATE_READING" if self.persistence_config.backend != "analytics_supabase" else None,
@@ -297,10 +296,15 @@ class AnprEnrichmentService:
         self.metrics.anpr_plate_media_validated += 1
         detection_record.to_payload()
         self.metrics.anpr_readings_validated += 1
-        reading_record.to_payload()
-        self.metrics.anpr_readings_validated += 1
-        summary_record.to_payload()
-        self.metrics.anpr_summaries_validated += 1
+        if self.persistence_config.backend != "analytics_supabase":
+            reading_record = PlateReadingRecord(
+                plate_detection_id="DRYRUN:PLATE_DETECTION",
+                **reading_payload,
+            )
+            reading_record.to_payload()
+            self.metrics.anpr_readings_validated += 1
+            summary_record.to_payload()
+            self.metrics.anpr_summaries_validated += 1
         if self.persistence_config.backend != "analytics_supabase" or not self.config.persist_result:
             return False
         media_row = self.track_media_repository.upsert(media_record) if self.track_media_repository is not None else None
@@ -323,16 +327,10 @@ class AnprEnrichmentService:
         detection_row = self.plate_detection_repository.create_plate_detection(detection_record)
         reading_record = PlateReadingRecord(
             plate_detection_id=str(detection_row["id"]),
-            ocr_engine=reading_record.ocr_engine,
-            ocr_version=reading_record.ocr_version,
-            raw_text=reading_record.raw_text,
-            normalized_text=reading_record.normalized_text,
-            plate_pattern=reading_record.plate_pattern,
-            confidence=reading_record.confidence,
-            status=reading_record.status,
-            is_selected=True,
-            metadata=reading_record.metadata,
+            **reading_payload,
         )
+        reading_record.to_payload()
+        self.metrics.anpr_readings_validated += 1
         reading_row = self.plate_reading_repository.create_plate_reading(reading_record)
         self.metrics.anpr_readings_inserted += 1
         summary_record = PlateSummaryRecord(
@@ -344,6 +342,8 @@ class AnprEnrichmentService:
             confidence=summary_record.confidence,
             reading_count=summary_record.reading_count,
         )
+        summary_record.to_payload()
+        self.metrics.anpr_summaries_validated += 1
         self.plate_summary_repository.upsert_plate_summary(summary_record)
         self.metrics.anpr_summaries_inserted += 1
         return True

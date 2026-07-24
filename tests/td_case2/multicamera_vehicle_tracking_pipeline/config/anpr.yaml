@@ -1,5 +1,5 @@
 anpr:
-  enabled: false
+  enabled: true
 
   plate_detector:
     backend: yolo

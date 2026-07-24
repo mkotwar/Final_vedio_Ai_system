@@ -5,7 +5,12 @@ import unittest
 from pathlib import Path
 
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.florence_config import FlorenceConfig
-from tests.td_case2.multicamera_vehicle_tracking_pipeline.models.florence_runtime_factory import FlorenceRuntimeFactory
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.models.florence_runtime_factory import (
+    DEFAULT_FLORENCE_ADAPTER_PATH,
+    DEFAULT_FLORENCE_MODEL_PATH,
+    DEFAULT_FLORENCE_PROCESSOR_PATH,
+    FlorenceRuntimeFactory,
+)
 
 
 class _FakeRuntime:
@@ -50,6 +55,11 @@ class FlorenceRuntimeFactoryTests(unittest.TestCase):
             self.assertIsNotNone(runtime)
             self.assertTrue(runtime.loaded)
             self.assertIn(runtime.kwargs["device"], {"cpu", "cuda"})
+
+    def test_default_paths_point_to_root_model_assets(self) -> None:
+        self.assertEqual(tuple(DEFAULT_FLORENCE_MODEL_PATH.parts)[-3:], ("models", "florence", "Florence-2-base-ft"))
+        self.assertEqual(DEFAULT_FLORENCE_PROCESSOR_PATH, DEFAULT_FLORENCE_MODEL_PATH)
+        self.assertEqual(tuple(DEFAULT_FLORENCE_ADAPTER_PATH.parts)[-3:], ("models", "florence_adapters", "adaptor_florance_baseFT"))
 
 
 if __name__ == "__main__":

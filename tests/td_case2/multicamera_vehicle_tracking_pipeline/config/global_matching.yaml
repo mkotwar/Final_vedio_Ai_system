@@ -1,0 +1,25 @@
+matching:
+  rule_version: global_match_v1
+  weights:
+    verified_plate: 0.70
+    time: 0.10
+    camera_route: 0.10
+    vehicle_class: 0.05
+    vehicle_colour: 0.05
+    visual_similarity: 0.00
+  thresholds:
+    confirmed: 0.85
+    possible: 0.55
+
+time_matching:
+  mode: disabled
+
+same_camera_matching: false
+create_single_track_global_objects: true
+
+camera_routes:
+  CAM_001:
+    CAM_002:
+      allowed: true
+      minimum_travel_seconds: 0
+      maximum_travel_seconds: 300

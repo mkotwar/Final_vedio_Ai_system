@@ -119,6 +119,9 @@ def _is_supported_model_reference(value: str) -> bool:
     candidate = Path(value)
     if candidate.exists():
         return True
+    repo_relative = (_repo_root() / candidate).resolve()
+    if repo_relative.exists():
+        return True
     return candidate.name == value and value in SUPPORTED_DOWNLOADABLE_MODELS
 
 
@@ -157,6 +160,9 @@ def load_detection_config(config_path: str | Path, *, overrides: dict[str, Any] 
 
 def detection_overrides_from_env() -> dict[str, Any]:
     overrides: dict[str, Any] = {}
+    vehicle_detector_model_path = os.getenv("VEHICLE_DETECTOR_MODEL_PATH")
+    if vehicle_detector_model_path not in (None, ""):
+        overrides["model_path"] = str(vehicle_detector_model_path)
     env_map = {
         "TD_CASE2_MULTICAM_MODEL_PATH": ("model_path", str),
         "TD_CASE2_MULTICAM_FALLBACK_MODEL_PATH": ("fallback_model_path", str),
@@ -168,6 +174,8 @@ def detection_overrides_from_env() -> dict[str, Any]:
     for env_name, (target_name, caster) in env_map.items():
         raw_value = os.getenv(env_name)
         if raw_value is None or raw_value == "":
+            continue
+        if target_name in overrides:
             continue
         overrides[target_name] = caster(raw_value)
     return overrides

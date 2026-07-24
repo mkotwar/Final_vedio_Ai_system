@@ -56,7 +56,7 @@ build/
 
 # Model Cache
 
-models/
+/models/
 hf_cache/
 ollama_cache/
 
@@ -124,3 +124,13 @@ weights/
 *.pth
 *.onnx
 *.safetensors
+
+# Local model assets under the repository root
+/models/**/*.pt
+/models/**/*.pth
+/models/**/*.onnx
+/models/**/*.bin
+/models/**/*.safetensors
+/models/**/blobs/
+/models/**/snapshots/
+/models/**/.cache/

@@ -550,6 +550,18 @@ Event abstraction and summary quality improvements.
 * Implemented semantic state-tracking algorithm in Event Abstraction Layer.
 * Validated and completely resolved 1-second event fragmentation issue. Phase 1B complete.
 
+## 2026-07-24
+
+* Reorganized the multicamera vehicle-tracking pipeline's local model assets under the repository-root `models/` folder while keeping the runtime Python package under `tests/td_case2/multicamera_vehicle_tracking_pipeline/models/`.
+* Added portable model-path defaults, a readiness-check workflow, and setup documentation so new-PC validation no longer depends on scattered legacy model folders or old machine-specific paths.
+* Added a read-only `verify_enrichment_run.py` audit CLI for completed multicamera enrichment runs in the `analytics` schema, with JSON export, strict consistency checks, and mocked unit coverage for Supabase query behavior.
+* Extended the same read-only verifier to support run, camera, and single-track drill-downs, including evidence diagnostics, missing-enrichment diagnostics, and plate-based cross-camera candidate hints without changing persistence or enrichment behavior.
+* Added a first production-safe standalone cross-camera matching stage for the multicamera vehicle-tracking pipeline. The new `build_global_vehicle_objects.py` command performs deterministic post-run candidate generation, conservative scoring, auditable `cross_camera_match` persistence, and stable `global_vehicle` / `global_vehicle_track` creation without modifying camera-level `vehicle_track` rows.
+* Added additive analytics-schema migrations `028_global_vehicle_matching_extensions.sql` and `029_global_vehicle_matching_indexes.sql`, plus updated `database/supabase/analytics_full_schema.sql`, so global objects now store `processing_run_id`, stable object codes, creation method, camera/track counts, and persisted match-to-object links.
+* Added a read-only `verify_global_vehicle_objects.py` audit CLI plus focused unit coverage for global-match config, immutable models, scoring, service orchestration, repository idempotency, build CLI behavior, and verifier behavior.
+* Added a first read-only FastAPI backend for the multicamera vehicle-tracking pipeline under `tests/td_case2/multicamera_vehicle_tracking_pipeline/api/`. It reuses the existing analytics client, adds a read-only query repository for the `analytics` schema, exposes safe JSON endpoints for runs, cameras, tracks, media references, cross-camera matches, and global vehicles, and strips sensitive metadata keys from responses.
+* Added focused API tests covering health, pagination, filters, 404 behavior, media-reference safety, error masking, and OpenAPI credential hygiene. The API test slice passed on July 24, 2026 with 29 tests green; the full multicamera suite remained at the same two unrelated detection-class normalization failures (`automobile`, `3wheeler`) and introduced no new failures.
+
 ## 2026-06-04
 
 * Added Event Catalog architecture

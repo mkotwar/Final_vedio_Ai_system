@@ -1,5 +1,5 @@
 florence:
-  enabled: false
+  enabled: true
 
   model_path: null
   adapter_path: null

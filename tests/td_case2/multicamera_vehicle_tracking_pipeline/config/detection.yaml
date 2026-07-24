@@ -1,5 +1,5 @@
 vehicle_detector:
-  model_path: object/vehical_detection/best_old.pt
+  model_path: models/vehicle_detection/best_old.pt
   fallback_model_path: yolov8n.pt
   allow_fallback: true
   device: auto
