@@ -137,7 +137,7 @@ export default function TrackDetailPage() {
         </div>
         <div className="card-grid">
           {mediaQuery.data.map((media) => (
-            <EvidenceCard key={media.media_id || `${media.storage_uri}-${media.frame_number}`} media={media} />
+            <EvidenceCard key={media.media_id || `${media.media_type || 'media'}-${media.frame_number || 'na'}`} media={media} />
           ))}
         </div>
       </section>

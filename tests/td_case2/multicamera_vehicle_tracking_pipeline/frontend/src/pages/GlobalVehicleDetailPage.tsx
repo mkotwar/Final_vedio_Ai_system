@@ -98,12 +98,12 @@ export default function GlobalVehicleDetailPage() {
         <div className="panel__header">
           <div>
             <p className="panel__eyebrow">Evidence references</p>
-            <h3>Reference-only media</h3>
+            <h3>Evidence media</h3>
           </div>
         </div>
         <div className="card-grid">
           {detail.evidence.map((item) => (
-            <EvidenceCard key={item.media_id || item.storage_uri || 'evidence'} media={item} />
+            <EvidenceCard key={item.media_id || `${item.media_type || 'evidence'}-${item.frame_number || 'na'}`} media={item} />
           ))}
         </div>
       </section>

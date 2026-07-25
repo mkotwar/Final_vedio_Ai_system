@@ -58,9 +58,25 @@ function buildMockFetch() {
     if (path.endsWith('/media/media-1')) {
       return jsonResponse({
         media_id: 'media-1',
-        availability: 'REFERENCE_ONLY',
-        storage_uri: 'debug_runs/reference_only/car_1.jpg',
+        availability: 'LOCAL_FILE',
+        content_url: '/api/v1/media/media-1/content',
         media_type: 'BEST_VEHICLE_CROP',
+      })
+    }
+    if (path.endsWith('/media/media-1/url')) {
+      return jsonResponse({
+        media_id: 'media-1',
+        availability: 'SIGNED_URL',
+        url: 'https://signed.example/media-1.jpg',
+        expires_in: 300,
+      })
+    }
+    if (path.endsWith('/media/media-2/url')) {
+      return jsonResponse({
+        media_id: 'media-2',
+        availability: 'SIGNED_URL',
+        url: 'https://signed.example/media-2.jpg',
+        expires_in: 300,
       })
     }
 

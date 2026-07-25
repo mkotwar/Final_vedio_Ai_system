@@ -131,7 +131,14 @@ export default function TracksPage() {
               {
                 key: 'evidence',
                 header: 'Evidence',
-                render: (row: TrackListItem) => row.primary_media?.storage_uri ? <span className="badge badge--neutral">Reference ready</span> : <span className="badge badge--neutral">No media</span>,
+                render: (row: TrackListItem) =>
+                  row.primary_media?.content_url || row.primary_media?.availability === 'SIGNED_URL' ? (
+                    <span className="badge badge--success">Image available</span>
+                  ) : row.primary_media?.availability ? (
+                    <span className="badge badge--neutral">{row.primary_media.availability}</span>
+                  ) : (
+                    <span className="badge badge--neutral">No media</span>
+                  ),
               },
               {
                 key: 'uuid',

@@ -29,5 +29,12 @@ export const handlers = [
   ),
   http.get(`${base}/global-vehicles/:globalVehicleCode/tracks`, () => HttpResponse.json(globalVehicleMembersFixture)),
   http.get(`${base}/cross-camera-matches`, () => HttpResponse.json(matchesFixture)),
-  http.get(`${base}/media/:mediaId`, () => HttpResponse.json({ media_id: 'media-1', availability: 'REFERENCE_ONLY', storage_uri: 'debug_runs/reference_only/car_1.jpg', media_type: 'BEST_VEHICLE_CROP' })),
+  http.get(`${base}/media/:mediaId`, () =>
+    HttpResponse.json({
+      media_id: 'media-1',
+      availability: 'LOCAL_FILE',
+      content_url: '/api/v1/media/media-1/content',
+      media_type: 'BEST_VEHICLE_CROP',
+    }),
+  ),
 ]

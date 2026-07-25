@@ -31,7 +31,7 @@ export function getApiBaseUrl(): string {
   }
 }
 
-function buildUrl(path: string, params?: Record<string, string | number | boolean | undefined | null>): string {
+export function buildApiUrl(path: string, params?: Record<string, string | number | boolean | undefined | null>): string {
   const baseUrl = getApiBaseUrl()
   const url = new URL(`${baseUrl}${path.startsWith('/') ? path : `/${path}`}`)
   if (params) {
@@ -43,6 +43,22 @@ function buildUrl(path: string, params?: Record<string, string | number | boolea
     })
   }
   return url.toString()
+}
+
+export function resolveApiAssetUrl(path: string): string {
+  const trimmed = path.trim()
+  if (!trimmed) {
+    throw new ApiClientError('Media URL is invalid.', {
+      status: 500,
+      code: 'INVALID_MEDIA_URL',
+      details: null,
+    })
+  }
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed
+  }
+  const apiOrigin = new URL(getApiBaseUrl()).origin
+  return new URL(trimmed.startsWith('/') ? trimmed : `/${trimmed}`, apiOrigin).toString()
 }
 
 async function parseApiError(response: Response): Promise<ApiClientError> {
@@ -78,7 +94,7 @@ export async function apiGet<T>(
   }
 
   try {
-    const response = await fetch(buildUrl(path, options.params), {
+    const response = await fetch(buildApiUrl(path, options.params), {
       method: 'GET',
       headers: {
         Accept: 'application/json',

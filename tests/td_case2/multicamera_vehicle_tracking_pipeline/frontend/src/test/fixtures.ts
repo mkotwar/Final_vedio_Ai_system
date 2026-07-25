@@ -84,11 +84,26 @@ export const mediaFixture: MediaReference[] = [
   {
     media_id: 'media-1',
     media_type: 'BEST_VEHICLE_CROP',
-    storage_provider: 'LOCAL',
-    storage_uri: 'debug_runs/reference_only/car_1.jpg',
+    availability: 'LOCAL_FILE',
+    content_url: '/api/v1/media/media-1/content',
     frame_number: 12,
     quality_score: 0.92,
     selection_rank: 1,
+    is_primary: true,
+    width: 200,
+    height: 100,
+  },
+  {
+    media_id: 'media-2',
+    media_type: 'PLATE_CROP',
+    availability: 'LOCAL_FILE',
+    content_url: '/api/v1/media/media-2/content',
+    frame_number: 12,
+    quality_score: 0.88,
+    selection_rank: 1,
+    is_primary: true,
+    width: 120,
+    height: 36,
   },
 ]
 
@@ -232,7 +247,21 @@ export const globalVehicleDetailFixture: GlobalVehicleDetailResponse = {
   })),
   confirmed_matches: [{ id: 'match-1' }],
   possible_matches: [],
-  evidence: mediaFixture,
+  evidence: [
+    mediaFixture[0],
+    {
+      media_id: 'media-3',
+      media_type: 'BEST_VEHICLE_CROP',
+      availability: 'LOCAL_FILE',
+      content_url: '/api/v1/media/media-3/content',
+      frame_number: 14,
+      quality_score: 0.9,
+      selection_rank: 1,
+      is_primary: true,
+      width: 200,
+      height: 100,
+    },
+  ],
 }
 
 export const matchesFixture: PaginatedResponse<MatchListItem> = {

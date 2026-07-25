@@ -410,6 +410,49 @@ code {
   margin-bottom: 16px;
 }
 
+.evidence-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.evidence-card__preview {
+  margin-bottom: 16px;
+}
+
+.evidence-card__image-link,
+.evidence-card__placeholder {
+  display: flex;
+  width: 100%;
+  min-height: 180px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.evidence-card__image {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+}
+
+.evidence-card__placeholder {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.evidence-card__placeholder strong,
+.evidence-card__placeholder p {
+  margin: 0;
+}
+
 .summary-card__metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
