@@ -4,7 +4,7 @@
 
 **Project Name:** AI Video Review & Investigation System
 
-**Last Updated:** 2026-07-18
+**Last Updated:** 2026-07-25
 
 **Overall Progress:** ~45%
 
@@ -561,6 +561,15 @@ Event abstraction and summary quality improvements.
 * Added a read-only `verify_global_vehicle_objects.py` audit CLI plus focused unit coverage for global-match config, immutable models, scoring, service orchestration, repository idempotency, build CLI behavior, and verifier behavior.
 * Added a first read-only FastAPI backend for the multicamera vehicle-tracking pipeline under `tests/td_case2/multicamera_vehicle_tracking_pipeline/api/`. It reuses the existing analytics client, adds a read-only query repository for the `analytics` schema, exposes safe JSON endpoints for runs, cameras, tracks, media references, cross-camera matches, and global vehicles, and strips sensitive metadata keys from responses.
 * Added focused API tests covering health, pagination, filters, 404 behavior, media-reference safety, error masking, and OpenAPI credential hygiene. The API test slice passed on July 24, 2026 with 29 tests green; the full multicamera suite remained at the same two unrelated detection-class normalization failures (`automobile`, `3wheeler`) and introduced no new failures.
+
+## 2026-07-25
+
+* Added a read-only React + TypeScript + Vite frontend for `tests/td_case2/multicamera_vehicle_tracking_pipeline` under `tests/td_case2/multicamera_vehicle_tracking_pipeline/frontend`.
+* The frontend is wired to the existing FastAPI backend only and does not call Supabase directly or expose service-role credentials in source.
+* Added typed API modules for runs, tracks, global vehicles, cross-camera matches, and media references, plus reusable layout, state, table, filter, and evidence components.
+* Added route-based screens for dashboard, runs, run detail, tracks, track detail, global vehicles, global vehicle detail, cross-camera matches, and 404 handling.
+* Added focused frontend coverage for API base URL handling, paginated response parsing, backend error parsing, run/track/global-vehicle/match rendering, reference-only media behavior, loading and empty states, and source checks that block direct Supabase usage.
+* Frontend validation passed locally on July 25, 2026 with `15` Vitest tests green and a successful production build from `tests/td_case2/multicamera_vehicle_tracking_pipeline/frontend`.
 
 ## 2026-06-04
 

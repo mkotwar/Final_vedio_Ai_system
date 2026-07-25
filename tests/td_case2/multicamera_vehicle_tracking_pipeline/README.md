@@ -274,6 +274,40 @@ Notes:
 - Sensitive metadata keys such as keys, tokens, and local model paths are stripped from responses.
 - Media delivery is currently reference-only; the API does not stream image bytes.
 
+## React frontend
+
+The pipeline now includes a React + TypeScript + Vite frontend under `frontend/`.
+
+Current frontend scope:
+
+- dashboard health and recent runs
+- processing-run list and detail views
+- local-track list and detail views
+- global-vehicle list and detail views
+- cross-camera match list view
+- loading, empty, retry, and typed API error states
+- URL-driven filters and pagination for list screens
+- reference-only evidence cards without direct Supabase access
+
+Run the frontend locally from `tests\td_case2\multicamera_vehicle_tracking_pipeline\frontend`:
+
+```powershell
+npm install
+npm run dev
+```
+
+Environment:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
+```
+
+Notes:
+
+- The frontend calls FastAPI only.
+- Supabase service-role credentials must remain server-side.
+- The frontend includes focused Vitest coverage for API parsing, list/detail rendering, status handling, reference-only media, and source-code checks that block direct Supabase usage.
+
 ## Validation report location
 
 Tracking validation output:

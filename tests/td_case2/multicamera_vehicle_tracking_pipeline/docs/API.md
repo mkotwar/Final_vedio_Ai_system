@@ -135,4 +135,21 @@ Track media endpoints return safe metadata only.
 
 ## Frontend contract
 
-The frontend should use this API instead of direct Supabase service-role access. Current next step for the React frontend is wiring run, track, match, and global-vehicle list/detail screens to these read-only endpoints.
+The React frontend under `tests/td_case2/multicamera_vehicle_tracking_pipeline/frontend` uses this API instead of direct Supabase service-role access.
+
+Current frontend coverage:
+
+- dashboard health and recent runs
+- run list and run detail
+- local track list and track detail
+- global vehicle list and detail
+- cross-camera match list
+- retry, loading, empty, timeout, and API error handling
+- reference-only media cards
+
+Frontend rules:
+
+- Browser requests must go to `http://127.0.0.1:8000/api/v1` or the configured `VITE_API_BASE_URL`
+- The frontend must not import or initialize a Supabase client
+- Service-role credentials must not appear in frontend source or environment examples
+- Media references are metadata only in this stage
