@@ -8,7 +8,7 @@ from .plate_models import NormalizedRegistrationText, PlateValidationResult
 VALID_STATE_CODES = {
     "AN", "AP", "AR", "AS", "BR", "CG", "CH", "DD", "DL", "DN", "GA", "GJ", "HP", "HR",
     "JH", "JK", "KA", "KL", "LA", "LD", "MH", "ML", "MN", "MP", "MZ", "NL", "OD", "OR",
-    "PB", "PY", "RJ", "SK", "TN", "TR", "TS", "UK", "UP", "WB",
+    "PB", "PY", "RJ", "SK", "TN", "TR", "TS", "UK", "UP", "WB"
 }
 
 STRICT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
