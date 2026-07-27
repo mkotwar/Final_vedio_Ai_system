@@ -4,6 +4,7 @@ export interface MediaReference {
   availability?: string | null
   content_url?: string | null
   thumbnail_url?: string | null
+  track_uuid?: string | null
   frame_number?: number | null
   captured_at?: string | null
   video_time_seconds?: number | null
@@ -23,6 +24,7 @@ export interface MediaDeliveryResponse {
   media_type?: string | null
   content_url?: string | null
   thumbnail_url?: string | null
+  track_uuid?: string | null
   frame_number?: number | null
   width?: number | null
   height?: number | null

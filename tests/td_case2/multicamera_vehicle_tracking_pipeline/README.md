@@ -91,6 +91,14 @@ SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
+The read-only FastAPI backend under `api/` now auto-loads these values from `tests\td_case2\multicamera_vehicle_tracking_pipeline\.env.example` for local runs.
+
+If you also want these values loaded into the current PowerShell session, run:
+
+```powershell
+. .\load-env.ps1
+```
+
 This pipeline also accepts the exact local key name:
 
 ```env
@@ -146,6 +154,26 @@ Direct track lookup:
 ```powershell
 .\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.verify_persisted_tracks --track-uuid RUN_20260722_175158:CAM_001:TRACK_1
 ```
+
+Enhanced ANPR artifact validation:
+
+```powershell
+.\.venv\Scripts\python.exe -m tests.td_case2.multicamera_vehicle_tracking_pipeline.scripts.validate_anpr_on_existing_run `
+  --run-code RUN_20260727_112517 `
+  --track-uuid RUN_20260727_112517:CAM_003:TRACK_2 `
+  --artifact-root artifacts `
+  --anpr-config tests\td_case2\multicamera_vehicle_tracking_pipeline\config\anpr.yaml `
+  --florence-config tests\td_case2\multicamera_vehicle_tracking_pipeline\config\florence.yaml `
+  --output-report debug_runs\multicamera_vehicle_tracking_pipeline\anpr_track2_validation.json
+```
+
+Enhanced ANPR behavior:
+
+- ANPR now examines multiple saved evidence roles per completed track instead of only one crop.
+- Plate YOLO runs on the original saved vehicle crop and a padded vehicle-crop variant, and the collector can fall back to class-aware heuristic plate regions when detector boxes are absent.
+- OCR now evaluates bounded preprocessing variants per candidate and aggregates repeated text across saved evidence roles before selecting the final result.
+- Runtime track-level statuses can now surface `VERIFIED`, `PARTIAL`, `UNREADABLE`, `NO_PLATE_DETECTED`, and `CONFLICTING_CANDIDATES`.
+- Persistence remains backward compatible by mapping richer runtime states into the existing analytics plate-reading schema while keeping full diagnostics in metadata during dry-run validation.
 
 Enrichment-run audit:
 
@@ -272,7 +300,14 @@ Notes:
 - The API is read-only in this stage.
 - The API uses the `analytics` schema only.
 - Sensitive metadata keys such as keys, tokens, and local model paths are stripped from responses.
-- Media delivery is currently reference-only; the API does not stream image bytes.
+- Local evidence media can now be streamed safely through FastAPI when the stored `track_media.storage_uri` resolves inside an approved root such as `artifacts/`.
+- Track detail now exposes structured persisted global membership so the frontend can link directly to a confirmed global vehicle instead of inferring membership client-side.
+- The dedicated media endpoints are:
+  - `GET /api/v1/media/{media_id}`
+  - `GET /api/v1/media/{media_id}/content`
+  - `GET /api/v1/media/{media_id}/url`
+- Unsafe paths, traversal attempts, unsupported extensions, and unsupported providers are blocked without exposing absolute local filesystem paths in responses.
+- Supabase Storage signed URLs remain optional and are only returned when a bucket is configured server-side.
 
 ## React frontend
 
@@ -285,6 +320,8 @@ Current frontend scope:
 - local-track list and detail views
 - global-vehicle list and detail views
 - cross-camera match list view
+- structured vehicle search route at `/search`
+- natural-language vehicle search layered onto the same `/search` route and backend search service
 - loading, empty, retry, and typed API error states
 - URL-driven filters and pagination for list screens
 - reference-only evidence cards without direct Supabase access
@@ -306,7 +343,71 @@ Notes:
 
 - The frontend calls FastAPI only.
 - Supabase service-role credentials must remain server-side.
-- The frontend includes focused Vitest coverage for API parsing, list/detail rendering, status handling, reference-only media, and source-code checks that block direct Supabase usage.
+- The frontend now renders live local evidence images for available `LOCAL_FILE` media and shows placeholders for `REFERENCE_ONLY`, `MISSING`, `UNSAFE_REFERENCE`, and `UNSUPPORTED_PROVIDER`.
+- Track detail now shows the linked `global_vehicle_code` and `Open Global Vehicle` action whenever the API returns a persisted membership; only unlinked tracks render `Not linked`.
+- Evidence cards use a fixed `240px` preview viewport with `object-fit: contain`, keeping both vehicle and plate crops fully visible while preserving aspect ratio.
+- The React UI now groups vehicle and plate evidence per track through a shared `VehicleIdentityCard`, so the plate crop stays visually attached to its parent vehicle in Track Detail, Global Vehicle Detail, Cross-Camera Matches, Vehicle Search, and list summaries.
+- List-oriented API responses now expose lightweight `primary_vehicle_media` and `primary_plate_media` fields so tracks, global vehicles, run detail tabs, and search results can render representative thumbnails without loading full evidence galleries.
+- The frontend includes focused Vitest coverage for API parsing, list/detail rendering, status handling, evidence rendering, placeholder behavior, and source-code checks that block direct Supabase usage.
+- The new structured vehicle search page reuses the same backend-only contract and does not call Supabase directly from the browser.
+- The same `/search` page now also supports natural-language vehicle queries that post to `POST /api/v1/search/natural-language`.
+- The backend validates and normalizes interpreted filters, then reuses the existing structured `VehicleSearchService` instead of generating SQL or allowing direct LLM/database access.
+- `POST /api/v1/search/natural-language/parse` is available for safe parser-only validation and does not hit the repository search methods.
+- Supported natural-language phrases include exact/full plates, plate starts/ends/contains forms, class words, colour words, `both cameras`, `verified plates`, and common time phrases such as `around 2 PM` or `between 2 PM and 3 PM`.
+- Explicit run and scope selections remain authoritative. The parser never invents another run, never searches all history when a selected run already exists, and validates parsed camera codes against the selected run before search execution.
+- The interpreted-filters panel shows the backend-validated translation plus fallback status and lets the operator apply those values back into the structured search form.
+
+## Structured vehicle search
+
+Read-only backend route:
+
+- `GET /api/v1/search/vehicles`
+
+Frontend route:
+
+- `http://127.0.0.1:5173/search`
+
+Supported structured filters:
+
+- `run_code`
+- `result_scope`
+- `vehicle_class`
+- `colour`
+- `plate`
+- `plate_match_type`
+- `camera_codes`
+- `date`
+- `start_time`
+- `end_time`
+- `minimum_confidence`
+- `multi_camera_only`
+- `verified_plate_only`
+- `limit`
+- `offset`
+- `sort_by`
+- `sort_order`
+
+Natural-language layer:
+
+- `POST /api/v1/search/natural-language`
+- `POST /api/v1/search/natural-language/parse`
+- returns interpreted filters, parser metadata, clarification state, pagination, and the same shared result-card data contract
+- reuses existing local-track and global-vehicle detail drill-down routes
+
+Response characteristics:
+
+- Results can mix local tracks and global vehicles in one ranked response.
+- Pagination uses `limit`, `offset`, `returned`, `total`, and `has_more`.
+- Relevance is deterministic and based on structured match reasons only.
+- Existing track and global-vehicle detail routes remain the drill-down targets for search cards.
+
+Live evidence validation on July 27, 2026:
+
+- `RUN_20260725_131944:CAM_002:TRACK_4` returned both `BEST_VEHICLE_CROP` and `PLATE_CROP` through FastAPI with `LOCAL_FILE` availability.
+- The same track rendered `GVO:RUN_20260725_131944:FA3FCF9E3ABC` and `Open Global Vehicle` in the live Track Detail page.
+- The confirmed global vehicle `GVO:RUN_20260725_131944:FA3FCF9E3ABC` rendered evidence from both `CAM_001 TRACK_4` and `CAM_002 TRACK_4`.
+- The grouped vehicle card kept plate `DL8CBF6268` beside its owning vehicle crop instead of rendering plate evidence as a disconnected card.
+- Browser evidence requests were served from FastAPI content routes under `http://127.0.0.1:8000/api/v1/media/.../content` during validation.
 
 ## Validation report location
 

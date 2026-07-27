@@ -49,6 +49,13 @@ def select_vehicle_evidence_candidates(
                 sharpness_score=candidate.sharpness_score,
                 edge_penalty=candidate.edge_penalty,
                 overall_score=candidate.overall_score,
+                source_image_kind="VEHICLE_CROP",
+                metadata={
+                    "candidate_type": candidate.candidate_type,
+                    "track_output_directory": evidence.output_directory,
+                    "track_class_name": completed_track.class_name,
+                    "source_path": str(completed_track.source_path) if completed_track.source_path is not None else None,
+                },
             )
         )
         seen_paths.add(file_path)

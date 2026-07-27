@@ -19,6 +19,9 @@ class EvidenceCandidate:
     overall_score: float
     encoded_jpeg: bytes
     file_path: str | None = None
+    source_frame_jpeg: bytes | None = None
+    source_frame_width: int | None = None
+    source_frame_height: int | None = None
 
 
 @dataclass(slots=True)
@@ -30,6 +33,12 @@ class TrackEvidencePackage:
     class_name: str
     candidates: dict[str, EvidenceCandidate] = field(default_factory=dict)
     output_directory: str | None = None
+    full_frame_path: str | None = None
+    full_frame_frame_number: int | None = None
+    full_frame_video_time_seconds: float | None = None
+    full_frame_bbox_xyxy: tuple[float, float, float, float] | None = None
+    full_frame_width: int | None = None
+    full_frame_height: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -39,6 +48,12 @@ class TrackEvidencePackage:
             "track_uuid": self.track_uuid,
             "class_name": self.class_name,
             "output_directory": self.output_directory,
+            "full_frame_path": self.full_frame_path,
+            "full_frame_frame_number": self.full_frame_frame_number,
+            "full_frame_video_time_seconds": self.full_frame_video_time_seconds,
+            "full_frame_bbox_xyxy": list(self.full_frame_bbox_xyxy) if self.full_frame_bbox_xyxy is not None else None,
+            "full_frame_width": self.full_frame_width,
+            "full_frame_height": self.full_frame_height,
             "candidate_count": len(self.candidates),
             "candidates": {
                 name: {
@@ -54,6 +69,8 @@ class TrackEvidencePackage:
                     "edge_penalty": candidate.edge_penalty,
                     "overall_score": candidate.overall_score,
                     "file_path": candidate.file_path,
+                    "source_frame_width": candidate.source_frame_width,
+                    "source_frame_height": candidate.source_frame_height,
                 }
                 for name, candidate in sorted(self.candidates.items())
             },

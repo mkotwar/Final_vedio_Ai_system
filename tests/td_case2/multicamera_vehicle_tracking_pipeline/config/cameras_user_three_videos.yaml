@@ -1,0 +1,21 @@
+cameras:
+  - camera_code: CAM_001
+    camera_name: CAM_001
+    enabled: true
+    source_type: file
+    source:
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/1test.mp4"
+
+  - camera_code: CAM_002
+    camera_name: CAM_002
+    enabled: true
+    source_type: file
+    source:
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/2test.mp4"
+
+  - camera_code: CAM_003
+    camera_name: CAM_003
+    enabled: true
+    source_type: file
+    source:
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/3test .mp4"

@@ -1,20 +1,17 @@
 import { useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listGlobalVehicles } from '../api/globalVehicles'
 import type { GlobalVehicleListItem } from '../types/globalVehicle'
 import FilterBar from '../components/filters/FilterBar'
-import DataTable from '../components/tables/DataTable'
 import Pagination from '../components/tables/Pagination'
 import LoadingState from '../components/states/LoadingState'
 import ErrorState from '../components/states/ErrorState'
 import EmptyState from '../components/states/EmptyState'
-import StatusBadge from '../components/states/StatusBadge'
-import ConfidenceBadge from '../components/states/ConfidenceBadge'
+import GlobalVehicleCard from '../components/cards/GlobalVehicleCard'
 
 export default function GlobalVehiclesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const filters = useMemo(
     () => ({
@@ -23,7 +20,7 @@ export default function GlobalVehiclesPage() {
       vehicle_class: searchParams.get('vehicle_class') || undefined,
       colour: searchParams.get('colour') || undefined,
       plate: searchParams.get('plate') || undefined,
-      minimum_confidence: searchParams.get('minimum_confidence') || undefined,
+      minimum_confidence: searchParams.get('minimum_confidence') || '0.5',
       minimum_camera_count: searchParams.get('minimum_camera_count') || undefined,
       page: Number(searchParams.get('page') || '1'),
       page_size: Number(searchParams.get('page_size') || '10'),
@@ -90,7 +87,7 @@ export default function GlobalVehiclesPage() {
         </label>
         <label>
           <span>Min confidence</span>
-          <input value={filters.minimum_confidence || ''} onChange={(event) => updateFilter('minimum_confidence', event.target.value)} placeholder="0.95" type="number" min="0" max="1" step="0.01" />
+          <input value={filters.minimum_confidence || ''} onChange={(event) => updateFilter('minimum_confidence', event.target.value)} placeholder="0.50" type="number" min="0" max="1" step="0.01" />
         </label>
         <label>
           <span>Min cameras</span>
@@ -105,34 +102,15 @@ export default function GlobalVehiclesPage() {
         <EmptyState title="No global vehicles found" description="Try widening the filters or selecting a run with persisted global objects." />
       ) : (
         <>
-          <DataTable
-            columns={[
-              {
-                key: 'code',
-                header: 'Global vehicle code',
-                render: (row: GlobalVehicleListItem) => (
-                  <div>
-                    <strong>{row.global_vehicle_code}</strong>
-                    <p className="table-subtext">
-                      {row.camera_count && row.camera_count > 1 ? 'Multi-camera object' : 'Single-camera object'}
-                    </p>
-                  </div>
-                ),
-              },
-              { key: 'status', header: 'Status', render: (row: GlobalVehicleListItem) => <StatusBadge value={row.status} /> },
-              { key: 'plate', header: 'Canonical plate', render: (row: GlobalVehicleListItem) => row.canonical_plate || 'N/A' },
-              { key: 'colour', header: 'Canonical colour', render: (row: GlobalVehicleListItem) => row.canonical_colour || 'N/A' },
-              { key: 'class', header: 'Canonical class', render: (row: GlobalVehicleListItem) => row.canonical_vehicle_class || 'N/A' },
-              { key: 'confidence', header: 'Confidence', render: (row: GlobalVehicleListItem) => <ConfidenceBadge value={row.confidence} /> },
-              { key: 'cameras', header: 'Cameras', render: (row: GlobalVehicleListItem) => row.camera_count ?? 'N/A' },
-              { key: 'tracks', header: 'Tracks', render: (row: GlobalVehicleListItem) => row.track_count ?? 'N/A' },
-              { key: 'method', header: 'Creation method', render: (row: GlobalVehicleListItem) => row.creation_method || 'N/A' },
-              { key: 'seen', header: 'First seen → Last seen', render: (row: GlobalVehicleListItem) => `${row.first_seen_at || 'N/A'} → ${row.last_seen_at || 'N/A'}` },
-            ]}
-            rows={globalVehiclesQuery.data.items}
-            getRowKey={(row) => row.global_vehicle_code}
-            onRowClick={(row) => navigate(`/global-vehicles/${encodeURIComponent(row.global_vehicle_code)}`)}
-          />
+          <div className="stack-list">
+            {globalVehiclesQuery.data.items.map((row: GlobalVehicleListItem) => (
+              <GlobalVehicleCard
+                key={row.global_vehicle_code}
+                vehicle={row}
+                detailHref={`/global-vehicles/${encodeURIComponent(row.global_vehicle_code)}`}
+              />
+            ))}
+          </div>
           <Pagination
             page={globalVehiclesQuery.data.page}
             pageSize={globalVehiclesQuery.data.page_size}

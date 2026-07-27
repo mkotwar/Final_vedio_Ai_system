@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 
 from ..orchestration.worker_multicamera_tracking_orchestrator import WorkerMultiCameraTrackingOrchestrator
+from .logging_utils import configure_cli_logging, summarize_worker_report
+
+
+LOGGER = logging.getLogger("validate_worker_multicamera_tracking")
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,12 +42,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    logging.basicConfig(level=getattr(logging, str(args.log_level).upper(), logging.INFO), format="%(levelname)s %(name)s %(message)s")
+    configure_cli_logging(args.log_level)
     persistence_backend = "disabled"
     if args.dry_run_persistence:
         persistence_backend = "dry_run"
     elif args.persist_to_supabase:
         persistence_backend = "analytics_supabase"
+    selected_cameras = ", ".join(args.camera_codes or ([args.camera_code] if args.camera_code else ["all enabled cameras"]))
+    LOGGER.info("Starting multi-camera worker validation")
+    LOGGER.info("Selected cameras: %s", selected_cameras)
+    LOGGER.info("Persistence backend: %s", persistence_backend)
     worker_overrides = {
         "enabled": True,
         "enable_persistence_worker": args.persist_to_supabase or args.dry_run_persistence,
@@ -83,7 +90,9 @@ def main() -> None:
         sample_frame_limit_per_camera=args.sample_frame_limit_per_camera,
         output_report=args.output_report,
     )
-    print(json.dumps(result.report, indent=2))
+    for line in summarize_worker_report(result.report):
+        LOGGER.info("%s", line)
+    LOGGER.info("Detailed report written to: %s", result.report_path)
 
 
 if __name__ == "__main__":

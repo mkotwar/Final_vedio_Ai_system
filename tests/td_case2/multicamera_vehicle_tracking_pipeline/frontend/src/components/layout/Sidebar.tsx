@@ -2,10 +2,11 @@ import { NavLink } from 'react-router-dom'
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
-  { to: '/runs', label: 'Processing Runs' },
-  { to: '/tracks', label: 'Local Tracks' },
+  { to: '/runs', label: 'Runs' },
+  { to: '/tracks', label: 'Tracks' },
   { to: '/global-vehicles', label: 'Global Vehicles' },
   { to: '/matches', label: 'Cross-Camera Matches' },
+  { to: '/search', label: 'Vehicle Search' },
 ]
 
 export default function Sidebar() {

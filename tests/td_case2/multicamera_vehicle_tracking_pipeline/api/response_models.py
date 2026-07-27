@@ -59,8 +59,10 @@ class CameraDetailResponse(BaseModel):
 class MediaReference(BaseModel):
     media_id: str | None = None
     media_type: str | None = None
-    storage_provider: str | None = None
-    storage_uri: str | None = None
+    availability: str | None = None
+    content_url: str | None = None
+    thumbnail_url: str | None = None
+    track_uuid: str | None = None
     frame_number: int | None = None
     captured_at: str | None = None
     video_time_seconds: float | None = None
@@ -71,6 +73,27 @@ class MediaReference(BaseModel):
     visibility_score: float | None = None
     selection_rank: int | None = None
     is_primary: bool | None = None
+
+
+class PlateResult(BaseModel):
+    raw_text: str | None = None
+    normalized_text: str | None = None
+    display_text: str | None = None
+    status: str | None = None
+    verification_status: str | None = None
+    plate_pattern: str | None = None
+    ocr_confidence: float | None = None
+    detector_confidence: float | None = None
+    source_media_id: str | None = None
+
+
+class TrackGlobalMembership(BaseModel):
+    linked: bool
+    global_vehicle_id: str | None = None
+    global_vehicle_code: str | None = None
+    membership_confidence: float | None = None
+    membership_status: str | None = None
+    member_track_count: int | None = None
 
 
 class TrackListItem(BaseModel):
@@ -86,12 +109,18 @@ class TrackListItem(BaseModel):
     observation_count: int | None = None
     best_detection_confidence: float | None = None
     average_detection_confidence: float | None = None
+    class_confidence: float | None = None
+    class_is_stable: bool | None = None
+    class_observation_count: int | None = None
     primary_colour: str | None = None
     colour_confidence: float | None = None
+    plate_result: PlateResult | None = None
     canonical_plate: str | None = None
     plate_status: str | None = None
     plate_confidence: float | None = None
     primary_media: MediaReference | None = None
+    primary_vehicle_media: MediaReference | None = None
+    primary_plate_media: MediaReference | None = None
 
 
 class TrackDetailResponse(BaseModel):
@@ -106,6 +135,8 @@ class ObservationItem(BaseModel):
     detection_confidence: float | None = None
     tracker_confidence: float | None = None
     is_key_observation: bool
+    class_name: str | None = None
+    raw_class_name: str | None = None
 
 
 class GlobalVehicleListItem(BaseModel):
@@ -115,6 +146,7 @@ class GlobalVehicleListItem(BaseModel):
     canonical_plate: str | None = None
     canonical_colour: str | None = None
     canonical_vehicle_class: str | None = None
+    plate_result: PlateResult | None = None
     confidence: float | None = None
     camera_count: int | None = None
     track_count: int | None = None
@@ -122,6 +154,30 @@ class GlobalVehicleListItem(BaseModel):
     first_seen_at: str | None = None
     last_seen_at: str | None = None
     primary_evidence_reference: MediaReference | None = None
+    primary_vehicle_media: MediaReference | None = None
+    primary_plate_media: MediaReference | None = None
+
+
+class GlobalVehicleMember(BaseModel):
+    vehicle_track_id: str | None = None
+    track_uuid: str | None = None
+    camera_code: str | None = None
+    vehicle_class: str | None = None
+    primary_colour: str | None = None
+    plate_result: PlateResult | None = None
+    canonical_plate: str | None = None
+    plate_status: str | None = None
+    plate_confidence: float | None = None
+    best_detection_confidence: float | None = None
+    first_seen_at: str | None = None
+    last_seen_at: str | None = None
+    association_score: float | None = None
+    association_method: str | None = None
+    association_status: str | None = None
+    is_current: bool | None = None
+    attached_at: str | None = None
+    primary_vehicle_media: MediaReference | None = None
+    primary_plate_media: MediaReference | None = None
 
 
 class GlobalVehicleDetailResponse(BaseModel):
@@ -145,6 +201,8 @@ class MatchListItem(BaseModel):
     decision_reasons: list[str]
     rule_version: str | None = None
     linked_global_vehicle_code: str | None = None
+    source_track: TrackListItem | None = None
+    candidate_track: TrackListItem | None = None
 
 
 class MatchDetailResponse(BaseModel):
@@ -154,5 +212,22 @@ class MatchDetailResponse(BaseModel):
 class MediaDeliveryResponse(BaseModel):
     media_id: str
     availability: str
-    storage_uri: str | None = None
     media_type: str | None = None
+    content_url: str | None = None
+    thumbnail_url: str | None = None
+    frame_number: int | None = None
+    width: int | None = None
+    height: int | None = None
+    quality_score: float | None = None
+    sharpness_score: float | None = None
+    visibility_score: float | None = None
+    selection_rank: int | None = None
+    is_primary: bool | None = None
+    error_detail: str | None = None
+
+
+class MediaSignedUrlResponse(BaseModel):
+    media_id: str
+    availability: str
+    url: str | None = None
+    expires_in: int | None = None

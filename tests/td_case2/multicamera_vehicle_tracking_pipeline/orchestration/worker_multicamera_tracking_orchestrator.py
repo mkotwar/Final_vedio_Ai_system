@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import asdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..database.repository import VehicleRepository
@@ -21,7 +22,7 @@ from ..enrichment.vehicle_colour_enrichment_service import VehicleColourEnrichme
 from ..detection.vehicle_detector import SharedVehicleDetector
 from ..evidence.evidence_config import EvidenceConfig, load_evidence_config
 from ..evidence.track_evidence_collector import TrackEvidenceCollector
-from ..ingestion.camera_config import CameraConfig, CameraConfigError, load_camera_configs
+from ..ingestion.camera_config import CameraConfig, CameraConfigError, apply_file_source_timestamp_policy, load_camera_configs
 from ..models.florence_runtime_factory import FlorenceRuntimeFactory
 from ..models.plate_detector_runtime_factory import PlateDetectorRuntimeFactory
 from ..orchestration.multi_camera_orchestrator import MultiCameraOrchestrator
@@ -40,6 +41,8 @@ from ..persistence.vehicle_class_mapping import normalize_vehicle_class
 from ..tracking.tracking_config import load_tracking_config, tracking_overrides_from_env
 from ..workers.worker_config import WorkerConfig, load_worker_config
 from ..workers.worker_supervisor import WorkerSupervisor
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -175,6 +178,7 @@ class WorkerMultiCameraTrackingOrchestrator:
         self.plate_detector_model_path = plate_detector_model_path
         self.plate_detector_device = plate_detector_device
         self.run_id = run_id or f"RUN_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self._run_started_at: datetime | None = None
         self.camera_code = camera_code
         self.camera_codes = list(camera_codes or [])
         self.camera_limit = camera_limit
@@ -186,6 +190,7 @@ class WorkerMultiCameraTrackingOrchestrator:
         sample_frame_limit_per_camera: int = 1,
         output_report: str | Path | None = None,
     ) -> WorkerTrackingRunResult:
+        LOGGER.info("Preparing worker pipeline run %s", self.run_id)
         all_camera_configs = load_camera_configs(self.camera_config_path, include_disabled=True, validate_paths=False)
         camera_configs = select_worker_cameras(
             all_camera_configs,
@@ -193,6 +198,10 @@ class WorkerMultiCameraTrackingOrchestrator:
             camera_codes=self.camera_codes,
             camera_limit=self.camera_limit,
         )
+        LOGGER.info("Loaded %s selected cameras", len(camera_configs))
+        self._run_started_at = datetime.now(timezone.utc)
+        camera_configs = apply_file_source_timestamp_policy(camera_configs, run_started_at=self._run_started_at)
+        all_camera_configs = apply_file_source_timestamp_policy(all_camera_configs, run_started_at=self._run_started_at)
         validate_selected_camera_sources(camera_configs)
         configured_camera_count = len(all_camera_configs)
         enabled_camera_count = sum(1 for camera in all_camera_configs if camera.enabled)
@@ -204,9 +213,12 @@ class WorkerMultiCameraTrackingOrchestrator:
         vehicle_colour_service = self.vehicle_colour_service or self._build_vehicle_colour_service()
         anpr_service = self.anpr_service or self._build_anpr_service()
         if self.worker_config.enable_persistence_worker and self.persistence_config.enabled:
+            LOGGER.info("Stage: persistence setup")
             persistence_service = persistence_service or self._build_persistence_service()
             if self.persistence_config.sync_cameras:
                 persistence_service.sync_cameras(camera_configs)
+                LOGGER.info("Stage complete: camera sync to persistence backend")
+        LOGGER.info("Stage: video processing started")
         wall_started = time.perf_counter()
         supervisor = WorkerSupervisor(
             camera_configs=camera_configs,
@@ -225,6 +237,7 @@ class WorkerMultiCameraTrackingOrchestrator:
         )
         result = supervisor.run()
         wall_runtime = time.perf_counter() - wall_started
+        LOGGER.info("Stage complete: video processing finished in %.2fs", wall_runtime)
         tracking_metrics = result.tracking_worker_metrics
         detection_metrics = result.detection_worker_metrics
         total_frames_read = sum(item["frames_read"] for item in result.camera_reader_metrics.values())
@@ -360,10 +373,17 @@ class WorkerMultiCameraTrackingOrchestrator:
             "anpr": anpr_service.get_metrics().to_dict() if anpr_service is not None else {"enabled": False},
             "generated_at": datetime.now().isoformat(),
             "evidence": {"enabled": self.evidence_config.enabled},
+            "debug_artifacts": {
+                "sample_frames_enabled": save_sample_frames,
+                "sample_frame_limit_per_camera": sample_frame_limit_per_camera if save_sample_frames else 0,
+                "sample_output_dir": str(output_dir) if save_sample_frames else None,
+            },
         }
+        LOGGER.info("Stage: finalizing persistence report")
         self._finalize_persistence(persistence_service, report)
         report_path = Path(output_report).resolve() if output_report else output_dir / "report.json"
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        LOGGER.info("Stage complete: report written to %s", report_path)
         return WorkerTrackingRunResult(report=report, report_path=report_path)
 
     def _build_persistence_service(self) -> PersistenceServiceProtocol:
@@ -375,6 +395,7 @@ class WorkerMultiCameraTrackingOrchestrator:
             execution_mode="THREADED",
             runtime_device=self.detector.device,
             artifact_root=Path(self.evidence_config.output_root),
+            run_started_at=self._run_started_at,
             repository=self.repository,
             analytics_client=self.analytics_client,
         )

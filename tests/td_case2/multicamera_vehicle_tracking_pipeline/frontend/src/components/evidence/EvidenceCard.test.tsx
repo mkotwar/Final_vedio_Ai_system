@@ -21,6 +21,8 @@ describe('EvidenceCard', () => {
 
     const image = await screen.findByRole('img', { name: 'BEST_VEHICLE_CROP' })
     expect(image).toHaveAttribute('src', 'http://127.0.0.1:8000/api/v1/media/media-1/content')
+    expect(image).toHaveClass('evidence-card__image')
+    expect(screen.getByRole('button', { name: 'Open BEST_VEHICLE_CROP preview' })).toHaveClass('evidence-card__image-button')
     expect(screen.getByText('PRIMARY')).toBeInTheDocument()
   })
 
@@ -69,6 +71,25 @@ describe('EvidenceCard', () => {
     fireEvent.error(image)
 
     await waitFor(() => expect(screen.getByText('The evidence image could not be loaded.')).toBeInTheDocument())
+  })
+
+  it('opens and closes the preview modal', async () => {
+    render(
+      <EvidenceCard
+        media={{
+          media_id: 'media-1',
+          media_type: 'BEST_VEHICLE_CROP',
+          availability: 'LOCAL_FILE',
+          content_url: '/api/v1/media/media-1/content',
+        }}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open BEST_VEHICLE_CROP preview' }))
+    expect(screen.getByRole('dialog', { name: 'BEST_VEHICLE_CROP preview' })).toBeInTheDocument()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'BEST_VEHICLE_CROP preview' })).not.toBeInTheDocument())
   })
 
   it('does not render absolute local paths', () => {

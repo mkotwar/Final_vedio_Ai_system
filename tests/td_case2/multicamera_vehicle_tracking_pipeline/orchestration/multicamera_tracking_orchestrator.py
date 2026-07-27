@@ -5,7 +5,7 @@ import logging
 import time
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
@@ -15,6 +15,7 @@ from ..detection.detection_config import detection_overrides_from_env, load_dete
 from ..detection.vehicle_detector import SharedVehicleDetector
 from ..evidence.evidence_config import EvidenceConfig, load_evidence_config
 from ..evidence.track_evidence_collector import TrackEvidenceCollector
+from ..ingestion.camera_config import apply_file_source_timestamp_policy
 from ..ingestion.multi_camera_reader import MultiCameraReader
 from ..orchestration.multi_camera_orchestrator import MultiCameraOrchestrator
 from ..persistence.analytics_database_client import AnalyticsDatabaseClient
@@ -80,6 +81,7 @@ class MultiCameraTrackingOrchestrator:
         self.evidence_config = load_evidence_config(self.evidence_config_path) if self.evidence_config_path.exists() else EvidenceConfig()
         self.detector = detector or SharedVehicleDetector(self.detection_config)
         self.run_id = run_id or f"RUN_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self._run_started_at: datetime | None = None
         self.router = router or CameraDetectionRouter(self.tracking_config, run_id=self.run_id)
         self.repository = repository
         self.analytics_client = analytics_client
@@ -94,7 +96,11 @@ class MultiCameraTrackingOrchestrator:
         sample_frame_limit_per_camera: int = 1,
         output_report: str | Path | None = None,
     ) -> TrackingRunResult:
-        camera_configs = self.camera_orchestrator.load_enabled_cameras()
+        self._run_started_at = datetime.now(timezone.utc)
+        camera_configs = apply_file_source_timestamp_policy(
+            self.camera_orchestrator.load_enabled_cameras(),
+            run_started_at=self._run_started_at,
+        )
         persistence_results_by_uuid: dict[str, TrackPersistenceResult] = {}
         finalized_tracks_by_uuid: dict[str, LocalVehicleTrack] = {}
         if self.persistence_config.enabled:
@@ -317,6 +323,7 @@ class MultiCameraTrackingOrchestrator:
             execution_mode="SEQUENTIAL",
             runtime_device=self.detector.device,
             artifact_root=Path(self.evidence_config.output_root),
+            run_started_at=self._run_started_at,
             repository=self.repository,
             analytics_client=self.analytics_client,
         )

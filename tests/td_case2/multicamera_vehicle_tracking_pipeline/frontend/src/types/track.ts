@@ -1,4 +1,5 @@
 import type { MediaReference } from './media'
+import type { PlateResult } from './plate'
 
 export interface TrackListItem {
   track_uuid: string
@@ -13,12 +14,18 @@ export interface TrackListItem {
   observation_count?: number | null
   best_detection_confidence?: number | null
   average_detection_confidence?: number | null
+  class_confidence?: number | null
+  class_is_stable?: boolean | null
+  class_observation_count?: number | null
   primary_colour?: string | null
   colour_confidence?: number | null
+  plate_result?: PlateResult | null
   canonical_plate?: string | null
   plate_status?: string | null
   plate_confidence?: number | null
   primary_media?: MediaReference | null
+  primary_vehicle_media?: MediaReference | null
+  primary_plate_media?: MediaReference | null
 }
 
 export interface ObservationItem {
@@ -34,6 +41,8 @@ export interface ObservationItem {
   detection_confidence?: number | null
   tracker_confidence?: number | null
   is_key_observation: boolean
+  class_name?: string | null
+  raw_class_name?: string | null
 }
 
 export interface TrackDetailResponse {
@@ -48,6 +57,7 @@ export interface TrackDetailResponse {
     colour_confidence?: number | null
   }
   plate: {
+    plate_result?: PlateResult | null
     canonical_plate?: string | null
     plate_status?: string | null
     plate_confidence?: number | null
@@ -59,11 +69,26 @@ export interface TrackDetailResponse {
     last_frame?: number | null
     key_observation_count: number
   }
+  class_diagnostics?: {
+    provisional_class_name?: string | null
+    stable_class_name?: string | null
+    class_is_locked?: boolean
+    class_confidence?: number | null
+    class_winner_margin?: number | null
+    class_observation_count?: number | null
+    class_conflict_count?: number | null
+    class_scores?: Record<string, number>
+    class_observation_counts?: Record<string, number>
+    class_max_confidences?: Record<string, number>
+    latest_observation_class_name?: string | null
+  } | null
   global_membership?: {
+    linked: boolean
     global_vehicle_id?: string | null
     global_vehicle_code?: string | null
-    association_status?: string | null
-    association_score?: number | null
+    membership_confidence?: number | null
+    membership_status?: string | null
+    member_track_count?: number | null
   } | null
   cross_camera_matches: Array<{
     id?: string | null

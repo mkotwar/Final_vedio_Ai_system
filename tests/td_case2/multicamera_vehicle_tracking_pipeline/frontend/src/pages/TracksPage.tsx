@@ -1,20 +1,17 @@
 import { useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listTracks } from '../api/tracks'
 import type { TrackListItem } from '../types/track'
-import DataTable from '../components/tables/DataTable'
 import Pagination from '../components/tables/Pagination'
 import FilterBar from '../components/filters/FilterBar'
 import LoadingState from '../components/states/LoadingState'
 import ErrorState from '../components/states/ErrorState'
 import EmptyState from '../components/states/EmptyState'
-import StatusBadge from '../components/states/StatusBadge'
-import ConfidenceBadge from '../components/states/ConfidenceBadge'
+import TrackSummaryCard from '../components/cards/TrackSummaryCard'
 
 export default function TracksPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const filters = useMemo(
     () => ({
@@ -27,7 +24,7 @@ export default function TracksPage() {
       plate: searchParams.get('plate') || undefined,
       plate_status: searchParams.get('plate_status') || undefined,
       lifecycle_state: searchParams.get('lifecycle_state') || undefined,
-      minimum_confidence: searchParams.get('minimum_confidence') || undefined,
+      minimum_confidence: searchParams.get('minimum_confidence') || '0.5',
       has_media: searchParams.get('has_media') || undefined,
       sort_by: searchParams.get('sort_by') || 'first_seen_at',
       sort_order: searchParams.get('sort_order') || 'desc',
@@ -101,7 +98,7 @@ export default function TracksPage() {
         </label>
         <label>
           <span>Min confidence</span>
-          <input value={filters.minimum_confidence || ''} onChange={(event) => updateFilter('minimum_confidence', event.target.value)} placeholder="0.8" type="number" min="0" max="1" step="0.01" />
+          <input value={filters.minimum_confidence || ''} onChange={(event) => updateFilter('minimum_confidence', event.target.value)} placeholder="0.50" type="number" min="0" max="1" step="0.01" />
         </label>
         <label>
           <span>Has media</span>
@@ -126,44 +123,11 @@ export default function TracksPage() {
         <EmptyState title="No tracks found" description="Try broadening the filters for the selected run." />
       ) : (
         <>
-          <DataTable
-            columns={[
-              {
-                key: 'evidence',
-                header: 'Evidence',
-                render: (row: TrackListItem) =>
-                  row.primary_media?.content_url || row.primary_media?.availability === 'SIGNED_URL' ? (
-                    <span className="badge badge--success">Image available</span>
-                  ) : row.primary_media?.availability ? (
-                    <span className="badge badge--neutral">{row.primary_media.availability}</span>
-                  ) : (
-                    <span className="badge badge--neutral">No media</span>
-                  ),
-              },
-              {
-                key: 'uuid',
-                header: 'Track UUID',
-                render: (row: TrackListItem) => (
-                  <div>
-                    <strong>{row.track_uuid}</strong>
-                    <p className="table-subtext">{row.camera_code || 'Unknown camera'}</p>
-                  </div>
-                ),
-              },
-              { key: 'class', header: 'Class', render: (row: TrackListItem) => row.vehicle_class || 'N/A' },
-              { key: 'colour', header: 'Colour', render: (row: TrackListItem) => row.primary_colour || 'N/A' },
-              { key: 'plate', header: 'Plate', render: (row: TrackListItem) => row.canonical_plate || 'N/A' },
-              { key: 'plateStatus', header: 'Plate status', render: (row: TrackListItem) => <StatusBadge value={row.plate_status} /> },
-              { key: 'lifecycle', header: 'Lifecycle', render: (row: TrackListItem) => <StatusBadge value={row.lifecycle_state} /> },
-              { key: 'observations', header: 'Observations', render: (row: TrackListItem) => row.observation_count ?? 'N/A' },
-              { key: 'confidence', header: 'Confidence', render: (row: TrackListItem) => <ConfidenceBadge value={row.best_detection_confidence} /> },
-              { key: 'timing', header: 'Timing', render: (row: TrackListItem) => `${row.first_seen_at || 'N/A'} → ${row.last_seen_at || 'N/A'}` },
-              { key: 'global', header: 'Global membership', render: () => <span className="table-subtext">Detail view</span> },
-            ]}
-            rows={tracksQuery.data.items}
-            getRowKey={(row) => row.track_uuid}
-            onRowClick={(row) => navigate(`/tracks/${encodeURIComponent(row.track_uuid)}`)}
-          />
+          <div className="stack-list">
+            {tracksQuery.data.items.map((row: TrackListItem) => (
+              <TrackSummaryCard key={row.track_uuid} track={row} detailHref={`/tracks/${encodeURIComponent(row.track_uuid)}`} />
+            ))}
+          </div>
           <Pagination
             page={tracksQuery.data.page}
             pageSize={tracksQuery.data.page_size}

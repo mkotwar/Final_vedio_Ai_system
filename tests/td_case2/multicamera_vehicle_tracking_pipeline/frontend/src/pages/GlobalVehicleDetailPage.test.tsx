@@ -10,7 +10,9 @@ describe('GlobalVehicleDetailPage', () => {
       path: '/global-vehicles/:globalVehicleCode',
     })
 
-    expect(await screen.findByText('DL8CBF6268')).toBeInTheDocument()
-    expect(screen.getAllByRole('img', { name: 'BEST_VEHICLE_CROP' })).toHaveLength(2)
+    expect((await screen.findAllByText('DL8CBF6268')).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('img', { name: 'BEST_VEHICLE_CROP' })).toHaveLength(3)
+    expect(screen.getAllByRole('img', { name: 'PLATE_CROP' })).toHaveLength(3)
+    expect(screen.getAllByRole('button', { name: /Open .* preview/ })).toHaveLength(6)
   })
 })

@@ -23,7 +23,7 @@ def list_tracks(
     plate: str | None = None,
     plate_status: str | None = None,
     lifecycle_state: str | None = None,
-    minimum_confidence: float | None = Query(default=None, ge=0, le=1),
+    minimum_confidence: float | None = Query(default=0.5, ge=0, le=1),
     has_media: bool | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),

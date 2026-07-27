@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import timezone
 from pathlib import Path
 
 import cv2
@@ -43,6 +44,39 @@ class _FakeDetector:
             detector_model="fake.pt",
             detector_device="cpu",
             frame=frame_packet.frame,
+        )
+
+
+class _CapturingPersistenceService:
+    def __init__(self) -> None:
+        self.camera_id_by_code = {}
+        self.synced_camera_configs: list[CameraConfig] = []
+        self.saved_tracks = []
+
+    def sync_cameras(self, camera_configs):
+        self.synced_camera_configs = list(camera_configs)
+        self.camera_id_by_code = {camera.camera_code: f"stub:{camera.camera_code}" for camera in camera_configs}
+        return dict(self.camera_id_by_code)
+
+    def save_completed_track(self, track):
+        self.saved_tracks.append(track)
+        from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_models import TrackPersistenceResult
+
+        return TrackPersistenceResult(
+            track_uuid=track.track_uuid,
+            status="inserted",
+            database_track_id=f"stub:{track.track_uuid}",
+            observations_written=track.observation_count,
+        )
+
+    def get_metrics(self):
+        from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_models import PersistenceRunMetrics
+
+        return PersistenceRunMetrics(
+            cameras_synced=len(self.synced_camera_configs),
+            tracks_considered=len(self.saved_tracks),
+            tracks_inserted=len(self.saved_tracks),
+            observations_written=sum(track.observation_count for track in self.saved_tracks),
         )
 
 
@@ -133,6 +167,121 @@ class WorkerOrchestratorTests(unittest.TestCase):
             self.assertIn("thread_shutdown", result.report["workers"])
             loaded = json.loads((root / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(loaded["detector"]["actual_model"], "fake.pt")
+
+    def test_worker_pipeline_assigns_run_timestamps_for_file_sources_without_start_time(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            _write_video(root / "data" / "camera_1.avi", 2)
+            _write_video(root / "data" / "camera_2.avi", 2)
+            (root / "config" / "cameras.yaml").write_text(
+                'cameras:\n'
+                '  - camera_code: CAM_001\n'
+                '    camera_name: North Gate\n'
+                '    source_path: data/camera_1.avi\n'
+                '    enabled: true\n'
+                '  - camera_code: CAM_002\n'
+                '    camera_name: Parking Entry\n'
+                '    source_path: data/camera_2.avi\n'
+                '    enabled: true\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "detection.yaml").write_text(
+                'vehicle_detector:\n  model_path: yolov8n.pt\n  fallback_model_path: yolov8n.pt\n  allow_fallback: true\n  device: cpu\n  confidence_threshold: 0.25\n  iou_threshold: 0.45\n  image_size: 640\n  allowed_classes:\n    - car\n    - bus\n    - truck\n    - motorcycle\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "tracking.yaml").write_text(
+                'tracking:\n  backend: ultralytics_bytetrack\n  track_high_thresh: 0.30\n  track_low_thresh: 0.10\n  new_track_thresh: 0.30\n  match_thresh: 0.80\n  track_buffer: 30\n  min_confirmed_observations: 1\n  max_lost_frames: 0\n  preserve_state_per_camera: true\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "workers.yaml").write_text(
+                'workers:\n  enabled: true\n  frame_queue_size: 10\n  detection_queue_size: 10\n  completed_track_queue_size: 10\n  error_queue_size: 10\n  queue_put_timeout_seconds: 0.1\n  queue_get_timeout_seconds: 0.1\n  shutdown_timeout_seconds: 5.0\n  stop_on_camera_error: false\n  stop_on_detector_error: true\n  stop_on_tracking_error: true\n  stop_on_persistence_error: false\n  enable_persistence_worker: true\n',
+                encoding="utf-8",
+            )
+            stub_persistence = _CapturingPersistenceService()
+            orchestrator = WorkerMultiCameraTrackingOrchestrator(
+                root / "config" / "cameras.yaml",
+                root / "config" / "detection.yaml",
+                root / "config" / "tracking.yaml",
+                root / "config" / "workers.yaml",
+                max_frames_per_camera=2,
+                detector=_FakeDetector(),
+                persistence_service=stub_persistence,
+                run_id="RUN_TEST",
+                persistence_overrides={"enabled": True, "backend": "dry_run", "dry_run": True},
+            )
+            result = orchestrator.run(output_report=root / "report.json")
+            self.assertGreater(result.report["total_completed_tracks"], 0)
+            self.assertEqual(len(stub_persistence.saved_tracks), result.report["total_completed_tracks"])
+            self.assertEqual(len(stub_persistence.synced_camera_configs), 2)
+            for camera_config in stub_persistence.synced_camera_configs:
+                self.assertIsNotNone(camera_config.start_time)
+                self.assertIsNotNone(camera_config.start_time.tzinfo)
+                self.assertIsNotNone(camera_config.start_time.utcoffset())
+            for track in stub_persistence.saved_tracks:
+                self.assertIsNotNone(track.first_seen_at)
+                self.assertIsNotNone(track.last_seen_at)
+                self.assertLessEqual(track.first_seen_at, track.last_seen_at)
+                self.assertIsNotNone(track.first_seen_at.tzinfo)
+                self.assertIsNotNone(track.first_seen_at.utcoffset())
+                self.assertEqual(track.first_video_time_seconds, track.observations[0].video_time_seconds)
+                self.assertEqual(track.last_video_time_seconds, track.observations[-1].video_time_seconds)
+                self.assertGreaterEqual(track.first_seen_at.astimezone(timezone.utc), stub_persistence.synced_camera_configs[0].start_time.astimezone(timezone.utc))
+
+    def test_worker_sample_frames_include_yolo_detection_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            _write_video(root / "data" / "camera_1.avi", 2)
+            (root / "config" / "cameras.yaml").write_text(
+                'cameras:\n'
+                '  - camera_code: CAM_001\n'
+                '    camera_name: North Gate\n'
+                '    source_path: data/camera_1.avi\n'
+                '    enabled: true\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "detection.yaml").write_text(
+                'vehicle_detector:\n  model_path: yolov8n.pt\n  fallback_model_path: yolov8n.pt\n  allow_fallback: true\n  device: cpu\n  confidence_threshold: 0.25\n  iou_threshold: 0.45\n  image_size: 640\n  allowed_classes:\n    - car\n    - bus\n    - truck\n    - motorcycle\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "tracking.yaml").write_text(
+                'tracking:\n  backend: ultralytics_bytetrack\n  track_high_thresh: 0.30\n  track_low_thresh: 0.10\n  new_track_thresh: 0.30\n  match_thresh: 0.80\n  track_buffer: 30\n  min_confirmed_observations: 1\n  max_lost_frames: 0\n  preserve_state_per_camera: true\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "workers.yaml").write_text(
+                'workers:\n  enabled: true\n  frame_queue_size: 10\n  detection_queue_size: 10\n  completed_track_queue_size: 10\n  error_queue_size: 10\n  queue_put_timeout_seconds: 0.1\n  queue_get_timeout_seconds: 0.1\n  shutdown_timeout_seconds: 5.0\n  stop_on_camera_error: false\n  stop_on_detector_error: true\n  stop_on_tracking_error: true\n  stop_on_persistence_error: false\n  enable_persistence_worker: false\n',
+                encoding="utf-8",
+            )
+            output_report = root / "report.json"
+            orchestrator = WorkerMultiCameraTrackingOrchestrator(
+                root / "config" / "cameras.yaml",
+                root / "config" / "detection.yaml",
+                root / "config" / "tracking.yaml",
+                root / "config" / "workers.yaml",
+                max_frames_per_camera=1,
+                detector=_FakeDetector(),
+                run_id="RUN_TEST",
+            )
+            result = orchestrator.run(
+                save_sample_frames=True,
+                sample_frame_limit_per_camera=1,
+                output_report=output_report,
+            )
+            sample_root = output_report.parent / "CAM_001"
+            detection_image = sample_root / "yolo_detections" / "sample_000001.jpg"
+            detection_json = sample_root / "yolo_detections" / "sample_000001.json"
+            tracking_image = sample_root / "tracking_samples" / "sample_000001.jpg"
+            self.assertTrue(detection_image.exists())
+            self.assertTrue(detection_json.exists())
+            self.assertTrue(tracking_image.exists())
+            payload = json.loads(detection_json.read_text(encoding="utf-8"))
+            self.assertEqual(payload["camera_code"], "CAM_001")
+            self.assertEqual(payload["frame_number"], 0)
+            self.assertEqual(payload["detections"][0]["class_name"], "car")
+            self.assertEqual(result.report["debug_artifacts"]["sample_output_dir"], str(output_report.parent))
 
 
 if __name__ == "__main__":

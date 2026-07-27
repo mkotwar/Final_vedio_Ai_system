@@ -42,6 +42,7 @@ class PlateDetectorRuntimeFactory:
             device=device_override or config.plate_detector.device,
             confidence_threshold=config.plate_detector.confidence_threshold,
             iou_threshold=config.plate_detector.iou_threshold,
+            inference_image_size=config.plate_detector.inference_image_size,
             maximum_detections_per_vehicle_crop=config.plate_detector.maximum_detections_per_vehicle_crop,
         )
         runtime.load()

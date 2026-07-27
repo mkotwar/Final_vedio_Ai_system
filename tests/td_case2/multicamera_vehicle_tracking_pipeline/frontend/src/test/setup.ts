@@ -1,6 +1,21 @@
 import '@testing-library/jest-dom/vitest'
 import { afterEach, vi } from 'vitest'
-import { camerasFixture, globalVehicleDetailFixture, globalVehicleMembersFixture, globalVehiclesFixture, healthFixture, matchesFixture, mediaFixture, observationsFixture, runDetailFixture, runsFixture, trackDetailFixture, tracksFixture } from './fixtures'
+import {
+  camerasFixture,
+  globalVehicleDetailFixture,
+  globalVehicleMembersFixture,
+  globalVehiclesFixture,
+  healthFixture,
+  matchesFixture,
+  mediaFixture,
+  naturalLanguageVehicleSearchFixture,
+  observationsFixture,
+  runDetailFixture,
+  runsFixture,
+  trackDetailFixture,
+  tracksFixture,
+  vehicleSearchFixture,
+} from './fixtures'
 
 function jsonResponse(body: unknown, status = 200) {
   return Promise.resolve(
@@ -14,7 +29,7 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 function buildMockFetch() {
-  return vi.fn(async (input: RequestInfo | URL) => {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const raw = typeof input === 'string' ? input : input.toString()
     const url = new URL(raw)
     const path = decodeURIComponent(url.pathname)
@@ -54,6 +69,120 @@ function buildMockFetch() {
     }
     if (path.endsWith('/cross-camera-matches')) {
       return jsonResponse(matchesFixture)
+    }
+    if (path.endsWith('/search/vehicles')) {
+      const params = url.searchParams
+      if (params.get('vehicle_class') === 'PLANE') {
+        return jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'Request validation failed.', details: null } }, 422)
+      }
+      if (params.get('colour') === 'RED') {
+        return jsonResponse({
+          ...vehicleSearchFixture,
+          pagination: { ...vehicleSearchFixture.pagination, returned: 0, total: 0, has_more: false },
+          results: [],
+        })
+      }
+      const limit = Number(params.get('limit') || String(vehicleSearchFixture.pagination.limit))
+      const offset = Number(params.get('offset') || '0')
+      const pagedResults = vehicleSearchFixture.results.slice(offset, offset + limit)
+      return jsonResponse({
+        ...vehicleSearchFixture,
+        pagination: {
+          limit,
+          offset,
+          returned: pagedResults.length,
+          total: vehicleSearchFixture.results.length,
+          has_more: offset + pagedResults.length < vehicleSearchFixture.results.length,
+        },
+        results: pagedResults,
+      })
+    }
+    if (path.endsWith('/search/natural-language')) {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+
+      if (body.query === 'Find vehicles in CAM_999.') {
+        return jsonResponse({
+          original_query: body.query,
+          parser: {
+            provider: 'fallback',
+            model: null,
+            fallback_used: true,
+          },
+          clarification_required: true,
+          clarification_message: 'Camera CAM_999 is not available for the selected run.',
+          interpreted_filters: {
+            run_code: body.run_code,
+            result_scope: body.result_scope ?? 'ALL',
+            camera_codes: ['CAM_999'],
+            clarification_required: true,
+            clarification_message: 'Camera CAM_999 is not available for the selected run.',
+          },
+          pagination: {
+            limit: body.limit ?? 25,
+            offset: body.offset ?? 0,
+            returned: 0,
+            total: 0,
+            has_more: false,
+          },
+          results: [],
+        })
+      }
+
+      if (body.query === 'Show red cars.') {
+        return jsonResponse({
+          ...naturalLanguageVehicleSearchFixture,
+          original_query: body.query,
+          parser: {
+            provider: 'fallback',
+            model: null,
+            fallback_used: true,
+          },
+          interpreted_filters: {
+            ...naturalLanguageVehicleSearchFixture.interpreted_filters,
+            result_scope: body.result_scope ?? 'ALL',
+            colour: 'RED',
+            plate: undefined,
+            plate_match_type: undefined,
+            camera_codes: [],
+            multi_camera_only: false,
+          },
+          pagination: {
+            limit: body.limit ?? 25,
+            offset: body.offset ?? 0,
+            returned: 0,
+            total: 0,
+            has_more: false,
+          },
+          results: [],
+        })
+      }
+
+      if (body.query === 'Trigger provider failure.') {
+        return jsonResponse({
+          error: {
+            code: 'NATURAL_LANGUAGE_SEARCH_FAILED',
+            message: 'Natural-language search could not be completed.',
+            details: null,
+          },
+        }, 503)
+      }
+
+      return jsonResponse({
+        ...naturalLanguageVehicleSearchFixture,
+        original_query: body.query || naturalLanguageVehicleSearchFixture.original_query,
+        interpreted_filters: {
+          ...naturalLanguageVehicleSearchFixture.interpreted_filters,
+          run_code: body.run_code ?? naturalLanguageVehicleSearchFixture.interpreted_filters.run_code,
+          result_scope: body.result_scope ?? naturalLanguageVehicleSearchFixture.interpreted_filters.result_scope,
+          limit: body.limit ?? naturalLanguageVehicleSearchFixture.pagination.limit,
+          offset: body.offset ?? naturalLanguageVehicleSearchFixture.pagination.offset,
+        },
+        pagination: {
+          ...naturalLanguageVehicleSearchFixture.pagination,
+          limit: body.limit ?? naturalLanguageVehicleSearchFixture.pagination.limit,
+          offset: body.offset ?? naturalLanguageVehicleSearchFixture.pagination.offset,
+        },
+      })
     }
     if (path.endsWith('/media/media-1')) {
       return jsonResponse({

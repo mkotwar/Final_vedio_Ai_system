@@ -94,6 +94,50 @@ class TrackingPersistenceServiceTests(unittest.TestCase):
         self.assertIsNotNone(stored)
         self.assertEqual(len(repo.get_track_observations(stored.id)), 3)
 
+    def test_stabilized_class_diagnostics_are_persisted_in_track_metadata(self) -> None:
+        repo = SimpleVehicleRepository()
+        service = TrackingPersistenceService(repo, PersistenceConfig())
+        service.sync_cameras([_camera_config()])
+        track = _track(class_name="3wheeler")
+        track.stable_class_name = "3wheeler"
+        track.provisional_class_name = "3wheeler"
+        track.class_is_locked = True
+        track.class_confidence = 0.86
+        track.class_winner_margin = 1.1
+        track.class_observation_count = 5
+        track.class_conflict_count = 1
+        track.class_scores = {"3wheeler": 2.91, "bus": 0.87}
+        track.class_observation_counts = {"3wheeler": 4, "bus": 1}
+        track.class_max_confidences = {"3wheeler": 0.92, "bus": 0.87}
+        result = service.save_completed_track(track)
+        self.assertEqual(result.status, "inserted")
+        stored = repo.get_track_by_uuid("CAM_001:TRACK_1")
+        self.assertEqual(stored.metadata["class_diagnostics"]["stable_class_name"], "3wheeler")
+        self.assertEqual(stored.metadata["class_diagnostics"]["class_scores"]["3wheeler"], 2.91)
+
+    def test_raw_and_stabilized_observation_classes_are_preserved(self) -> None:
+        repo = SimpleVehicleRepository()
+        service = TrackingPersistenceService(repo, PersistenceConfig())
+        service.sync_cameras([_camera_config()])
+        observation = TrackObservation(
+            camera_code="CAM_001",
+            local_track_id=1,
+            frame_number=0,
+            video_time_seconds=0.0,
+            camera_timestamp=datetime(2026, 7, 22, 10, 0, 0),
+            class_name="3wheeler",
+            confidence=0.91,
+            bbox_xyxy=(1.0, 2.0, 10.0, 12.0),
+            track_uuid="CAM_001:TRACK_1",
+            state="active",
+            raw_class_name="bus",
+        )
+        service.save_completed_track(_track(class_name="3wheeler", observations=[observation]))
+        stored = repo.get_track_by_uuid("CAM_001:TRACK_1")
+        saved_observation = repo.get_track_observations(stored.id)[0]
+        self.assertEqual(saved_observation.metadata["class_name"], "3wheeler")
+        self.assertEqual(saved_observation.metadata["raw_class_name"], "bus")
+
     def test_discarded_track_skipped_by_default(self) -> None:
         repo = SimpleVehicleRepository()
         service = TrackingPersistenceService(repo, PersistenceConfig())

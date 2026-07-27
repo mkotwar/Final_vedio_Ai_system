@@ -78,4 +78,39 @@ def build_track_media_records(
                 },
             )
         )
+    if evidence_package.full_frame_path:
+        full_frame_path = Path(evidence_package.full_frame_path)
+        if not full_frame_path.exists():
+            raise FileNotFoundError(f"Full-frame evidence file does not exist: {full_frame_path}")
+        relative_path = _to_portable_relative_path(full_frame_path, artifact_root)
+        bbox_metadata = list(evidence_package.full_frame_bbox_xyxy) if evidence_package.full_frame_bbox_xyxy is not None else None
+        records.append(
+            TrackMediaRecord(
+                vehicle_track_id=vehicle_track_id,
+                media_type="FULL_FRAME",
+                storage_uri=relative_path,
+                storage_provider="LOCAL",
+                mime_type="image/jpeg",
+                file_size_bytes=full_frame_path.stat().st_size,
+                frame_number=evidence_package.full_frame_frame_number,
+                captured_at=None,
+                video_time_seconds=evidence_package.full_frame_video_time_seconds,
+                bbox={"bbox_xyxy": bbox_metadata} if bbox_metadata is not None else None,
+                width=evidence_package.full_frame_width,
+                height=evidence_package.full_frame_height,
+                quality_score=None,
+                sharpness_score=None,
+                visibility_score=None,
+                occlusion_score=None,
+                selection_rank=5,
+                is_primary=False,
+                metadata={
+                    "camera_id": camera_id,
+                    "track_uuid": evidence_package.track_uuid,
+                    "local_track_id": evidence_package.local_track_id,
+                    "source_role": "BEST_OVERALL",
+                    "bbox_xyxy": bbox_metadata,
+                },
+            )
+        )
     return records

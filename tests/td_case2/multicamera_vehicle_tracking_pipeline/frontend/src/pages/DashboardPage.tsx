@@ -12,21 +12,23 @@ export default function DashboardPage() {
   const healthQuery = useQuery({
     queryKey: ['dashboard', 'health'],
     queryFn: () => apiGet<HealthResponse>('/health'),
+    retry: 1,
   })
   const runsQuery = useQuery({
     queryKey: ['dashboard', 'runs'],
     queryFn: () => listRuns({ page: 1, page_size: 5, sort_by: 'created_at', sort_order: 'desc' }),
+    retry: 1,
   })
 
   if (healthQuery.isPending || runsQuery.isPending) {
     return <LoadingState label="Loading dashboard..." />
   }
 
-  if (healthQuery.isError || runsQuery.isError) {
+  if (runsQuery.isError) {
     return (
       <ErrorState
         title="Dashboard unavailable"
-        message="The frontend could not load backend health or recent processing runs."
+        message="The frontend could not load recent processing runs from FastAPI."
         onRetry={() => {
           void healthQuery.refetch()
           void runsQuery.refetch()
@@ -35,32 +37,43 @@ export default function DashboardPage() {
     )
   }
 
+  const health = healthQuery.data ?? {
+    status: healthQuery.isError ? 'unknown' : 'degraded',
+    service: 'multicamera-vehicle-api',
+    database: healthQuery.isError ? 'unavailable' : 'unknown',
+    schema: 'analytics',
+  }
   const latestRun = runsQuery.data.items[0]
+  const healthHeadline = health.status === 'ok' ? 'FastAPI analytics bridge is online' : 'FastAPI analytics bridge is reachable with warnings'
+  const healthDescription = healthQuery.isError
+    ? 'Recent processing runs loaded, but the live health probe did not respond.'
+    : health.status === 'ok'
+      ? 'All frontend data is flowing through the read-only API at '
+      : 'The API is responding, but its live analytics database check is currently degraded at '
 
   return (
     <div className="page-grid">
       <section className="hero-panel">
         <div>
           <p className="hero-panel__eyebrow">Backend</p>
-          <h3>FastAPI analytics bridge is online</h3>
+          <h3>{healthHeadline}</h3>
           <p>
-            All frontend data is flowing through the read-only API at
-            {' '}
+            {healthDescription}
             <code>127.0.0.1:8000/api/v1</code>.
           </p>
         </div>
         <div className="hero-panel__stats">
           <div className="metric-card">
             <span>Service</span>
-            <strong>{healthQuery.data.service}</strong>
+            <strong>{health.service}</strong>
           </div>
           <div className="metric-card">
             <span>Database</span>
-            <strong>{healthQuery.data.database}</strong>
+            <strong>{health.database}</strong>
           </div>
           <div className="metric-card">
             <span>Schema</span>
-            <strong>{healthQuery.data.schema}</strong>
+            <strong>{health.schema}</strong>
           </div>
         </div>
       </section>

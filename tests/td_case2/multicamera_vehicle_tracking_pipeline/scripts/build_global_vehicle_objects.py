@@ -11,6 +11,7 @@ from ..cross_camera.global_match_service import GlobalMatchService
 from ..persistence.analytics_database_client import AnalyticsDatabaseClient, AnalyticsDatabaseClientError
 from ..persistence.cross_camera_match_repository import CrossCameraMatchRepository
 from ..persistence.global_vehicle_object_repository import GlobalVehicleObjectRepository
+from .logging_utils import configure_cli_logging
 
 
 EXIT_SUCCESS = 0
@@ -32,7 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def configure_logging(level_name: str) -> None:
-    logging.basicConfig(level=getattr(logging, level_name.upper(), logging.INFO), format="%(levelname)s %(name)s: %(message)s")
+    configure_cli_logging(level_name)
 
 
 def write_json_report(path_value: str, report: dict[str, object]) -> None:

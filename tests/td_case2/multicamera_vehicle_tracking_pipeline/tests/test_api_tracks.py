@@ -31,7 +31,27 @@ def test_track_detail_returns_safe_view() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["track"]["canonical_plate"] == "DL8CBF6268"
+    assert body["track"]["plate_result"]["display_text"] == "DL8CBF6268"
+    assert body["plate"]["plate_result"]["status"] == "VERIFIED"
+    assert body["global_membership"] == {
+        "linked": True,
+        "global_vehicle_id": "global-1",
+        "global_vehicle_code": "GVO:RUN_20260724_151402:943BD1FE7C62",
+        "membership_confidence": 0.95,
+        "membership_status": "CONFIRMED",
+        "member_track_count": 2,
+    }
+    assert "association_method" not in response.text
     assert "model_path" not in response.text
+
+
+def test_track_detail_can_return_unlinked_membership() -> None:
+    repository = FakeApiRepository()
+    repository.track_detail["global_membership"] = {"linked": False}
+    client = build_test_client(repository)
+    response = client.get("/api/v1/tracks/RUN_20260724_151402:CAM_001:TRACK_4")
+    assert response.status_code == 200
+    assert response.json()["global_membership"] == {"linked": False}
 
 
 def test_track_observations_support_pagination() -> None:

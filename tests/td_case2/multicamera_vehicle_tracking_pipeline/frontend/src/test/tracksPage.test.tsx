@@ -14,7 +14,9 @@ describe('TracksPage', () => {
       route: '/tracks?run_code=RUN_20260724_151402',
       path: '/tracks',
     })
-    expect(await screen.findByText('DL8CBF6268')).toBeInTheDocument()
-    expect(screen.getByText('GREY')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('0.5')).toBeInTheDocument()
+    expect((await screen.findAllByText('DL8CBF6268')).length).toBeGreaterThan(0)
+    expect(screen.getByText('RUN_20260724_151402:CAM_001:TRACK_4')).toBeInTheDocument()
+    expect(screen.getByText('Plate evidence')).toBeInTheDocument()
   })
 })

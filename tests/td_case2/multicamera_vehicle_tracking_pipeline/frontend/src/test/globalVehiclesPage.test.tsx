@@ -8,6 +8,7 @@ describe('Global vehicles views', () => {
   it('renders the global vehicles list', async () => {
     renderWithProviders(<GlobalVehiclesPage />, { route: '/global-vehicles', path: '/global-vehicles' })
     expect(await screen.findByText('GVO:RUN_20260724_151402:943BD1FE7C62')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('0.5')).toBeInTheDocument()
   })
 
   it('renders the verified global vehicle detail', async () => {
@@ -15,9 +16,9 @@ describe('Global vehicles views', () => {
       route: '/global-vehicles/GVO%3ARUN_20260724_151402%3A943BD1FE7C62',
       path: '/global-vehicles/:globalVehicleCode',
     })
-    expect(await screen.findByText('DL8CBF6268')).toBeInTheDocument()
-    expect(screen.getByText('CAR')).toBeInTheDocument()
-    expect(screen.getByText('GREY')).toBeInTheDocument()
+    expect((await screen.findAllByText('DL8CBF6268')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('CAR').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('GREY').length).toBeGreaterThan(0)
     expect(screen.getAllByText('RUN_20260724_151402:CAM_001:TRACK_4')).toHaveLength(2)
     expect(screen.getAllByText('RUN_20260724_151402:CAM_002:TRACK_4')).toHaveLength(2)
   })

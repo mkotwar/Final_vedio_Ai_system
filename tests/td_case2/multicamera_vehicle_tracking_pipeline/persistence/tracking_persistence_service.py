@@ -7,6 +7,7 @@ from typing import Iterable
 from ..database.models import CameraRecord, VehicleObservationRecord, VehicleTrackRecord
 from ..database.repository import RepositoryConstraintError, VehicleRepository
 from ..ingestion.camera_config import CameraConfig
+from ..tracking.class_stabilization import track_class_metadata
 from ..persistence.vehicle_class_mapping import RUNTIME_VEHICLE_CLASSES, is_supported_vehicle_class, normalize_runtime_vehicle_class
 from ..tracking.tracking_models import LocalVehicleTrack, TrackObservation
 from .persistence_config import PersistenceConfig
@@ -97,6 +98,7 @@ class TrackingPersistenceService:
             best_confidence=track.best_confidence,
             best_frame_path=None,
             best_crop_path=None,
+            metadata={"class_diagnostics": track_class_metadata(track)},
         )
         observation_rows = self._select_observation_rows(track, database_track_id=track_record.id)
         return PreparedTrackWrite(track_record=track_record, observation_rows=observation_rows)
@@ -129,6 +131,7 @@ class TrackingPersistenceService:
                 bbox_x2=item.bbox_x2,
                 bbox_y2=item.bbox_y2,
                 confidence=item.confidence,
+                metadata=dict(item.metadata),
             )
             for item in prepared.observation_rows
         ]
@@ -194,6 +197,11 @@ class TrackingPersistenceService:
                     bbox_x2=x2,
                     bbox_y2=y2,
                     confidence=observation.confidence,
+                    metadata={
+                        "track_uuid": track.track_uuid,
+                        "class_name": observation.class_name,
+                        "raw_class_name": observation.raw_class_name,
+                    },
                 )
             )
         return rows

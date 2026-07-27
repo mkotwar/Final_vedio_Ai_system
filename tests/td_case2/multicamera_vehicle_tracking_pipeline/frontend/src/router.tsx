@@ -9,6 +9,7 @@ import GlobalVehiclesPage from './pages/GlobalVehiclesPage'
 import GlobalVehicleDetailPage from './pages/GlobalVehicleDetailPage'
 import CrossCameraMatchesPage from './pages/CrossCameraMatchesPage'
 import NotFoundPage from './pages/NotFoundPage'
+import VehicleSearchPage from './pages/VehicleSearchPage'
 
 export const router = createBrowserRouter([
   {
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
       {
         path: 'matches',
         element: <CrossCameraMatchesPage />,
+      },
+      {
+        path: 'search',
+        element: <VehicleSearchPage />,
       },
       {
         path: '*',

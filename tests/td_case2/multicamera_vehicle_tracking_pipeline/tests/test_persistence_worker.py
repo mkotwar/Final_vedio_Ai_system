@@ -4,11 +4,15 @@ import threading
 import unittest
 from datetime import datetime
 from pathlib import Path
+import queue
+import time
 
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.database.repository import SimpleVehicleRepository
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.ingestion.camera_config import CameraConfig
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_config import PersistenceConfig
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_models import TrackPersistenceResult
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.tracking_persistence_service import TrackingPersistenceService
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_service_protocol import PersistenceServiceProtocol
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracking_models import LocalVehicleTrack, TrackObservation
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.workers.persistence_worker import PersistenceWorker
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.workers.worker_config import WorkerConfig
@@ -57,6 +61,56 @@ class PersistenceWorkerTests(unittest.TestCase):
         worker.start()
         worker.join(5)
         self.assertEqual(worker.metrics.tracks_inserted, 1)
+
+    def test_temporary_full_follow_up_queue_does_not_fail_worker(self) -> None:
+        class _FakePersistenceService(PersistenceServiceProtocol):
+            def save_completed_track(self, track: LocalVehicleTrack) -> TrackPersistenceResult:
+                return TrackPersistenceResult(
+                    track_uuid=track.track_uuid,
+                    status="inserted",
+                    database_track_id="db-track-1",
+                    observations_written=1,
+                )
+
+            def save_completed_tracks(self, tracks: list[LocalVehicleTrack]) -> list[TrackPersistenceResult]:
+                return [self.save_completed_track(track) for track in tracks]
+
+            def get_metrics(self):
+                raise NotImplementedError
+
+        completed_queue = TrackedQueue(10)
+        error_queue = TrackedQueue(10)
+        vehicle_colour_queue = TrackedQueue(1)
+        shutdown_event = threading.Event()
+        worker = PersistenceWorker(
+            persistence_service=_FakePersistenceService(),
+            completed_track_queue=completed_queue,
+            error_queue=error_queue,
+            shutdown_event=shutdown_event,
+            worker_config=WorkerConfig(queue_put_timeout_seconds=0.05, queue_get_timeout_seconds=0.05),
+            vehicle_colour_queue=vehicle_colour_queue,
+        )
+        vehicle_colour_queue.put(object(), timeout=0.05)
+
+        released: list[object] = []
+
+        def _drain_later() -> None:
+            time.sleep(0.15)
+            released.append(vehicle_colour_queue.get(timeout=0.1)[0])
+
+        drain_thread = threading.Thread(target=_drain_later)
+        drain_thread.start()
+        completed_queue.put(CompletedTrackMessage("CAM_001", _track()), timeout=0.05)
+        completed_queue.put(EndOfInputMessage(), timeout=0.05)
+        worker.start()
+        worker.join(5)
+        drain_thread.join(5)
+
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(worker.metrics.errors, 0)
+        self.assertTrue(error_queue.empty())
+        self.assertEqual(worker.metrics.tracks_inserted, 1)
+        self.assertEqual(len(released), 1)
 
 
 if __name__ == "__main__":

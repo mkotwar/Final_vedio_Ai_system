@@ -59,26 +59,26 @@ class PersistenceWorker(threading.Thread):
                     and result.status in {"inserted", "already_exists", "dry_run"}
                     and result.database_track_id is not None
                 ):
-                    self.vehicle_colour_queue.put(
+                    self._enqueue_follow_up(
+                        self.vehicle_colour_queue,
                         VehicleColourJobMessage(
                             camera_code=item.camera_code,
                             track=item.track,
                             persistence_result=result,
                         ),
-                        timeout=self.worker_config.queue_put_timeout_seconds,
                     )
                 if (
                     self.anpr_queue is not None
                     and result.status in {"inserted", "already_exists", "dry_run"}
                     and result.database_track_id is not None
                 ):
-                    self.anpr_queue.put(
+                    self._enqueue_follow_up(
+                        self.anpr_queue,
                         AnprJobMessage(
                             camera_code=item.camera_code,
                             track=item.track,
                             persistence_result=result,
                         ),
-                        timeout=self.worker_config.queue_put_timeout_seconds,
                     )
                 if result.status == "inserted":
                     self.metrics.tracks_inserted += 1
@@ -97,6 +97,16 @@ class PersistenceWorker(threading.Thread):
             self._emit_error(exc, fatal=fatal)
             if fatal:
                 self.shutdown_event.set()
+
+    def _enqueue_follow_up(self, target_queue: TrackedQueue, message: object) -> None:
+        while not self.shutdown_event.is_set():
+            try:
+                target_queue.put(message, timeout=self.worker_config.queue_put_timeout_seconds)
+                return
+            except queue.Full:
+                # ANPR and colour workers can be slower than persistence. Keep applying
+                # backpressure instead of failing the whole run on a temporary full queue.
+                continue
 
     def _emit_error(self, exc: Exception, *, fatal: bool) -> None:
         message = WorkerErrorMessage(

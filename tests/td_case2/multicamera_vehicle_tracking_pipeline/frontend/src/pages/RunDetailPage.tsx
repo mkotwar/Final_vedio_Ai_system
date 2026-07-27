@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getRun, listRunCameras } from '../api/runs'
 import { listTracks } from '../api/tracks'
@@ -11,9 +11,9 @@ import ErrorState from '../components/states/ErrorState'
 import StatusBadge from '../components/states/StatusBadge'
 import DataTable from '../components/tables/DataTable'
 import type { CameraListItem } from '../types/run'
-import type { TrackListItem } from '../types/track'
-import type { GlobalVehicleListItem } from '../types/globalVehicle'
 import type { MatchListItem } from '../types/match'
+import TrackSummaryCard from '../components/cards/TrackSummaryCard'
+import GlobalVehicleCard from '../components/cards/GlobalVehicleCard'
 
 type DetailTab = 'cameras' | 'tracks' | 'global' | 'matches'
 
@@ -132,45 +132,27 @@ export default function RunDetailPage() {
         ) : null}
 
         {activeTab === 'tracks' && tracksQuery.data ? (
-          <DataTable
-            columns={[
-              {
-                key: 'track',
-                header: 'Track',
-                render: (row: TrackListItem) => (
-                  <Link className="table-link" to={`/tracks/${encodeURIComponent(row.track_uuid)}`}>
-                    {row.track_uuid}
-                  </Link>
-                ),
-              },
-              { key: 'camera', header: 'Camera', render: (row: TrackListItem) => row.camera_code || 'N/A' },
-              { key: 'class', header: 'Class', render: (row: TrackListItem) => row.vehicle_class || 'N/A' },
-              { key: 'plate', header: 'Plate', render: (row: TrackListItem) => row.canonical_plate || 'N/A' },
-            ]}
-            rows={tracksQuery.data.items}
-            getRowKey={(row) => row.track_uuid}
-          />
+          <div className="vehicle-results-grid vehicle-results-grid--compact">
+            {tracksQuery.data.items.map((track) => (
+              <TrackSummaryCard
+                key={track.track_uuid}
+                track={track}
+                detailHref={`/tracks/${encodeURIComponent(track.track_uuid)}`}
+              />
+            ))}
+          </div>
         ) : null}
 
         {activeTab === 'global' && globalVehiclesQuery.data ? (
-          <DataTable
-            columns={[
-              {
-                key: 'code',
-                header: 'Global vehicle',
-                render: (row: GlobalVehicleListItem) => (
-                  <Link className="table-link" to={`/global-vehicles/${encodeURIComponent(row.global_vehicle_code)}`}>
-                    {row.global_vehicle_code}
-                  </Link>
-                ),
-              },
-              { key: 'status', header: 'Status', render: (row: GlobalVehicleListItem) => <StatusBadge value={row.status} /> },
-              { key: 'plate', header: 'Plate', render: (row: GlobalVehicleListItem) => row.canonical_plate || 'N/A' },
-              { key: 'count', header: 'Track count', render: (row: GlobalVehicleListItem) => row.track_count ?? 'N/A' },
-            ]}
-            rows={globalVehiclesQuery.data.items}
-            getRowKey={(row) => row.global_vehicle_code}
-          />
+          <div className="vehicle-results-grid vehicle-results-grid--compact">
+            {globalVehiclesQuery.data.items.map((vehicle) => (
+              <GlobalVehicleCard
+                key={vehicle.global_vehicle_code}
+                vehicle={vehicle}
+                detailHref={`/global-vehicles/${encodeURIComponent(vehicle.global_vehicle_code)}`}
+              />
+            ))}
+          </div>
         ) : null}
 
         {activeTab === 'matches' && matchesQuery.data ? (

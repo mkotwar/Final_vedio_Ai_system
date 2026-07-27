@@ -13,3 +13,16 @@ tracking:
   min_confirmed_observations: 3
   max_lost_frames: 30
   preserve_state_per_camera: true
+  fragment_linking:
+    enabled: true
+    maximum_gap_seconds: 1.5
+    minimum_spatial_score: 0.55
+    minimum_class_compatibility: 0.50
+    require_no_time_overlap: true
+    reject_verified_plate_conflict: true
+  identity_continuity:
+    enabled: true
+    minimum_spatial_score: 0.20
+    minimum_class_compatibility: 0.50
+    maximum_area_ratio: 3.50
+    hard_split_spatial_score: 0.08

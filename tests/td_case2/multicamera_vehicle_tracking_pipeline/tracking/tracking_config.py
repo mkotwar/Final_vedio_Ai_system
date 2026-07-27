@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +11,67 @@ SUPPORTED_TRACKING_BACKENDS = ("supervision_bytetrack", "ultralytics_bytetrack")
 
 class TrackingConfigError(ValueError):
     """Raised when the tracking configuration is invalid."""
+
+
+@dataclass(frozen=True, slots=True)
+class ClassStabilizationConfig:
+    enabled: bool = True
+    strategy: str = "confidence_weighted_vote"
+    observation_count_weight: float = 0.10
+    max_confidence_weight: float = 0.25
+    minimum_observations: int = 2
+    minimum_winner_margin: float = 0.20
+    lock_after_observations: int = 5
+    allow_unlock_on_strong_conflict: bool = True
+    strong_conflict_min_observations: int = 3
+    strong_conflict_margin: float = 0.75
+
+    def __post_init__(self) -> None:
+        if int(self.minimum_observations) <= 0:
+            raise TrackingConfigError("class_stabilization.minimum_observations must be positive.")
+        if int(self.lock_after_observations) <= 0:
+            raise TrackingConfigError("class_stabilization.lock_after_observations must be positive.")
+        if int(self.strong_conflict_min_observations) <= 0:
+            raise TrackingConfigError("class_stabilization.strong_conflict_min_observations must be positive.")
+        for field_name in ("observation_count_weight", "max_confidence_weight", "minimum_winner_margin", "strong_conflict_margin"):
+            value = float(getattr(self, field_name))
+            if value < 0.0:
+                raise TrackingConfigError(f"class_stabilization.{field_name} must be non-negative.")
+
+
+@dataclass(frozen=True, slots=True)
+class FragmentLinkingConfig:
+    enabled: bool = False
+    maximum_gap_seconds: float = 1.5
+    minimum_spatial_score: float = 0.55
+    minimum_class_compatibility: float = 0.50
+    require_no_time_overlap: bool = True
+    reject_verified_plate_conflict: bool = True
+
+    def __post_init__(self) -> None:
+        if float(self.maximum_gap_seconds) < 0.0:
+            raise TrackingConfigError("fragment_linking.maximum_gap_seconds must be non-negative.")
+        for field_name in ("minimum_spatial_score", "minimum_class_compatibility"):
+            value = float(getattr(self, field_name))
+            if not 0.0 <= value <= 1.0:
+                raise TrackingConfigError(f"fragment_linking.{field_name} must be between 0 and 1.")
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityContinuityConfig:
+    enabled: bool = True
+    minimum_spatial_score: float = 0.20
+    minimum_class_compatibility: float = 0.50
+    maximum_area_ratio: float = 3.50
+    hard_split_spatial_score: float = 0.08
+
+    def __post_init__(self) -> None:
+        for field_name in ("minimum_spatial_score", "minimum_class_compatibility", "hard_split_spatial_score"):
+            value = float(getattr(self, field_name))
+            if not 0.0 <= value <= 1.0:
+                raise TrackingConfigError(f"identity_continuity.{field_name} must be between 0 and 1.")
+        if float(self.maximum_area_ratio) < 1.0:
+            raise TrackingConfigError("identity_continuity.maximum_area_ratio must be at least 1.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,6 +90,23 @@ class TrackingConfig:
     min_confirmed_observations: int = 3
     max_lost_frames: int = 30
     preserve_state_per_camera: bool = True
+    class_stabilization: ClassStabilizationConfig = field(default_factory=ClassStabilizationConfig)
+    class_aliases: dict[str, str] = field(default_factory=lambda: {
+        "3 wheeler": "3wheeler",
+        "3-wheeler": "3wheeler",
+        "three_wheeler": "3wheeler",
+        "three wheeler": "3wheeler",
+        "auto": "3wheeler",
+        "auto rickshaw": "3wheeler",
+        "auto_rickshaw": "3wheeler",
+        "rickshaw": "3wheeler",
+    })
+    class_families: dict[str, tuple[str, ...]] = field(default_factory=lambda: {
+        "light_passenger": ("car", "3wheeler"),
+        "heavy_vehicle": ("bus", "truck"),
+    })
+    fragment_linking: FragmentLinkingConfig = field(default_factory=FragmentLinkingConfig)
+    identity_continuity: IdentityContinuityConfig = field(default_factory=IdentityContinuityConfig)
 
     def __post_init__(self) -> None:
         if self.backend not in SUPPORTED_TRACKING_BACKENDS:
@@ -49,6 +127,18 @@ class TrackingConfig:
             raise TrackingConfigError("min_confirmed_observations must be positive.")
         if int(self.max_lost_frames) < 0:
             raise TrackingConfigError("max_lost_frames must be non-negative.")
+        normalized_aliases = {_normalize_alias_key(key): str(value).strip().lower() for key, value in self.class_aliases.items() if str(key).strip()}
+        normalized_families = {
+            str(name).strip(): tuple(str(member).strip().lower() for member in members if str(member).strip())
+            for name, members in self.class_families.items()
+            if str(name).strip()
+        }
+        object.__setattr__(self, "class_aliases", normalized_aliases)
+        object.__setattr__(self, "class_families", normalized_families)
+
+
+def _normalize_alias_key(value: Any) -> str:
+    return " ".join(str(value).strip().lower().replace("_", " ").replace("-", " ").split())
 
 
 def _parse_scalar(value: str) -> Any:
@@ -128,6 +218,15 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
         min_confirmed_observations=int(raw_config.get("min_confirmed_observations", 3)),
         max_lost_frames=int(raw_config.get("max_lost_frames", 30)),
         preserve_state_per_camera=bool(raw_config.get("preserve_state_per_camera", True)),
+        class_stabilization=ClassStabilizationConfig(**dict(raw_config.get("class_stabilization", {}) or {})),
+        class_aliases={str(key): str(value) for key, value in dict(raw_config.get("class_aliases", {}) or {}).items()},
+        class_families={
+            str(key): tuple(str(item) for item in value)
+            for key, value in dict(raw_config.get("class_families", {}) or {}).items()
+            if isinstance(value, (list, tuple))
+        },
+        fragment_linking=FragmentLinkingConfig(**dict(raw_config.get("fragment_linking", {}) or {})),
+        identity_continuity=IdentityContinuityConfig(**dict(raw_config.get("identity_continuity", {}) or {})),
     )
     if overrides:
         overrides = _normalize_tracking_overrides(overrides)
@@ -147,6 +246,15 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
             min_confirmed_observations=int(overrides.get("min_confirmed_observations", config.min_confirmed_observations)),
             max_lost_frames=int(overrides.get("max_lost_frames", config.max_lost_frames)),
             preserve_state_per_camera=bool(overrides.get("preserve_state_per_camera", config.preserve_state_per_camera)),
+            class_stabilization=ClassStabilizationConfig(**dict(overrides.get("class_stabilization", asdict(config.class_stabilization)) or {})),
+            class_aliases={str(key): str(value) for key, value in dict(overrides.get("class_aliases", config.class_aliases) or {}).items()},
+            class_families={
+                str(key): tuple(str(item) for item in value)
+                for key, value in dict(overrides.get("class_families", config.class_families) or {}).items()
+                if isinstance(value, (list, tuple))
+            },
+            fragment_linking=FragmentLinkingConfig(**dict(overrides.get("fragment_linking", asdict(config.fragment_linking)) or {})),
+            identity_continuity=IdentityContinuityConfig(**dict(overrides.get("identity_continuity", asdict(config.identity_continuity)) or {})),
         )
     return config
 

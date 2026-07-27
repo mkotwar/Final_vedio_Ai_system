@@ -27,6 +27,28 @@ class CameraConfigTests(unittest.TestCase):
             configs = load_camera_configs(config_path)
             self.assertEqual(len(configs), 1)
             self.assertEqual(configs[0].camera_code, "CAM_001")
+            self.assertEqual(configs[0].camera_name, "North Gate")
+
+    def test_nested_source_path_and_default_camera_name_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "config").mkdir()
+            (root / "data").mkdir()
+            (root / "data" / "camera_1.mp4").write_bytes(b"placeholder")
+            config_path = root / "config" / "cameras.yaml"
+            config_path.write_text(
+                'cameras:\n'
+                '  - camera_code: CAM_001\n'
+                '    enabled: true\n'
+                '    source_type: file\n'
+                '    source:\n'
+                '      path: data/camera_1.mp4\n',
+                encoding="utf-8",
+            )
+            configs = load_camera_configs(config_path)
+            self.assertEqual(len(configs), 1)
+            self.assertEqual(configs[0].camera_code, "CAM_001")
+            self.assertEqual(configs[0].camera_name, "CAM_001")
 
     def test_duplicate_camera_code_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -78,6 +100,23 @@ class CameraConfigTests(unittest.TestCase):
                 '    camera_name: A\n'
                 '    source_path: data/missing.mp4\n'
                 '    enabled: true\n',
+                encoding="utf-8",
+            )
+            with self.assertRaises(CameraConfigError):
+                load_camera_configs(config_path)
+
+    def test_missing_legacy_and_nested_source_path_is_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "config").mkdir()
+            config_path = root / "config" / "cameras.yaml"
+            config_path.write_text(
+                'cameras:\n'
+                '  - camera_code: CAM_001\n'
+                '    enabled: true\n'
+                '    source_type: file\n'
+                '    source:\n'
+                '      uri: rtsp://camera-1\n',
                 encoding="utf-8",
             )
             with self.assertRaises(CameraConfigError):

@@ -14,6 +14,7 @@ def test_global_vehicle_list_supports_filters() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["items"][0]["global_vehicle_code"] == "GVO:RUN_20260724_151402:943BD1FE7C62"
+    assert body["items"][0]["plate_result"]["display_text"] == "DL8CBF6268"
 
 
 def test_global_vehicle_detail_returns_multi_camera_object() -> None:
@@ -22,6 +23,7 @@ def test_global_vehicle_detail_returns_multi_camera_object() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["global_vehicle"]["canonical_plate"] == "DL8CBF6268"
+    assert body["global_vehicle"]["plate_result"]["status"] == "VERIFIED"
     assert {member["camera_code"] for member in body["members"]} == {"CAM_001", "CAM_002"}
 
 

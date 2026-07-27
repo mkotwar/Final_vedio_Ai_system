@@ -10,6 +10,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from ..detection.detection_config import DetectionConfig
 from ..ingestion.camera_config import CameraConfig
+from ..tracking.class_stabilization import track_class_metadata
 from ..tracking.tracking_config import TrackingConfig
 from ..tracking.tracking_models import LocalVehicleTrack, TrackObservation
 from .evidence_to_track_media_mapper import build_track_media_records
@@ -75,6 +76,7 @@ class AnalyticsPersistenceService:
         track_media_repository: TrackMediaRepository | None = None,
         artifact_root: Path | None = None,
         enable_database_writes: bool | None = None,
+        run_started_at: datetime | None = None,
     ) -> None:
         self.client = client
         self.config = config
@@ -91,6 +93,7 @@ class AnalyticsPersistenceService:
         self.camera_id_by_code: dict[str, object] = {}
         self._processing_run_id: UUID | None = None
         self._started_at: datetime | None = None
+        self._run_started_at_override = self._ensure_optional_timezone(run_started_at)
         self._camera_context_by_code: dict[str, _CameraPersistenceContext] = {}
         self._detector_model_id: UUID | None = None
         self._tracker_model_id: UUID | None = None
@@ -338,7 +341,11 @@ class AnalyticsPersistenceService:
             tracker_backend=self.tracking_config.backend,
             tracker_configuration=self._tracking_configuration_payload(),
             searchable=True,
-            metadata={"camera_name": track.camera_name, "source_path": str(track.source_path) if track.source_path else None},
+            metadata={
+                "camera_name": track.camera_name,
+                "source_path": str(track.source_path) if track.source_path else None,
+                "class_diagnostics": track_class_metadata(track),
+            },
         )
         track_record.to_payload()
         observation_records = self._build_observation_records(track, vehicle_track_id=dry_run_track_uuid)
@@ -379,7 +386,7 @@ class AnalyticsPersistenceService:
     def _ensure_processing_run(self, camera_configs: list[CameraConfig]) -> None:
         if self._processing_run_id is not None:
             return
-        self._started_at = datetime.now(timezone.utc)
+        self._started_at = self._run_started_at_override or datetime.now(timezone.utc)
         processing_run_record = ProcessingRunRecord(
             run_code=self.run_code,
             pipeline_name=self.pipeline_name,
@@ -516,7 +523,11 @@ class AnalyticsPersistenceService:
                     detection_confidence=observation.confidence,
                     tracker_confidence=None,
                     is_key_observation=index in {0, len(selected) - 1},
-                    metadata={"track_uuid": track.track_uuid},
+                    metadata={
+                        "track_uuid": track.track_uuid,
+                        "class_name": observation.class_name,
+                        "raw_class_name": observation.raw_class_name,
+                    },
                 )
             )
         return rows
@@ -741,6 +752,28 @@ class AnalyticsPersistenceService:
             "min_confirmed_observations": self.tracking_config.min_confirmed_observations,
             "max_lost_frames": self.tracking_config.max_lost_frames,
             "preserve_state_per_camera": self.tracking_config.preserve_state_per_camera,
+            "class_stabilization": {
+                "enabled": self.tracking_config.class_stabilization.enabled,
+                "strategy": self.tracking_config.class_stabilization.strategy,
+                "observation_count_weight": self.tracking_config.class_stabilization.observation_count_weight,
+                "max_confidence_weight": self.tracking_config.class_stabilization.max_confidence_weight,
+                "minimum_observations": self.tracking_config.class_stabilization.minimum_observations,
+                "minimum_winner_margin": self.tracking_config.class_stabilization.minimum_winner_margin,
+                "lock_after_observations": self.tracking_config.class_stabilization.lock_after_observations,
+                "allow_unlock_on_strong_conflict": self.tracking_config.class_stabilization.allow_unlock_on_strong_conflict,
+                "strong_conflict_min_observations": self.tracking_config.class_stabilization.strong_conflict_min_observations,
+                "strong_conflict_margin": self.tracking_config.class_stabilization.strong_conflict_margin,
+            },
+            "class_aliases": dict(self.tracking_config.class_aliases),
+            "class_families": {key: list(value) for key, value in self.tracking_config.class_families.items()},
+            "fragment_linking": {
+                "enabled": self.tracking_config.fragment_linking.enabled,
+                "maximum_gap_seconds": self.tracking_config.fragment_linking.maximum_gap_seconds,
+                "minimum_spatial_score": self.tracking_config.fragment_linking.minimum_spatial_score,
+                "minimum_class_compatibility": self.tracking_config.fragment_linking.minimum_class_compatibility,
+                "require_no_time_overlap": self.tracking_config.fragment_linking.require_no_time_overlap,
+                "reject_verified_plate_conflict": self.tracking_config.fragment_linking.reject_verified_plate_conflict,
+            },
         }
 
     def _require_processing_run_id(self) -> UUID:

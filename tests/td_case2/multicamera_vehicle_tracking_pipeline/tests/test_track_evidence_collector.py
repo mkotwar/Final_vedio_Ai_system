@@ -106,6 +106,24 @@ class TrackEvidenceCollectorTests(unittest.TestCase):
             self.assertIsNotNone(evidence)
             self.assertIsNotNone(evidence.output_directory)
             self.assertTrue(Path(evidence.output_directory).exists())
+            self.assertTrue((Path(evidence.output_directory) / "full_frame.jpg").exists())
+            self.assertIsNotNone(evidence.full_frame_path)
+
+    def test_best_overall_prefers_fully_visible_crop_over_edge_crop(self) -> None:
+        collector = TrackEvidenceCollector(EvidenceConfig(enabled=True, minimum_crop_width=20, minimum_crop_height=20), run_id="RUN_TEST")
+        frame = np.zeros((120, 160, 3), dtype=np.uint8)
+        centered_crop = frame.copy()
+        centered_crop[30:90, 50:110] = 255
+        edge_crop = frame.copy()
+        edge_crop[10:70, 0:60] = 255
+
+        collector.update(_packet(0, edge_crop), [_observation(0, confidence=0.95, bbox_xyxy=(0.0, 10.0, 60.0, 70.0))])
+        collector.update(_packet(1, centered_crop), [_observation(1, confidence=0.90, bbox_xyxy=(50.0, 30.0, 110.0, 90.0))])
+
+        evidence = collector.finalize_track(_track(2))
+        self.assertIsNotNone(evidence)
+        assert evidence is not None
+        self.assertEqual(evidence.candidates["best_overall"].frame_number, 1)
 
 
 if __name__ == "__main__":

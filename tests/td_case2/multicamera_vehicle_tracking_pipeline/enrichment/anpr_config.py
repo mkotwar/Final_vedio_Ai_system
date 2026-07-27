@@ -24,6 +24,7 @@ class PlateDetectorConfig:
     device: str = "auto"
     confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
+    inference_image_size: int = 640
     maximum_detections_per_vehicle_crop: int = 3
 
     def __post_init__(self) -> None:
@@ -35,6 +36,8 @@ class PlateDetectorConfig:
             raise AnprConfigError("plate_detector.confidence_threshold must be between 0 and 1.")
         if not 0.0 <= float(self.iou_threshold) <= 1.0:
             raise AnprConfigError("plate_detector.iou_threshold must be between 0 and 1.")
+        if int(self.inference_image_size) not in {640, 960, 1280}:
+            raise AnprConfigError("plate_detector.inference_image_size must be one of 640, 960, or 1280.")
         if int(self.maximum_detections_per_vehicle_crop) <= 0:
             raise AnprConfigError("plate_detector.maximum_detections_per_vehicle_crop must be positive.")
 
@@ -51,6 +54,7 @@ class PlateSelectionConfig:
     size_weight: float = 0.20
     aspect_ratio_weight: float = 0.10
     edge_penalty_weight: float = 0.05
+    heuristic_region_penalty: float = 0.20
 
     def __post_init__(self) -> None:
         for field_name in ("minimum_width", "minimum_height", "minimum_area"):
@@ -66,6 +70,7 @@ class PlateSelectionConfig:
             "size_weight",
             "aspect_ratio_weight",
             "edge_penalty_weight",
+            "heuristic_region_penalty",
         ):
             if float(getattr(self, field_name)) < 0.0:
                 raise AnprConfigError(f"plate_selection.{field_name} must be non-negative.")
@@ -79,6 +84,9 @@ class AnprOcrConfig:
     retry_with_preprocessing: bool = True
     fallback_to_other_plate_candidates: bool = True
     maximum_plate_candidates_for_ocr: int = 3
+    max_variants_per_candidate: int = 6
+    early_stop_on_verified: bool = True
+    minimum_support_frames_for_verified: int = 2
     task_prompt: str = "<OCR>"
 
     def __post_init__(self) -> None:
@@ -90,6 +98,10 @@ class AnprOcrConfig:
             raise AnprConfigError("ocr.maximum_retries must be non-negative.")
         if int(self.maximum_plate_candidates_for_ocr) <= 0:
             raise AnprConfigError("ocr.maximum_plate_candidates_for_ocr must be positive.")
+        if int(self.max_variants_per_candidate) <= 0:
+            raise AnprConfigError("ocr.max_variants_per_candidate must be positive.")
+        if int(self.minimum_support_frames_for_verified) <= 0:
+            raise AnprConfigError("ocr.minimum_support_frames_for_verified must be positive.")
         if not str(self.task_prompt).strip():
             raise AnprConfigError("ocr.task_prompt must not be empty.")
 
@@ -110,6 +122,61 @@ class AnprValidationConfig:
             raise AnprConfigError("validation normalized lengths must be positive.")
         if int(self.minimum_normalized_length) > int(self.maximum_normalized_length):
             raise AnprConfigError("validation.minimum_normalized_length must not exceed maximum_normalized_length.")
+
+
+@dataclass(frozen=True, slots=True)
+class FallbackRegionConfig:
+    name: str
+    x_min_ratio: float
+    y_min_ratio: float
+    x_max_ratio: float
+    y_max_ratio: float
+
+    def __post_init__(self) -> None:
+        if not str(self.name).strip():
+            raise AnprConfigError("fallback region name must not be empty.")
+        for field_name in ("x_min_ratio", "y_min_ratio", "x_max_ratio", "y_max_ratio"):
+            value = float(getattr(self, field_name))
+            if not 0.0 <= value <= 1.0:
+                raise AnprConfigError(f"fallback region {field_name} must be between 0 and 1.")
+        if float(self.x_max_ratio) <= float(self.x_min_ratio):
+            raise AnprConfigError("fallback region x_max_ratio must be greater than x_min_ratio.")
+        if float(self.y_max_ratio) <= float(self.y_min_ratio):
+            raise AnprConfigError("fallback region y_max_ratio must be greater than y_min_ratio.")
+
+
+@dataclass(frozen=True, slots=True)
+class AnprFallbackConfig:
+    enabled: bool = True
+    vehicle_crop_padding_ratio: float = 0.15
+    enable_original_frame_region: bool = True
+    enable_padded_vehicle_crop: bool = True
+    heuristic_regions_by_class: dict[str, tuple[FallbackRegionConfig, ...]] = field(
+        default_factory=lambda: {
+            "3WHEELER": (
+                FallbackRegionConfig("lower_right", 0.50, 0.55, 1.00, 1.00),
+                FallbackRegionConfig("lower_center", 0.20, 0.55, 0.80, 1.00),
+            ),
+            "AUTO_RICKSHAW": (
+                FallbackRegionConfig("lower_right", 0.50, 0.55, 1.00, 1.00),
+                FallbackRegionConfig("lower_center", 0.20, 0.55, 0.80, 1.00),
+            ),
+            "BUS": (FallbackRegionConfig("lower_center", 0.20, 0.55, 0.80, 1.00),),
+            "TRUCK": (FallbackRegionConfig("lower_center", 0.20, 0.55, 0.80, 1.00),),
+            "CAR": (FallbackRegionConfig("lower_center", 0.25, 0.55, 0.75, 1.00),),
+        }
+    )
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= float(self.vehicle_crop_padding_ratio) <= 0.5:
+            raise AnprConfigError("fallback.vehicle_crop_padding_ratio must be between 0 and 0.5.")
+        normalized: dict[str, tuple[FallbackRegionConfig, ...]] = {}
+        for class_name, regions in self.heuristic_regions_by_class.items():
+            key = str(class_name).strip().upper()
+            if not key:
+                raise AnprConfigError("fallback class name must not be empty.")
+            normalized[key] = tuple(regions)
+        object.__setattr__(self, "heuristic_regions_by_class", normalized)
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,6 +207,7 @@ class AnprConfig:
     plate_selection: PlateSelectionConfig = field(default_factory=PlateSelectionConfig)
     ocr: AnprOcrConfig = field(default_factory=AnprOcrConfig)
     validation: AnprValidationConfig = field(default_factory=AnprValidationConfig)
+    fallback: AnprFallbackConfig = field(default_factory=AnprFallbackConfig)
     media: AnprMediaConfig = field(default_factory=AnprMediaConfig)
     persist_result: bool = True
     fail_pipeline_on_error: bool = False
@@ -176,6 +244,7 @@ def load_anpr_config(config_path: str | Path, *, overrides: dict[str, Any] | Non
     selection_raw = _mapping(raw, "plate_selection")
     ocr_raw = _mapping(raw, "ocr")
     validation_raw = _mapping(raw, "validation")
+    fallback_raw = _mapping(raw, "fallback")
     media_raw = _mapping(raw, "media")
     config = AnprConfig(
         enabled=bool(raw.get("enabled", False)),
@@ -186,6 +255,7 @@ def load_anpr_config(config_path: str | Path, *, overrides: dict[str, Any] | Non
             device=str(detector_raw.get("device", "auto")),
             confidence_threshold=float(detector_raw.get("confidence_threshold", 0.25)),
             iou_threshold=float(detector_raw.get("iou_threshold", 0.45)),
+            inference_image_size=int(detector_raw.get("inference_image_size", 640)),
             maximum_detections_per_vehicle_crop=int(detector_raw.get("maximum_detections_per_vehicle_crop", 3)),
         ),
         vehicle_evidence_roles=tuple(str(item) for item in raw.get("vehicle_evidence_roles", (
@@ -209,6 +279,7 @@ def load_anpr_config(config_path: str | Path, *, overrides: dict[str, Any] | Non
             size_weight=float(selection_raw.get("size_weight", 0.20)),
             aspect_ratio_weight=float(selection_raw.get("aspect_ratio_weight", 0.10)),
             edge_penalty_weight=float(selection_raw.get("edge_penalty_weight", 0.05)),
+            heuristic_region_penalty=float(selection_raw.get("heuristic_region_penalty", 0.20)),
         ),
         ocr=AnprOcrConfig(
             backend=str(ocr_raw.get("backend", "florence")),
@@ -217,6 +288,9 @@ def load_anpr_config(config_path: str | Path, *, overrides: dict[str, Any] | Non
             retry_with_preprocessing=bool(ocr_raw.get("retry_with_preprocessing", True)),
             fallback_to_other_plate_candidates=bool(ocr_raw.get("fallback_to_other_plate_candidates", True)),
             maximum_plate_candidates_for_ocr=int(ocr_raw.get("maximum_plate_candidates_for_ocr", 3)),
+            max_variants_per_candidate=int(ocr_raw.get("max_variants_per_candidate", 6)),
+            early_stop_on_verified=bool(ocr_raw.get("early_stop_on_verified", True)),
+            minimum_support_frames_for_verified=int(ocr_raw.get("minimum_support_frames_for_verified", 2)),
             task_prompt=str(ocr_raw.get("task_prompt", "<OCR>")),
         ),
         validation=AnprValidationConfig(
@@ -226,6 +300,13 @@ def load_anpr_config(config_path: str | Path, *, overrides: dict[str, Any] | Non
             maximum_normalized_length=int(validation_raw.get("maximum_normalized_length", 12)),
             allow_unverified_result=bool(validation_raw.get("allow_unverified_result", True)),
             persist_only_verified_as_primary=bool(validation_raw.get("persist_only_verified_as_primary", True)),
+        ),
+        fallback=AnprFallbackConfig(
+            enabled=bool(fallback_raw.get("enabled", True)),
+            vehicle_crop_padding_ratio=float(fallback_raw.get("vehicle_crop_padding_ratio", 0.15)),
+            enable_original_frame_region=bool(fallback_raw.get("enable_original_frame_region", True)),
+            enable_padded_vehicle_crop=bool(fallback_raw.get("enable_padded_vehicle_crop", True)),
+            heuristic_regions_by_class=_load_fallback_regions(fallback_raw),
         ),
         media=AnprMediaConfig(
             save_plate_crops=bool(media_raw.get("save_plate_crops", True)),
@@ -256,3 +337,30 @@ def _optional_str(value: object) -> str | None:
     if value in (None, "", "null"):
         return None
     return str(value)
+
+
+def _load_fallback_regions(payload: dict[str, Any]) -> dict[str, tuple[FallbackRegionConfig, ...]]:
+    raw_regions = payload.get("heuristic_regions_by_class")
+    if raw_regions in (None, ""):
+        return AnprFallbackConfig().heuristic_regions_by_class
+    if not isinstance(raw_regions, dict):
+        raise AnprConfigError("fallback.heuristic_regions_by_class must be a mapping.")
+    normalized: dict[str, tuple[FallbackRegionConfig, ...]] = {}
+    for class_name, region_list in raw_regions.items():
+        if not isinstance(region_list, list):
+            raise AnprConfigError(f"fallback regions for {class_name} must be a list.")
+        regions: list[FallbackRegionConfig] = []
+        for item in region_list:
+            if not isinstance(item, dict):
+                raise AnprConfigError(f"fallback region for {class_name} must be a mapping.")
+            regions.append(
+                FallbackRegionConfig(
+                    name=str(item.get("name", "")),
+                    x_min_ratio=float(item.get("x_min_ratio", 0.0)),
+                    y_min_ratio=float(item.get("y_min_ratio", 0.0)),
+                    x_max_ratio=float(item.get("x_max_ratio", 1.0)),
+                    y_max_ratio=float(item.get("y_max_ratio", 1.0)),
+                )
+            )
+        normalized[str(class_name).strip().upper()] = tuple(regions)
+    return normalized

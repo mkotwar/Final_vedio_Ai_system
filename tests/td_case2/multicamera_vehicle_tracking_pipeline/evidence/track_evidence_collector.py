@@ -49,7 +49,7 @@ class TrackEvidenceCollector:
             crop_height, crop_width = crop.shape[:2]
             if crop_width < self.config.minimum_crop_width or crop_height < self.config.minimum_crop_height:
                 continue
-            encoded = self._encode_crop(crop)
+            encoded = self._encode_image(crop)
             state = self._states_by_track_uuid.setdefault(
                 observation.track_uuid,
                 _TrackEvidenceState(
@@ -65,12 +65,13 @@ class TrackEvidenceCollector:
             state.last_frame_number = observation.frame_number
             state.accepted_frame_numbers.append(observation.frame_number)
             candidate = self._build_candidate(observation, adjusted_bbox, crop_width, crop_height, encoded, crop, frame_width, frame_height)
-            self._consider_candidate(state, "first", candidate, condition=self.config.collect_first and "first" not in state.candidates)
-            self._consider_candidate(state, "last", candidate, condition=self.config.collect_last)
+            self._consider_candidate(state, "first", candidate, frame=frame, condition=self.config.collect_first and "first" not in state.candidates)
+            self._consider_candidate(state, "last", candidate, frame=frame, condition=self.config.collect_last)
             self._consider_candidate(
                 state,
                 "highest_confidence",
                 candidate,
+                frame=frame,
                 condition=self.config.collect_highest_confidence and (
                     "highest_confidence" not in state.candidates or candidate.confidence > state.candidates["highest_confidence"].confidence
                 ),
@@ -79,6 +80,7 @@ class TrackEvidenceCollector:
                 state,
                 "largest",
                 candidate,
+                frame=frame,
                 condition=self.config.collect_largest and (
                     "largest" not in state.candidates or candidate.area > state.candidates["largest"].area
                 ),
@@ -87,6 +89,7 @@ class TrackEvidenceCollector:
                 state,
                 "sharpest",
                 candidate,
+                frame=frame,
                 condition=self.config.collect_sharpest and (
                     "sharpest" not in state.candidates or candidate.sharpness_score > state.candidates["sharpest"].sharpness_score
                 ),
@@ -95,12 +98,13 @@ class TrackEvidenceCollector:
                 state,
                 "best_overall",
                 candidate,
+                frame=frame,
                 condition=self.config.collect_best_overall and (
                     "best_overall" not in state.candidates or candidate.overall_score > state.candidates["best_overall"].overall_score
                 ),
             )
             if self.config.collect_middle:
-                self._consider_middle_candidate(state, candidate)
+                self._consider_middle_candidate(state, candidate, frame=frame)
 
     def finalize_track(self, track: LocalVehicleTrack) -> TrackEvidencePackage | None:
         if not self.config.enabled:
@@ -109,9 +113,10 @@ class TrackEvidenceCollector:
         if state is None or not state.candidates:
             return None
         output_directory = None
+        full_frame_metadata: dict[str, object] = {}
         candidates = dict(state.candidates)
         if self.config.save_final_selected_crops:
-            output_directory = self._persist_candidates(track, candidates)
+            output_directory, full_frame_metadata = self._persist_candidates(track, candidates)
         return TrackEvidencePackage(
             run_id=self.run_id,
             camera_code=track.camera_code,
@@ -120,6 +125,12 @@ class TrackEvidenceCollector:
             class_name=track.class_name,
             candidates=candidates,
             output_directory=output_directory,
+            full_frame_path=full_frame_metadata.get("full_frame_path"),
+            full_frame_frame_number=full_frame_metadata.get("full_frame_frame_number"),
+            full_frame_video_time_seconds=full_frame_metadata.get("full_frame_video_time_seconds"),
+            full_frame_bbox_xyxy=full_frame_metadata.get("full_frame_bbox_xyxy"),
+            full_frame_width=full_frame_metadata.get("full_frame_width"),
+            full_frame_height=full_frame_metadata.get("full_frame_height"),
         )
 
     def drop_camera(self, camera_code: str) -> None:
@@ -159,10 +170,10 @@ class TrackEvidenceCollector:
             return None
         return crop.copy(), clamped
 
-    def _encode_crop(self, crop: np.ndarray) -> bytes:
-        ok, encoded = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.config.jpeg_quality)])
+    def _encode_image(self, image: np.ndarray) -> bytes:
+        ok, encoded = cv2.imencode(".jpg", image, [int(cv2.IMWRITE_JPEG_QUALITY), int(self.config.jpeg_quality)])
         if not ok:
-            raise RuntimeError("Failed to JPEG-encode evidence crop.")
+            raise RuntimeError("Failed to JPEG-encode evidence image.")
         return bytes(encoded.tobytes())
 
     def _build_candidate(
@@ -178,9 +189,19 @@ class TrackEvidenceCollector:
     ) -> EvidenceCandidate:
         area = int(crop_width * crop_height)
         sharpness = self._sharpness_score(crop) if self.config.sharpness_enabled else 0.0
+        normalized_sharpness = self._normalized_sharpness_score(sharpness) if self.config.sharpness_enabled else 0.0
         edge_penalty = self._edge_penalty(bbox_xyxy, frame_width, frame_height) if self.config.edge_penalty_enabled else 0.0
         normalized_area = area / max(1.0, float(frame_width * frame_height))
-        overall_score = (float(observation.confidence) * 0.5) + (normalized_area * 0.25) + (sharpness * 0.25) - edge_penalty
+        centeredness = self._centeredness_score(bbox_xyxy, frame_width, frame_height)
+        visibility_score = self._visibility_score(bbox_xyxy, frame_width, frame_height)
+        overall_score = (
+            (float(observation.confidence) * 0.30)
+            + (normalized_area * 0.15)
+            + (normalized_sharpness * 0.20)
+            + (centeredness * 0.15)
+            + (visibility_score * 0.20)
+            - edge_penalty
+        )
         return EvidenceCandidate(
             candidate_type="generic",
             frame_number=observation.frame_number,
@@ -196,9 +217,18 @@ class TrackEvidenceCollector:
             encoded_jpeg=encoded,
         )
 
-    def _consider_candidate(self, state: _TrackEvidenceState, candidate_name: str, candidate: EvidenceCandidate, *, condition: bool) -> None:
+    def _consider_candidate(
+        self,
+        state: _TrackEvidenceState,
+        candidate_name: str,
+        candidate: EvidenceCandidate,
+        *,
+        frame: np.ndarray,
+        condition: bool,
+    ) -> None:
         if not condition:
             return
+        frame_height, frame_width = frame.shape[:2]
         state.candidates[candidate_name] = EvidenceCandidate(
             candidate_type=candidate_name,
             frame_number=candidate.frame_number,
@@ -213,21 +243,30 @@ class TrackEvidenceCollector:
             overall_score=candidate.overall_score,
             encoded_jpeg=candidate.encoded_jpeg,
             file_path=candidate.file_path,
+            source_frame_jpeg=self._encode_image(frame),
+            source_frame_width=frame_width,
+            source_frame_height=frame_height,
         )
 
-    def _consider_middle_candidate(self, state: _TrackEvidenceState, candidate: EvidenceCandidate) -> None:
+    def _consider_middle_candidate(self, state: _TrackEvidenceState, candidate: EvidenceCandidate, *, frame: np.ndarray) -> None:
         if state.first_frame_number is None or state.last_frame_number is None:
             return
         desired_mid = (state.first_frame_number + state.last_frame_number) / 2.0
         existing = state.candidates.get("middle")
         if existing is None or abs(candidate.frame_number - desired_mid) < abs(existing.frame_number - desired_mid):
-            self._consider_candidate(state, "middle", candidate, condition=True)
+            self._consider_candidate(state, "middle", candidate, frame=frame, condition=True)
 
     @staticmethod
     def _sharpness_score(crop: np.ndarray) -> float:
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         variance = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         return variance
+
+    @staticmethod
+    def _normalized_sharpness_score(raw_sharpness: float) -> float:
+        if raw_sharpness <= 0.0:
+            return 0.0
+        return raw_sharpness / (raw_sharpness + 300.0)
 
     @staticmethod
     def _edge_penalty(bbox_xyxy: tuple[float, float, float, float], frame_width: int, frame_height: int) -> float:
@@ -237,7 +276,26 @@ class TrackEvidenceCollector:
         normalized = min(margin_x / max(1.0, frame_width), margin_y / max(1.0, frame_height))
         return max(0.0, 0.1 - normalized)
 
-    def _persist_candidates(self, track: LocalVehicleTrack, candidates: dict[str, EvidenceCandidate]) -> str:
+    @staticmethod
+    def _centeredness_score(bbox_xyxy: tuple[float, float, float, float], frame_width: int, frame_height: int) -> float:
+        x1, y1, x2, y2 = bbox_xyxy
+        center_x = (x1 + x2) / 2.0
+        center_y = (y1 + y2) / 2.0
+        normalized_dx = abs(center_x - (float(frame_width) / 2.0)) / max(float(frame_width) / 2.0, 1.0)
+        normalized_dy = abs(center_y - (float(frame_height) / 2.0)) / max(float(frame_height) / 2.0, 1.0)
+        return max(0.0, 1.0 - ((normalized_dx * 0.6) + (normalized_dy * 0.4)))
+
+    @staticmethod
+    def _visibility_score(bbox_xyxy: tuple[float, float, float, float], frame_width: int, frame_height: int) -> float:
+        x1, y1, x2, y2 = bbox_xyxy
+        left_margin = max(0.0, x1) / max(float(frame_width), 1.0)
+        right_margin = max(0.0, float(frame_width) - x2) / max(float(frame_width), 1.0)
+        top_margin = max(0.0, y1) / max(float(frame_height), 1.0)
+        bottom_margin = max(0.0, float(frame_height) - y2) / max(float(frame_height), 1.0)
+        tightest_margin = min(left_margin, right_margin, top_margin, bottom_margin)
+        return max(0.0, min(1.0, tightest_margin / 0.08))
+
+    def _persist_candidates(self, track: LocalVehicleTrack, candidates: dict[str, EvidenceCandidate]) -> tuple[str, dict[str, object]]:
         base_dir = Path(self.config.output_root) / self.run_id / track.camera_code / f"track_{track.local_track_id:06d}" / track.track_uuid.replace(":", "_")
         base_dir.mkdir(parents=True, exist_ok=True)
         for candidate_name, candidate in list(candidates.items()):
@@ -257,5 +315,29 @@ class TrackEvidenceCollector:
                 overall_score=candidate.overall_score,
                 encoded_jpeg=candidate.encoded_jpeg,
                 file_path=str(target_path),
+                source_frame_jpeg=candidate.source_frame_jpeg,
+                source_frame_width=candidate.source_frame_width,
+                source_frame_height=candidate.source_frame_height,
             )
-        return str(base_dir)
+        full_frame_metadata: dict[str, object] = {}
+        representative = self._select_representative_full_frame_candidate(candidates)
+        if representative is not None and representative.source_frame_jpeg is not None:
+            full_frame_path = base_dir / "full_frame.jpg"
+            full_frame_path.write_bytes(representative.source_frame_jpeg)
+            full_frame_metadata = {
+                "full_frame_path": str(full_frame_path),
+                "full_frame_frame_number": representative.frame_number,
+                "full_frame_video_time_seconds": representative.video_time_seconds,
+                "full_frame_bbox_xyxy": representative.bbox_xyxy,
+                "full_frame_width": representative.source_frame_width,
+                "full_frame_height": representative.source_frame_height,
+            }
+        return str(base_dir), full_frame_metadata
+
+    @staticmethod
+    def _select_representative_full_frame_candidate(candidates: dict[str, EvidenceCandidate]) -> EvidenceCandidate | None:
+        for key in ("best_overall", "highest_confidence", "largest", "sharpest", "middle", "first", "last"):
+            candidate = candidates.get(key)
+            if candidate is not None and candidate.source_frame_jpeg is not None:
+                return candidate
+        return next((candidate for candidate in candidates.values() if candidate.source_frame_jpeg is not None), None)

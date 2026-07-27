@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from ..database.client import create_backend_client
@@ -23,6 +24,7 @@ def build_persistence_service(
     execution_mode: str,
     runtime_device: str | None,
     artifact_root: Path,
+    run_started_at: datetime | None = None,
     repository: VehicleRepository | None = None,
     analytics_client: AnalyticsDatabaseClient | None = None,
 ) -> PersistenceServiceProtocol | None:
@@ -42,6 +44,7 @@ def build_persistence_service(
             runtime_device=runtime_device,
             artifact_root=artifact_root,
             enable_database_writes=(config.backend == "analytics_supabase"),
+            run_started_at=run_started_at,
         )
     return TrackingPersistenceService(
         repository or _build_old_public_repository(),

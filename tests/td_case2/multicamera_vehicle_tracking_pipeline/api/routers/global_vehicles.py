@@ -20,7 +20,7 @@ def list_global_vehicles(
     vehicle_class: str | None = None,
     colour: str | None = None,
     plate: str | None = None,
-    minimum_confidence: float | None = Query(default=None, ge=0, le=1),
+    minimum_confidence: float | None = Query(default=0.5, ge=0, le=1),
     minimum_camera_count: int | None = Query(default=None, ge=1),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),

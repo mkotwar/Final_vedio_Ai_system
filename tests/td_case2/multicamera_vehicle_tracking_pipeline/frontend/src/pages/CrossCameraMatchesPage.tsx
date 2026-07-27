@@ -1,16 +1,18 @@
+import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listMatches } from '../api/matches'
 import type { MatchListItem } from '../types/match'
 import FilterBar from '../components/filters/FilterBar'
-import DataTable from '../components/tables/DataTable'
 import Pagination from '../components/tables/Pagination'
 import LoadingState from '../components/states/LoadingState'
 import ErrorState from '../components/states/ErrorState'
 import EmptyState from '../components/states/EmptyState'
 import StatusBadge from '../components/states/StatusBadge'
 import ConfidenceBadge from '../components/states/ConfidenceBadge'
+import TrackSummaryCard from '../components/cards/TrackSummaryCard'
+import type { TrackListItem } from '../types/track'
 
 export default function CrossCameraMatchesPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -87,26 +89,44 @@ export default function CrossCameraMatchesPage() {
         <EmptyState title="No matches found" description="No cross-camera matches matched the current filters." />
       ) : (
         <>
-          <DataTable
-            columns={[
-              { key: 'sourceTrack', header: 'Source track', render: (row: MatchListItem) => row.source_track_uuid || 'N/A' },
-              { key: 'sourceCamera', header: 'Source camera', render: (row: MatchListItem) => row.source_camera_code || 'N/A' },
-              { key: 'candidateTrack', header: 'Candidate track', render: (row: MatchListItem) => row.candidate_track_uuid || 'N/A' },
-              { key: 'candidateCamera', header: 'Candidate camera', render: (row: MatchListItem) => row.candidate_camera_code || 'N/A' },
-              { key: 'decision', header: 'Decision', render: (row: MatchListItem) => <StatusBadge value={row.decision} /> },
-              { key: 'overall', header: 'Overall', render: (row: MatchListItem) => <ConfidenceBadge value={row.overall_score} /> },
-              { key: 'plate', header: 'Plate', render: (row: MatchListItem) => <ConfidenceBadge value={row.plate_score} /> },
-              { key: 'class', header: 'Class', render: (row: MatchListItem) => <ConfidenceBadge value={row.class_score} /> },
-              { key: 'colour', header: 'Colour', render: (row: MatchListItem) => <ConfidenceBadge value={row.colour_score} /> },
-              { key: 'route', header: 'Route', render: (row: MatchListItem) => <ConfidenceBadge value={row.route_score} /> },
-              { key: 'time', header: 'Time', render: (row: MatchListItem) => <ConfidenceBadge value={row.time_score} /> },
-              { key: 'visual', header: 'Visual', render: (row: MatchListItem) => <ConfidenceBadge value={row.visual_score} /> },
-              { key: 'linked', header: 'Linked global vehicle', render: (row: MatchListItem) => row.linked_global_vehicle_code || 'N/A' },
-              { key: 'reasons', header: 'Reasons', render: (row: MatchListItem) => row.decision_reasons.join(', ') || 'N/A' },
-            ]}
-            rows={matchesQuery.data.items}
-            getRowKey={(row) => row.id || `${row.source_track_uuid}-${row.candidate_track_uuid}`}
-          />
+          <div className="stack-list">
+            {matchesQuery.data.items.map((match) => (
+              <article className="match-comparison-card" key={match.id || `${match.source_track_uuid}-${match.candidate_track_uuid}`}>
+                <div className="match-comparison-card__header">
+                  <div>
+                    <p className="summary-card__eyebrow">Cross-camera match</p>
+                    <h3>{match.linked_global_vehicle_code || `${match.source_track_uuid || 'Source'} → ${match.candidate_track_uuid || 'Candidate'}`}</h3>
+                  </div>
+                  <div className="match-comparison-card__scores">
+                    <StatusBadge value={match.decision} />
+                    <ConfidenceBadge value={match.overall_score} />
+                  </div>
+                </div>
+
+                <div className="match-comparison-card__grid">
+                  <TrackSummaryCard
+                    track={toTrackSummary(match.source_track, match.source_track_uuid, match.source_camera_code)}
+                    detailHref={match.source_track_uuid ? `/tracks/${encodeURIComponent(match.source_track_uuid)}` : undefined}
+                  />
+                  <TrackSummaryCard
+                    track={toTrackSummary(match.candidate_track, match.candidate_track_uuid, match.candidate_camera_code)}
+                    detailHref={match.candidate_track_uuid ? `/tracks/${encodeURIComponent(match.candidate_track_uuid)}` : undefined}
+                  />
+                </div>
+
+                <dl className="match-comparison-card__details">
+                  <Meta label="Plate score" value={<ConfidenceBadge value={match.plate_score} />} />
+                  <Meta label="Class score" value={<ConfidenceBadge value={match.class_score} />} />
+                  <Meta label="Colour score" value={<ConfidenceBadge value={match.colour_score} />} />
+                  <Meta label="Route score" value={<ConfidenceBadge value={match.route_score} />} />
+                  <Meta label="Time score" value={<ConfidenceBadge value={match.time_score} />} />
+                  <Meta label="Visual score" value={<ConfidenceBadge value={match.visual_score} />} />
+                  <Meta label="Rule version" value={match.rule_version || 'N/A'} />
+                  <Meta label="Reasons" value={match.decision_reasons.join(', ') || 'N/A'} wide />
+                </dl>
+              </article>
+            ))}
+          </div>
           <Pagination
             page={matchesQuery.data.page}
             pageSize={matchesQuery.data.page_size}
@@ -116,6 +136,35 @@ export default function CrossCameraMatchesPage() {
           />
         </>
       )}
+    </div>
+  )
+}
+
+function toTrackSummary(track: MatchListItem['source_track'] | MatchListItem['candidate_track'], trackUuid?: string | null, cameraCode?: string | null): TrackListItem {
+  return {
+    track_uuid: track?.track_uuid || trackUuid || 'Unknown track',
+    camera_code: track?.camera_code || cameraCode || null,
+    vehicle_class: track?.vehicle_class || null,
+    lifecycle_state: track?.lifecycle_state || null,
+    first_seen_at: track?.first_seen_at || null,
+    last_seen_at: track?.last_seen_at || null,
+    best_detection_confidence: track?.best_detection_confidence || null,
+    primary_colour: track?.primary_colour || null,
+    plate_result: track?.plate_result || null,
+    canonical_plate: track?.canonical_plate || null,
+    plate_status: track?.plate_status || null,
+    plate_confidence: track?.plate_confidence || null,
+    primary_media: track?.primary_media || null,
+    primary_vehicle_media: track?.primary_vehicle_media || null,
+    primary_plate_media: track?.primary_plate_media || null,
+  }
+}
+
+function Meta({ label, value, wide = false }: { label: string; value: ReactNode; wide?: boolean }) {
+  return (
+    <div className={wide ? 'match-comparison-card__detail match-comparison-card__detail--wide' : 'match-comparison-card__detail'}>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   )
 }

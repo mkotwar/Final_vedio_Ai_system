@@ -5,6 +5,7 @@ from copy import deepcopy
 from fastapi.testclient import TestClient
 
 from ..api.main import create_app
+from ..api.search_models import VehicleSearchQuery
 from ..api.settings import ApiSettings
 from ..persistence.analytics_repository_base import AnalyticsRepositoryError
 from ..persistence.api_read_repository import Page
@@ -36,6 +37,16 @@ class FakeApiRepository:
                 "camera_code": "CAM_001",
                 "vehicle_class": "CAR",
                 "primary_colour": "GREY",
+                "plate_result": {
+                    "raw_text": "DL8CBF6268",
+                    "normalized_text": "DL8CBF6268",
+                    "display_text": "DL8CBF6268",
+                    "status": "VERIFIED",
+                    "verification_status": "VERIFIED",
+                    "ocr_confidence": 0.98,
+                    "detector_confidence": 0.8,
+                    "source_media_id": "media-2",
+                },
                 "canonical_plate": "DL8CBF6268",
                 "plate_status": "VERIFIED",
                 "primary_media": {
@@ -47,10 +58,31 @@ class FakeApiRepository:
             },
             "camera": {"camera_code": "CAM_001", "camera_name": "Entry Gate", "location": "North"},
             "colour": {"primary_colour": "GREY", "colour_confidence": 0.95, "model_path": "unsafe"},
-            "plate": {"canonical_plate": "DL8CBF6268", "plate_status": "VERIFIED", "plate_confidence": 0.98},
+            "plate": {
+                "plate_result": {
+                    "raw_text": "DL8CBF6268",
+                    "normalized_text": "DL8CBF6268",
+                    "display_text": "DL8CBF6268",
+                    "status": "VERIFIED",
+                    "verification_status": "VERIFIED",
+                    "ocr_confidence": 0.98,
+                    "detector_confidence": 0.8,
+                    "source_media_id": "media-2",
+                },
+                "canonical_plate": "DL8CBF6268",
+                "plate_status": "VERIFIED",
+                "plate_confidence": 0.98,
+            },
             "media": [{"media_id": "media-1", "media_type": "BEST_VEHICLE_CROP", "storage_provider": "LOCAL", "storage_uri": "safe/ref.jpg"}],
             "observation_summary": {"count": 12, "first_frame": 10, "last_frame": 40, "key_observation_count": 2},
-            "global_membership": {"global_vehicle_code": "GVO:RUN_20260724_151402:943BD1FE7C62"},
+            "global_membership": {
+                "linked": True,
+                "global_vehicle_id": "global-1",
+                "global_vehicle_code": "GVO:RUN_20260724_151402:943BD1FE7C62",
+                "membership_confidence": 0.95,
+                "membership_status": "CONFIRMED",
+                "member_track_count": 2,
+            },
             "cross_camera_matches": [{"id": "match-1", "decision": "CONFIRMED"}],
             "errors": [],
         }
@@ -58,7 +90,12 @@ class FakeApiRepository:
     def health(self):
         self.calls.append(("health", {}))
         if self.raise_health_error:
-            raise AnalyticsRepositoryError(operation="health", table_name="processing_run", message="boom")
+            return {
+                "status": "degraded",
+                "service": "multicamera-vehicle-api",
+                "database": "unreachable",
+                "schema": "analytics",
+            }
         return {"status": "ok", "service": "multicamera-vehicle-api", "database": "reachable", "schema": "analytics"}
 
     def list_runs(self, **kwargs):
@@ -159,6 +196,14 @@ class FakeApiRepository:
                     "average_detection_confidence": 0.88,
                     "primary_colour": kwargs.get("colour") or "GREY",
                     "colour_confidence": 0.95,
+                    "plate_result": {
+                        "raw_text": kwargs.get("plate") or "DL8CBF6268",
+                        "normalized_text": kwargs.get("plate") or "DL8CBF6268",
+                        "display_text": kwargs.get("plate") or "DL8CBF6268",
+                        "status": kwargs.get("plate_status") or "VERIFIED",
+                        "verification_status": kwargs.get("plate_status") or "VERIFIED",
+                        "ocr_confidence": 0.98,
+                    },
                     "canonical_plate": kwargs.get("plate") or "DL8CBF6268",
                     "plate_status": kwargs.get("plate_status") or "VERIFIED",
                     "plate_confidence": 0.98,
@@ -239,6 +284,14 @@ class FakeApiRepository:
                     "global_vehicle_code": "GVO:RUN_20260724_151402:943BD1FE7C62",
                     "run_code": kwargs.get("run_code") or "RUN_20260724_151402",
                     "status": kwargs.get("status") or "CONFIRMED",
+                    "plate_result": {
+                        "raw_text": kwargs.get("plate") or "DL8CBF6268",
+                        "normalized_text": kwargs.get("plate") or "DL8CBF6268",
+                        "display_text": kwargs.get("plate") or "DL8CBF6268",
+                        "status": "VERIFIED",
+                        "verification_status": "VERIFIED",
+                        "ocr_confidence": 0.98,
+                    },
                     "canonical_plate": kwargs.get("plate") or "DL8CBF6268",
                     "canonical_colour": kwargs.get("colour") or "GREY",
                     "canonical_vehicle_class": kwargs.get("vehicle_class") or "CAR",
@@ -265,6 +318,14 @@ class FakeApiRepository:
                 "global_vehicle_code": global_vehicle_code,
                 "run_code": "RUN_20260724_151402",
                 "status": "CONFIRMED",
+                "plate_result": {
+                    "raw_text": "DL8CBF6268",
+                    "normalized_text": "DL8CBF6268",
+                    "display_text": "DL8CBF6268",
+                    "status": "VERIFIED",
+                    "verification_status": "VERIFIED",
+                    "ocr_confidence": 0.98,
+                },
                 "canonical_plate": "DL8CBF6268",
                 "canonical_colour": "GREY",
                 "canonical_vehicle_class": "CAR",
@@ -328,12 +389,95 @@ class FakeApiRepository:
             return None
         return self.list_cross_camera_matches(page=1, page_size=25).items[0]
 
+    def search_local_tracks(self, **kwargs):
+        self.calls.append(("search_local_tracks", kwargs))
+        if kwargs.get("run_code") == "RUN_MISSING":
+            return Page(items=[], page=1, page_size=kwargs["fetch_limit"], total=0)
+        if kwargs.get("vehicle_class") == "PLANE":
+            return Page(items=[], page=1, page_size=kwargs["fetch_limit"], total=0)
+        return Page(
+            items=[
+                {
+                    "result_type": "LOCAL_TRACK",
+                    "global_vehicle_code": None,
+                    "track_uuid": "RUN_20260725_131944:CAM_001:TRACK_4",
+                    "class_name": kwargs.get("vehicle_class") or "CAR",
+                    "colour": kwargs.get("colour") or "GREY",
+                    "plate_result": {
+                        "raw_text": kwargs.get("plate") or "DL8CBF6268",
+                        "normalized_text": kwargs.get("plate") or "DL8CBF6268",
+                        "display_text": kwargs.get("plate") or "DL8CBF6268",
+                        "status": "VERIFIED",
+                        "verification_status": "VERIFIED",
+                        "ocr_confidence": 0.98,
+                    },
+                    "plate": kwargs.get("plate") or "DL8CBF6268",
+                    "plate_status": "VERIFIED",
+                    "camera_codes": kwargs.get("camera_codes") or ["CAM_001"],
+                    "first_seen_at": "2026-07-25T13:19:44+05:30",
+                    "last_seen_at": "2026-07-25T13:19:54+05:30",
+                    "confidence": kwargs.get("minimum_confidence", 0.93) or 0.93,
+                    "member_track_count": 1,
+                    "primary_media": {
+                        "media_id": "media-1",
+                        "media_type": "BEST_VEHICLE_CROP",
+                        "storage_provider": "LOCAL",
+                        "storage_uri": "safe/ref.jpg",
+                    },
+                }
+            ],
+            page=1,
+            page_size=kwargs["fetch_limit"],
+            total=1,
+        )
 
-def build_test_client(repository: FakeApiRepository) -> TestClient:
+    def search_global_vehicles(self, **kwargs):
+        self.calls.append(("search_global_vehicles", kwargs))
+        if kwargs.get("run_code") == "RUN_MISSING":
+            return Page(items=[], page=1, page_size=kwargs["fetch_limit"], total=0)
+        return Page(
+            items=[
+                {
+                    "result_type": "GLOBAL_VEHICLE",
+                    "global_vehicle_code": "GVO:RUN_20260725_131944:FA3FCF9E3ABC",
+                    "track_uuid": None,
+                    "class_name": kwargs.get("vehicle_class") or "CAR",
+                    "colour": kwargs.get("colour") or "GREY",
+                    "plate_result": {
+                        "raw_text": kwargs.get("plate") or "DL8CBF6268",
+                        "normalized_text": kwargs.get("plate") or "DL8CBF6268",
+                        "display_text": kwargs.get("plate") or "DL8CBF6268",
+                        "status": "VERIFIED",
+                        "verification_status": "VERIFIED",
+                        "ocr_confidence": 0.98,
+                    },
+                    "plate": kwargs.get("plate") or "DL8CBF6268",
+                    "plate_status": "VERIFIED",
+                    "camera_codes": kwargs.get("camera_codes") or ["CAM_001", "CAM_002"],
+                    "first_seen_at": "2026-07-25T13:19:44+05:30",
+                    "last_seen_at": "2026-07-25T13:20:04+05:30",
+                    "confidence": kwargs.get("minimum_confidence", 0.95) or 0.95,
+                    "member_track_count": 2,
+                    "primary_media": {
+                        "media_id": "media-1",
+                        "media_type": "BEST_VEHICLE_CROP",
+                        "storage_provider": "LOCAL",
+                        "storage_uri": "safe/ref.jpg",
+                    },
+                }
+            ],
+            page=1,
+            page_size=kwargs["fetch_limit"],
+            total=1,
+        )
+
+
+def build_test_client(repository: FakeApiRepository, **setting_overrides) -> TestClient:
     settings = ApiSettings(
         SUPABASE_URL="https://example.supabase.co",
         SUPABASE_SERVICE_ROLE_KEY="super-secret",
-        API_CORS_ORIGINS="http://localhost:5173",
+        API_CORS_ORIGINS="http://127.0.0.1:5173,http://localhost:5173",
+        **setting_overrides,
     )
     app = create_app(settings=settings, repository_factory=lambda _: repository)
     app.state.settings = settings

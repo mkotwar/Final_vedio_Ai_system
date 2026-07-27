@@ -232,6 +232,13 @@ class VerifyEnrichmentRunTests(unittest.TestCase):
         report = verify_enrichment_run.generate_report(_FakeAnalyticsClient(dataset=dataset), "RUN_20260724_151402", 5)
         self.assertEqual(report["consistency"]["plate_readings_without_known_plate_detection"], 1)
 
+    def test_other_run_plate_readings_do_not_count_as_orphans_for_current_run(self):
+        dataset = _base_dataset()
+        dataset["plate_detection"].append({"id": "pd-other", "vehicle_track_id": "track-other", "track_media_id": "media-other", "confidence": 0.5})
+        dataset["plate_reading"].append({"id": "pr-other", "plate_detection_id": "pd-other", "status": "VERIFIED"})
+        report = verify_enrichment_run.generate_report(_FakeAnalyticsClient(dataset=dataset), "RUN_20260724_151402", 5)
+        self.assertEqual(report["consistency"]["plate_readings_without_known_plate_detection"], 0)
+
     def test_duplicate_track_uuid_detected(self):
         dataset = _base_dataset()
         dataset["vehicle_track"].append({**dataset["vehicle_track"][0], "id": "track-x"})

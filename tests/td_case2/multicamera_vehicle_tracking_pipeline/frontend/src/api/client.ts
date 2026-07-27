@@ -127,3 +127,55 @@ export async function apiGet<T>(
     window.clearTimeout(timeoutId)
   }
 }
+
+export async function apiPost<T>(
+  path: string,
+  options: {
+    body?: unknown
+    signal?: AbortSignal
+    timeoutMs?: number
+  } = {},
+): Promise<T> {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+
+  try {
+    const response = await fetch(buildApiUrl(path), {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(options.body ?? {}),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw await parseApiError(response)
+    }
+
+    return (await response.json()) as T
+  } catch (error) {
+    if (error instanceof ApiClientError) {
+      throw error
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ApiClientError('The request timed out or was cancelled.', {
+        status: 408,
+        code: 'REQUEST_TIMEOUT',
+        details: null,
+      })
+    }
+    throw new ApiClientError('The backend is unavailable.', {
+      status: 503,
+      code: 'BACKEND_UNAVAILABLE',
+      details: null,
+    })
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}

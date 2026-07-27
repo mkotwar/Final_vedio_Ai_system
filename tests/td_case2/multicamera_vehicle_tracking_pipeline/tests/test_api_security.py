@@ -28,3 +28,12 @@ def test_openapi_does_not_expose_credentials() -> None:
     body = response.text
     assert "SUPABASE_SERVICE_ROLE_KEY" not in body
     assert "super-secret" not in body
+
+
+def test_media_metadata_does_not_expose_absolute_local_paths() -> None:
+    client = build_test_client(FakeApiRepository())
+    response = client.get("/api/v1/media/media-unsafe-absolute")
+    assert response.status_code == 200
+    body = response.text
+    assert "C:/" not in body
+    assert "C:\\" not in body

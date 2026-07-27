@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,29 @@ def _parse_start_time(value: Any, *, camera_code: str) -> datetime | None:
     except ValueError as exc:
         raise CameraConfigError(f"Camera '{camera_code}' has invalid start_time: {value!r}") from exc
     return parsed
+
+
+def _extract_source_path(raw_item: dict[str, Any], *, index: int) -> str:
+    raw_source_path = raw_item.get("source_path")
+    if raw_source_path not in (None, ""):
+        return str(raw_source_path)
+    raw_source = raw_item.get("source")
+    if isinstance(raw_source, dict):
+        nested_path = raw_source.get("path")
+        if nested_path not in (None, ""):
+            return str(nested_path)
+    raise CameraConfigError(
+        "Camera entry at index "
+        f"{index} is missing required field 'source_path' or nested field 'source.path'."
+    )
+
+
+def _extract_camera_name(raw_item: dict[str, Any], *, camera_code: str) -> str:
+    raw_name = raw_item.get("camera_name")
+    if raw_name is None:
+        return camera_code
+    camera_name = str(raw_name).strip()
+    return camera_name or camera_code
 
 
 def _load_yaml_text(text: str) -> dict[str, Any]:
@@ -106,7 +130,7 @@ def load_camera_configs(config_path: str | Path, *, include_disabled: bool = Fal
     for index, raw_item in enumerate(raw_cameras):
         if not isinstance(raw_item, dict):
             raise CameraConfigError(f"Camera entry at index {index} must be a mapping.")
-        for required in ("camera_code", "camera_name", "source_path", "enabled"):
+        for required in ("camera_code", "enabled"):
             if required not in raw_item:
                 raise CameraConfigError(f"Camera entry at index {index} is missing required field '{required}'.")
         camera_code = str(raw_item["camera_code"]).strip()
@@ -116,12 +140,12 @@ def load_camera_configs(config_path: str | Path, *, include_disabled: bool = Fal
             raise CameraConfigError(f"Duplicate camera_code found: {camera_code}")
         seen_codes.add(camera_code)
 
-        resolved_path = _resolve_source_path(str(raw_item["source_path"]), config_path=path)
+        resolved_path = _resolve_source_path(_extract_source_path(raw_item, index=index), config_path=path)
         if validate_paths and not resolved_path.exists():
             raise CameraConfigError(f"Camera '{camera_code}' source_path does not exist: {resolved_path}")
         config = CameraConfig(
             camera_code=camera_code,
-            camera_name=str(raw_item["camera_name"]).strip(),
+            camera_name=_extract_camera_name(raw_item, camera_code=camera_code),
             source_path=resolved_path,
             enabled=bool(raw_item["enabled"]),
             start_time=_parse_start_time(raw_item.get("start_time"), camera_code=camera_code),
@@ -129,3 +153,24 @@ def load_camera_configs(config_path: str | Path, *, include_disabled: bool = Fal
         if config.enabled or include_disabled:
             configs.append(config)
     return configs
+
+
+def apply_file_source_timestamp_policy(
+    camera_configs: list[CameraConfig],
+    *,
+    run_started_at: datetime | None,
+) -> list[CameraConfig]:
+    """Apply the run/video-source timestamp policy for local-file cameras.
+
+    The multicamera validation pipeline currently reads from file-backed sources.
+    When a camera config omits an explicit recording start time, we anchor the
+    source to the run-level start timestamp so frame-relative times can be
+    translated into stable timestamptz values for persistence.
+    """
+
+    if run_started_at is None:
+        return list(camera_configs)
+    return [
+        config if config.start_time is not None else replace(config, start_time=run_started_at)
+        for config in camera_configs
+    ]

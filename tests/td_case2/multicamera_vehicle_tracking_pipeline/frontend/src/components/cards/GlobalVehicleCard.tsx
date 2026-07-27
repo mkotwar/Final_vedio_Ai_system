@@ -1,39 +1,33 @@
 import type { GlobalVehicleListItem } from '../../types/globalVehicle'
-import ConfidenceBadge from '../states/ConfidenceBadge'
-import StatusBadge from '../states/StatusBadge'
+import VehicleIdentityCard from '../vehicle/VehicleIdentityCard'
 
 interface GlobalVehicleCardProps {
   vehicle: GlobalVehicleListItem
+  detailHref?: string
 }
 
-export default function GlobalVehicleCard({ vehicle }: GlobalVehicleCardProps) {
+export default function GlobalVehicleCard({ vehicle, detailHref }: GlobalVehicleCardProps) {
   return (
-    <article className="summary-card">
-      <div className="summary-card__header">
-        <div>
-          <p className="summary-card__eyebrow">{vehicle.run_code || 'Run'}</p>
-          <h3>{vehicle.global_vehicle_code}</h3>
-        </div>
-        <StatusBadge value={vehicle.status} />
-      </div>
-      <div className="summary-card__metrics">
-        <div>
-          <span>Plate</span>
-          <strong>{vehicle.canonical_plate || 'N/A'}</strong>
-        </div>
-        <div>
-          <span>Class</span>
-          <strong>{vehicle.canonical_vehicle_class || 'N/A'}</strong>
-        </div>
-        <div>
-          <span>Colour</span>
-          <strong>{vehicle.canonical_colour || 'N/A'}</strong>
-        </div>
-        <div>
-          <span>Confidence</span>
-          <ConfidenceBadge value={vehicle.confidence} />
-        </div>
-      </div>
-    </article>
+    <VehicleIdentityCard
+      compact
+      eyebrow={vehicle.run_code || 'Run'}
+      title="Global vehicle"
+      identifier={vehicle.global_vehicle_code}
+      subtitle={vehicle.creation_method || null}
+      status={vehicle.status}
+      vehicleClass={vehicle.canonical_vehicle_class}
+      colour={vehicle.canonical_colour}
+      plateResult={vehicle.plate_result}
+      plate={vehicle.canonical_plate}
+      plateStatus={vehicle.plate_result?.status || null}
+      cameraCodes={vehicle.camera_count ? [`${vehicle.camera_count} camera${vehicle.camera_count > 1 ? 's' : ''}`] : []}
+      firstSeenAt={vehicle.first_seen_at}
+      lastSeenAt={vehicle.last_seen_at}
+      confidence={vehicle.confidence}
+      vehicleMedia={vehicle.primary_vehicle_media || vehicle.primary_evidence_reference}
+      plateMedia={vehicle.primary_plate_media}
+      memberCount={vehicle.track_count}
+      detailHref={detailHref}
+    />
   )
 }

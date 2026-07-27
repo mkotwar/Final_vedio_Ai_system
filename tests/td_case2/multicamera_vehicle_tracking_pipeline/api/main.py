@@ -14,7 +14,7 @@ from ..persistence.analytics_repository_base import AnalyticsRepositoryError
 from .dependencies import build_repository_from_settings, sanitize_payload
 from .errors import ApiError
 from .response_models import ErrorResponse
-from .routers import cameras, global_vehicles, health, matches, media, runs, tracks
+from .routers import cameras, global_vehicles, health, matches, media, runs, search, tracks
 from .settings import ApiSettings, get_settings
 
 
@@ -40,6 +40,16 @@ def create_app(
     async def lifespan(app: FastAPI):
         logging.basicConfig(level=getattr(logging, resolved_settings.api_log_level.upper(), logging.INFO))
         LOGGER.info("Credentials: SUPABASE_URL=%s SUPABASE_SERVICE_ROLE_KEY=%s", resolved_settings.credentials_summary()["SUPABASE_URL"], resolved_settings.credentials_summary()["SUPABASE_SERVICE_ROLE_KEY"])
+        media_roots = resolved_settings.media_allowed_roots
+        existing_media_roots = sum(1 for root in media_roots if root.exists())
+        LOGGER.info(
+            "Media settings: mode=%s roots_configured=%s roots_existing=%s ttl_seconds=%s bucket_configured=%s",
+            resolved_settings.media_mode,
+            len(media_roots),
+            existing_media_roots,
+            resolved_settings.api_media_url_ttl_seconds,
+            "SET" if resolved_settings.media_bucket else "MISSING",
+        )
         app.state.settings = resolved_settings
         app.state.repository = resolved_factory(resolved_settings)
         yield
@@ -53,7 +63,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=resolved_settings.cors_origins,
         allow_credentials=False,
-        allow_methods=["GET", "OPTIONS"],
+        allow_methods=["GET", "OPTIONS", "POST"],
         allow_headers=["Accept", "Authorization", "Content-Type"],
     )
 
@@ -85,6 +95,7 @@ def create_app(
     app.include_router(global_vehicles.router, prefix="/api/v1")
     app.include_router(matches.router, prefix="/api/v1")
     app.include_router(media.router, prefix="/api/v1")
+    app.include_router(search.router, prefix="/api/v1")
     return app
 
 

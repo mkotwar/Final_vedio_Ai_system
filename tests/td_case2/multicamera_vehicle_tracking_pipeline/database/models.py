@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 from uuid import UUID, uuid4
 
 
@@ -39,6 +39,7 @@ class VehicleTrackRecord:
     best_confidence: float | None = None
     best_frame_path: str | None = None
     best_crop_path: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     id: UUID = field(default_factory=uuid4)
     created_at: datetime = field(default_factory=utc_now)
 
@@ -68,6 +69,7 @@ class VehicleObservationRecord:
     bbox_x2: float
     bbox_y2: float
     confidence: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
     id: int | None = None
     created_at: datetime = field(default_factory=utc_now)
 

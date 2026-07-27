@@ -54,6 +54,42 @@ class EvidenceToTrackMediaMapperTests(unittest.TestCase):
             self.assertEqual(records[0].media_type, "BEST_VEHICLE_CROP")
             self.assertNotIn("encoded_jpeg", records[0].metadata)
 
+    def test_full_frame_record_generated_when_package_includes_full_frame(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            target = root / "RUN_1" / "CAM_001" / "track_000001" / "RUN_1_CAM_001_TRACK_1" / "best_overall.jpg"
+            full_frame = root / "RUN_1" / "CAM_001" / "track_000001" / "RUN_1_CAM_001_TRACK_1" / "full_frame.jpg"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"jpeg")
+            full_frame.write_bytes(b"fullframe")
+            evidence = TrackEvidencePackage(
+                run_id="RUN_1",
+                camera_code="CAM_001",
+                local_track_id=1,
+                track_uuid="RUN_1:CAM_001:TRACK_1",
+                class_name="car",
+                candidates={"best_overall": _candidate(str(target))},
+                output_directory=str(target.parent),
+                full_frame_path=str(full_frame),
+                full_frame_frame_number=10,
+                full_frame_video_time_seconds=1.2,
+                full_frame_bbox_xyxy=(1.0, 2.0, 10.0, 12.0),
+                full_frame_width=1920,
+                full_frame_height=1080,
+            )
+            records = build_track_media_records(
+                evidence_package=evidence,
+                vehicle_track_id="track-id",
+                camera_id="camera-id",
+                artifact_root=root,
+                persist_roles=["BEST_OVERALL"],
+            )
+            self.assertEqual(len(records), 2)
+            full_frame_record = next(record for record in records if record.media_type == "FULL_FRAME")
+            self.assertEqual(full_frame_record.storage_uri, "RUN_1/CAM_001/track_000001/RUN_1_CAM_001_TRACK_1/full_frame.jpg")
+            self.assertEqual(full_frame_record.width, 1920)
+            self.assertEqual(full_frame_record.height, 1080)
+
     def test_missing_file_reported(self) -> None:
         evidence = TrackEvidencePackage(
             run_id="RUN_1",

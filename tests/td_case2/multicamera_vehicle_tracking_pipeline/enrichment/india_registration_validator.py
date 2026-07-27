@@ -49,9 +49,10 @@ def validate_indian_registration(
                 reasons=tuple(["format_match"] + (["low_confidence"] if not verified else [])),
                 candidate_values=normalized.candidate_values,
             )
-    status = "UNKNOWN" if not normalized.cleaned_text else "PARTIAL"
+    partial_value = _partial_candidate(normalized.cleaned_text)
+    status = "UNKNOWN" if not normalized.cleaned_text else ("PARTIAL" if partial_value else "UNREADABLE")
     return PlateValidationResult(
-        normalized_text=None,
+        normalized_text=partial_value,
         is_verified=False,
         status=status,
         confidence_adjustment=-0.25,
@@ -59,3 +60,17 @@ def validate_indian_registration(
         reasons=tuple(dict.fromkeys(reasons or ["no_pattern_match"])),
         candidate_values=normalized.candidate_values,
     )
+
+
+def _partial_candidate(cleaned_text: str) -> str | None:
+    if not cleaned_text:
+        return None
+    if cleaned_text in {"STOP", "CNG", "KEEPDISTANCE"}:
+        return None
+    numeric_suffix = re.search(r"([0-9]{4})$", cleaned_text)
+    if numeric_suffix:
+        return numeric_suffix.group(1)
+    state_prefix = re.match(r"^([A-Z]{2}[0-9]{1,2})", cleaned_text)
+    if state_prefix:
+        return state_prefix.group(1)
+    return None

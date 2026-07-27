@@ -46,7 +46,7 @@ def _observation(frame_number: int, *, camera_code: str = "CAM_001", local_track
 
 def _track(observation_count: int = 3) -> LocalVehicleTrack:
     observations = [_observation(index) for index in range(observation_count)]
-    return LocalVehicleTrack(
+    track = LocalVehicleTrack(
         track_uuid="CAM_001:TRACK_1",
         camera_code="CAM_001",
         local_track_id=1,
@@ -64,6 +64,16 @@ def _track(observation_count: int = 3) -> LocalVehicleTrack:
         camera_name="North Gate",
         source_path=Path("camera.mp4"),
     )
+    track.stable_class_name = "car"
+    track.provisional_class_name = "car"
+    track.class_is_locked = True
+    track.class_confidence = 0.88
+    track.class_winner_margin = 1.25
+    track.class_observation_count = observation_count
+    track.class_scores = {"car": 2.4}
+    track.class_observation_counts = {"car": observation_count}
+    track.class_max_confidences = {"car": 0.8}
+    return track
 
 
 class _NoopClient:
@@ -232,6 +242,34 @@ class AnalyticsPersistenceServiceTests(unittest.TestCase):
         self.assertEqual(len(service._ai_model_repository.records), 2)
         self.assertEqual(len(service._run_model_repository.records), 2)
 
+    def test_run_started_at_override_is_used_for_processing_run(self) -> None:
+        fixed_started_at = _utc(15)
+        self.tempdir = tempfile.TemporaryDirectory()
+        service = AnalyticsPersistenceService(
+            None,
+            PersistenceConfig(backend="dry_run"),
+            run_code="RUN_TEST",
+            detection_config=DetectionConfig(model_path="yolov8n.pt"),
+            tracking_config=TrackingConfig(min_confirmed_observations=1),
+            execution_mode="THREADED",
+            runtime_device="cpu",
+            artifact_root=Path(self.tempdir.name),
+            enable_database_writes=False,
+            run_started_at=fixed_started_at,
+        )
+        service.sync_cameras(
+            [
+                CameraConfig(
+                    camera_code="CAM_001",
+                    camera_name="Camera CAM_001",
+                    source_path=Path("CAM_001.mp4"),
+                    enabled=True,
+                    start_time=fixed_started_at,
+                )
+            ]
+        )
+        self.assertEqual(service._started_at, fixed_started_at)
+
     def test_save_completed_track_batches_observations(self) -> None:
         service = self._build_service()
         service.sync_cameras([_camera_config()])
@@ -243,6 +281,7 @@ class AnalyticsPersistenceServiceTests(unittest.TestCase):
         self.assertEqual([len(batch) for batch in service._track_observation_repository.batches], [2, 2, 1])
         stored_track = service._vehicle_track_repository.records[0]
         self.assertEqual(stored_track.vehicle_class, "CAR")
+        self.assertEqual(stored_track.metadata["class_diagnostics"]["stable_class_name"], "car")
         self.assertEqual(result.media_persistence["attempted"], 1)
         self.assertEqual(len(service._track_media_repository.records), 1)
 

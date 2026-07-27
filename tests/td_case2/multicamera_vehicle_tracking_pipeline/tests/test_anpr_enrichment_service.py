@@ -7,7 +7,7 @@ from pathlib import Path
 
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.anpr_config import AnprConfig
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.anpr_enrichment_service import AnprEnrichmentService
-from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.plate_models import PlateCandidate, PlateOcrResult, VehicleEvidenceInput
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.plate_models import PlateCandidate, PlateOcrAttempt, PlateOcrResult, VehicleEvidenceInput
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.evidence_models import EvidenceCandidate, TrackEvidencePackage
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.persistence.persistence_config import PersistenceConfig
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracking_models import LocalVehicleTrack, TrackObservation
@@ -38,6 +38,14 @@ class _FakeExtractor:
             source_vehicle_storage_uri=candidate.source_vehicle_storage_uri,
             metadata={"matched_pattern": "STANDARD"},
         )
+
+
+class _AttemptingFakeExtractor:
+    def __init__(self, attempts_by_uri: dict[str, list[PlateOcrAttempt]]) -> None:
+        self.attempts_by_uri = attempts_by_uri
+
+    def extract_attempts(self, candidate: PlateCandidate) -> list[PlateOcrAttempt]:
+        return list(self.attempts_by_uri.get(candidate.relative_storage_uri, ()))
 
 
 class _FakeTrackMediaRepository:
@@ -195,6 +203,116 @@ class AnprEnrichmentServiceTests(unittest.TestCase):
             self.assertEqual(service.metrics.anpr_readings_inserted, 1)
             self.assertEqual(service.metrics.anpr_summaries_inserted, 1)
 
+    def test_temporal_aggregation_returns_partial_when_suffix_repeats(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            candidate_1 = _candidate(artifact_root, "candidate_001.jpg", frame_number=10)
+            candidate_2 = _candidate(artifact_root, "candidate_002.jpg", frame_number=12)
+            extractor = _AttemptingFakeExtractor(
+                {
+                    candidate_1.relative_storage_uri: [_attempt(candidate_1, "6268", "6268", "PARTIAL", "UNVERIFIED")],
+                    candidate_2.relative_storage_uri: [_attempt(candidate_2, "6268", "6268", "PARTIAL", "UNVERIFIED")],
+                }
+            )
+            service = AnprEnrichmentService(
+                config=AnprConfig(enabled=True),
+                persistence_config=PersistenceConfig(backend="dry_run", dry_run=True),
+                artifact_root=artifact_root,
+                candidate_collector=_MultiCandidateCollector([candidate_1, candidate_2]),
+                ocr_extractor=extractor,
+            )
+            evidence_path = artifact_root / "RUN_1" / "CAM_001" / "track_000001" / "best_overall.jpg"
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_bytes(b"jpg")
+            result = service.enrich_track(completed_track=_track(evidence_path), persisted_vehicle_track_id="track-id")
+            self.assertEqual(result.status, "PARTIAL")
+            self.assertEqual(result.normalized_text, "6268")
+            self.assertEqual(result.support_frame_count, 2)
+
+    def test_temporal_aggregation_returns_conflict_for_incompatible_strong_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_root = Path(tmpdir)
+            candidate_1 = _candidate(artifact_root, "candidate_001.jpg", frame_number=10)
+            candidate_2 = _candidate(artifact_root, "candidate_002.jpg", frame_number=12)
+            extractor = _AttemptingFakeExtractor(
+                {
+                    candidate_1.relative_storage_uri: [_attempt(candidate_1, "DL8CBF6268", "DL8CBF6268", "VERIFIED", "VERIFIED")],
+                    candidate_2.relative_storage_uri: [_attempt(candidate_2, "DL8CBF6269", "DL8CBF6269", "VERIFIED", "VERIFIED")],
+                }
+            )
+            service = AnprEnrichmentService(
+                config=AnprConfig(enabled=True, ocr=AnprConfig(enabled=True).ocr),
+                persistence_config=PersistenceConfig(backend="dry_run", dry_run=True),
+                artifact_root=artifact_root,
+                candidate_collector=_MultiCandidateCollector([candidate_1, candidate_2]),
+                ocr_extractor=extractor,
+            )
+            evidence_path = artifact_root / "RUN_1" / "CAM_001" / "track_000001" / "best_overall.jpg"
+            evidence_path.parent.mkdir(parents=True, exist_ok=True)
+            evidence_path.write_bytes(b"jpg")
+            result = service.enrich_track(completed_track=_track(evidence_path), persisted_vehicle_track_id="track-id")
+            self.assertEqual(result.status, "CONFLICTING_CANDIDATES")
+            self.assertIsNone(result.normalized_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _MultiCandidateCollector:
+    def __init__(self, candidates: list[PlateCandidate]) -> None:
+        self.candidates = candidates
+
+    def collect(self, vehicle_evidence):
+        return list(self.candidates)
+
+
+def _candidate(artifact_root: Path, filename: str, *, frame_number: int) -> PlateCandidate:
+    plate_path = artifact_root / "RUN_1" / "CAM_001" / "track_000001" / "plate_evidence" / filename
+    plate_path.parent.mkdir(parents=True, exist_ok=True)
+    plate_path.write_bytes(b"jpg")
+    return PlateCandidate(
+        track_uuid="RUN:CAM_001:TRACK_1",
+        camera_code="CAM_001",
+        source_vehicle_role="BEST_OVERALL",
+        source_vehicle_storage_uri="RUN_1/CAM_001/track_000001/best_overall.jpg",
+        plate_bbox_xyxy=(1.0, 2.0, 30.0, 15.0),
+        detector_confidence=0.9,
+        crop_width=120,
+        crop_height=40,
+        area=4800,
+        aspect_ratio=3.0,
+        sharpness_score=0.8,
+        edge_penalty=0.0,
+        overall_score=0.9,
+        local_file_path=plate_path,
+        relative_storage_uri=f"RUN_1/CAM_001/track_000001/plate_evidence/{filename}",
+        frame_number=frame_number,
+        video_time_seconds=float(frame_number) / 10.0,
+    )
+
+
+def _attempt(
+    candidate: PlateCandidate,
+    raw_text: str,
+    normalized_text: str | None,
+    status: str,
+    verification_status: str,
+) -> PlateOcrAttempt:
+    return PlateOcrAttempt(
+        candidate_storage_uri=candidate.relative_storage_uri,
+        source_vehicle_storage_uri=candidate.source_vehicle_storage_uri,
+        source_vehicle_role=candidate.source_vehicle_role,
+        source_image_kind=candidate.source_image_kind,
+        candidate_source=candidate.candidate_source,
+        preprocessing_variant="original",
+        frame_number=candidate.frame_number,
+        video_time_seconds=candidate.video_time_seconds,
+        detector_confidence=candidate.detector_confidence,
+        raw_text=raw_text,
+        normalized_text=normalized_text,
+        confidence=0.9,
+        status=status,
+        verification_status=verification_status,
+        metadata={},
+    )

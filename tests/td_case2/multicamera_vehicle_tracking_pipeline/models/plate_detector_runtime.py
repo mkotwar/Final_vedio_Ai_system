@@ -30,6 +30,7 @@ class PlateDetectorRuntime:
         device: str,
         confidence_threshold: float,
         iou_threshold: float,
+        inference_image_size: int,
         maximum_detections_per_vehicle_crop: int,
         dependencies: PlateDetectorDependencies | None = None,
     ) -> None:
@@ -37,6 +38,7 @@ class PlateDetectorRuntime:
         self.device = device
         self.confidence_threshold = confidence_threshold
         self.iou_threshold = iou_threshold
+        self.inference_image_size = inference_image_size
         self.maximum_detections_per_vehicle_crop = maximum_detections_per_vehicle_crop
         self.dependencies = dependencies or PlateDetectorDependencies(yolo_cls=YOLO)
         self.model = None
@@ -71,6 +73,7 @@ class PlateDetectorRuntime:
                 conf=self.confidence_threshold,
                 iou=self.iou_threshold,
                 device=None if self.device == "auto" else self.device,
+                imgsz=self.inference_image_size,
                 verbose=False,
                 max_det=self.maximum_detections_per_vehicle_crop,
             )

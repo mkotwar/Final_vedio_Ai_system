@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import json
 import queue
 import threading
 import traceback
@@ -8,8 +9,8 @@ from pathlib import Path
 
 import cv2
 
-from ..evidence.track_evidence_collector import TrackEvidenceCollector
 from ..detection.detection_models import DetectionPacket
+from ..evidence.track_evidence_collector import TrackEvidenceCollector
 from ..tracking.camera_detection_router import CameraDetectionRouter
 from ..tracking.tracking_models import LocalVehicleTrack, TrackObservation
 from .worker_config import WorkerConfig
@@ -88,7 +89,7 @@ class TrackingWorker(threading.Thread):
                 previous_ids = set(self.metrics.unique_track_ids_by_camera.get(camera_code, []))
                 self.metrics.unique_track_ids_by_camera[camera_code] = sorted(previous_ids | track_ids)
                 if self.save_sample_frames:
-                    self._save_sample_frame(item, result.observations, len(result.active_tracks))
+                    self._save_sample_artifacts(item, result.observations, len(result.active_tracks))
                 self._emit_tracks(camera_code, result.completed_tracks)
         except Exception as exc:
             self.metrics.tracking_errors += 1
@@ -153,19 +154,45 @@ class TrackingWorker(threading.Thread):
             except queue.Full:
                 continue
 
-    def _save_sample_frame(self, packet: DetectionPacket, observations: list[TrackObservation], active_track_count: int) -> None:
+    def _save_sample_artifacts(self, packet: DetectionPacket, observations: list[TrackObservation], active_track_count: int) -> None:
         if self.sample_output_dir is None:
             return
         camera_code = packet.camera_code
         count = self._sample_counts.get(camera_code, 0)
         if count >= self.sample_frame_limit_per_camera or packet.frame is None:
             return
-        frame = packet.frame.copy()
+        sample_index = count + 1
+        camera_dir = self.sample_output_dir / camera_code
+        detection_dir = camera_dir / "yolo_detections"
+        tracking_dir = camera_dir / "tracking_samples"
+        detection_dir.mkdir(parents=True, exist_ok=True)
+        tracking_dir.mkdir(parents=True, exist_ok=True)
+
+        detection_frame = packet.frame.copy()
+        for detection in packet.detections:
+            x1, y1, x2, y2 = (int(round(value)) for value in detection.bbox_xyxy)
+            cv2.rectangle(detection_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            label = f"{detection.class_name} {detection.confidence:.2f}"
+            cv2.putText(detection_frame, label, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2, cv2.LINE_AA)
+        detection_overlay_lines = [
+            f"camera={packet.camera_code}",
+            f"frame={packet.frame_number}",
+            f"time={packet.video_time_seconds:.2f}s",
+            f"detections={len(packet.detections)}",
+        ]
+        if packet.camera_timestamp is not None:
+            detection_overlay_lines.append(packet.camera_timestamp.isoformat())
+        y = 24
+        for line in detection_overlay_lines:
+            cv2.putText(detection_frame, line, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2, cv2.LINE_AA)
+            y += 24
+
+        tracking_frame = packet.frame.copy()
         for observation in observations:
             x1, y1, x2, y2 = (int(round(value)) for value in observation.bbox_xyxy)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
+            cv2.rectangle(tracking_frame, (x1, y1), (x2, y2), (0, 200, 255), 2)
             label = f"{observation.camera_code} | {observation.class_name} | ID {observation.local_track_id} | {observation.confidence:.2f}"
-            cv2.putText(frame, label, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2, cv2.LINE_AA)
+            cv2.putText(tracking_frame, label, (x1, max(20, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2, cv2.LINE_AA)
         overlay_lines = [
             f"camera={packet.camera_code}",
             f"frame={packet.frame_number}",
@@ -174,13 +201,39 @@ class TrackingWorker(threading.Thread):
         ]
         y = 24
         for line in overlay_lines:
-            cv2.putText(frame, line, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(tracking_frame, line, (12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2, cv2.LINE_AA)
             y += 24
-        self._sample_counts[camera_code] = count + 1
-        camera_dir = self.sample_output_dir / camera_code
-        camera_dir.mkdir(parents=True, exist_ok=True)
-        sample_path = camera_dir / f"sample_{self._sample_counts[camera_code]:06d}.jpg"
-        cv2.imwrite(str(sample_path), frame)
+
+        detection_payload = {
+            "camera_code": packet.camera_code,
+            "camera_name": packet.camera_name,
+            "source_path": str(packet.source_path),
+            "frame_number": packet.frame_number,
+            "video_time_seconds": packet.video_time_seconds,
+            "camera_timestamp": packet.camera_timestamp.isoformat() if packet.camera_timestamp is not None else None,
+            "frame_width": packet.frame_width,
+            "frame_height": packet.frame_height,
+            "detector_model": packet.detector_model,
+            "detector_device": packet.detector_device,
+            "inference_time_ms": packet.inference_time_ms,
+            "detections": [
+                {
+                    "class_id": detection.class_id,
+                    "class_name": detection.class_name,
+                    "confidence": detection.confidence,
+                    "bbox_xyxy": list(detection.bbox_xyxy),
+                }
+                for detection in packet.detections
+            ],
+        }
+
+        self._sample_counts[camera_code] = sample_index
+        detection_image_path = detection_dir / f"sample_{sample_index:06d}.jpg"
+        detection_json_path = detection_dir / f"sample_{sample_index:06d}.json"
+        tracking_image_path = tracking_dir / f"sample_{sample_index:06d}.jpg"
+        cv2.imwrite(str(detection_image_path), detection_frame)
+        detection_json_path.write_text(json.dumps(detection_payload, indent=2), encoding="utf-8")
+        cv2.imwrite(str(tracking_image_path), tracking_frame)
 
     def _emit_error(self, exc: Exception, *, fatal: bool) -> None:
         message = WorkerErrorMessage(

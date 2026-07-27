@@ -71,6 +71,10 @@ class VehicleEvidenceInput:
     sharpness_score: float
     edge_penalty: float
     overall_score: float
+    source_image_kind: str = "VEHICLE_CROP"
+    source_frame_path: Path | None = None
+    source_frame_region_bbox_xyxy: tuple[float, float, float, float] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "source_vehicle_storage_uri", _ensure_relative_uri(self.source_vehicle_storage_uri, field_name="source_vehicle_storage_uri"))
@@ -79,6 +83,13 @@ class VehicleEvidenceInput:
         _ensure_confidence(self.confidence, field_name="confidence")
         if self.crop_width <= 0 or self.crop_height <= 0:
             raise PlateModelValidationError("VehicleEvidenceInput crop dimensions must be positive.")
+        if self.source_image_kind not in {"VEHICLE_CROP", "PADDED_VEHICLE_CROP", "ORIGINAL_FRAME_REGION"}:
+            raise PlateModelValidationError("VehicleEvidenceInput source_image_kind is invalid.")
+        if self.source_frame_region_bbox_xyxy is not None:
+            x1, y1, x2, y2 = self.source_frame_region_bbox_xyxy
+            if x2 <= x1 or y2 <= y1:
+                raise PlateModelValidationError("VehicleEvidenceInput source_frame_region_bbox_xyxy must satisfy x2 > x1 and y2 > y1.")
+        object.__setattr__(self, "metadata", _sanitize_metadata(self.metadata))
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +111,9 @@ class PlateCandidate:
     relative_storage_uri: str
     frame_number: int
     video_time_seconds: float
+    candidate_source: str = "DETECTOR"
+    source_image_kind: str = "VEHICLE_CROP"
+    heuristic_region_name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -113,6 +127,10 @@ class PlateCandidate:
             raise PlateModelValidationError("PlateCandidate aspect_ratio must be positive.")
         object.__setattr__(self, "source_vehicle_storage_uri", _ensure_relative_uri(self.source_vehicle_storage_uri, field_name="source_vehicle_storage_uri"))
         object.__setattr__(self, "relative_storage_uri", _ensure_relative_uri(self.relative_storage_uri, field_name="relative_storage_uri"))
+        if self.candidate_source not in {"DETECTOR", "HEURISTIC_REGION"}:
+            raise PlateModelValidationError("PlateCandidate candidate_source is invalid.")
+        if self.source_image_kind not in {"VEHICLE_CROP", "PADDED_VEHICLE_CROP", "ORIGINAL_FRAME_REGION"}:
+            raise PlateModelValidationError("PlateCandidate source_image_kind is invalid.")
         object.__setattr__(self, "metadata", _sanitize_metadata(self.metadata))
 
 
@@ -158,4 +176,32 @@ class PlateOcrResult:
         object.__setattr__(self, "source_vehicle_storage_uri", _ensure_relative_uri(self.source_vehicle_storage_uri, field_name="source_vehicle_storage_uri"))
         if len(self.raw_text) > 512:
             raise PlateModelValidationError("PlateOcrResult raw_text must be bounded.")
+        object.__setattr__(self, "metadata", _sanitize_metadata(self.metadata))
+
+
+@dataclass(frozen=True, slots=True)
+class PlateOcrAttempt:
+    candidate_storage_uri: str
+    source_vehicle_storage_uri: str
+    source_vehicle_role: str
+    source_image_kind: str
+    candidate_source: str
+    preprocessing_variant: str
+    frame_number: int
+    video_time_seconds: float
+    detector_confidence: float
+    raw_text: str
+    normalized_text: str | None
+    confidence: float
+    status: str
+    verification_status: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "candidate_storage_uri", _ensure_relative_uri(self.candidate_storage_uri, field_name="candidate_storage_uri"))
+        object.__setattr__(self, "source_vehicle_storage_uri", _ensure_relative_uri(self.source_vehicle_storage_uri, field_name="source_vehicle_storage_uri"))
+        _ensure_confidence(self.detector_confidence, field_name="detector_confidence")
+        _ensure_confidence(self.confidence, field_name="confidence")
+        if self.candidate_source not in {"DETECTOR", "HEURISTIC_REGION"}:
+            raise PlateModelValidationError("PlateOcrAttempt candidate_source is invalid.")
         object.__setattr__(self, "metadata", _sanitize_metadata(self.metadata))
