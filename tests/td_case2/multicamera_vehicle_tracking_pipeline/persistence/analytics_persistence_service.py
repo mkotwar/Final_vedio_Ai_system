@@ -326,7 +326,7 @@ class AnalyticsPersistenceService:
             camera_id=context.camera_id,
             track_uuid=track.track_uuid,
             local_track_id=track.local_track_id,
-            vehicle_class=track.class_name,
+            vehicle_class=track.stable_class_name or "UNKNOWN",
             first_seen_at=self._ensure_timezone(track.first_seen_at),
             last_seen_at=self._ensure_timezone(track.last_seen_at),
             first_frame_number=track.first_frame_number,
@@ -489,8 +489,9 @@ class AnalyticsPersistenceService:
             raise AnalyticsPersistenceValidationError(f"Unknown camera_code for analytics persistence: {track.camera_code}")
         if int(track.local_track_id) < 0:
             raise AnalyticsPersistenceValidationError("local_track_id must be non-negative.")
-        if not is_supported_vehicle_class(track.class_name):
-            raise AnalyticsPersistenceValidationError(f"Unsupported vehicle class: {track.class_name}")
+        persisted_class_name = track.stable_class_name or "unknown"
+        if not is_supported_vehicle_class(persisted_class_name):
+            raise AnalyticsPersistenceValidationError(f"Unsupported vehicle class: {persisted_class_name}")
         if track.first_seen_at is None or track.last_seen_at is None:
             raise AnalyticsPersistenceValidationError("Track timestamps must be present.")
         if track.last_seen_at < track.first_seen_at:
@@ -758,11 +759,16 @@ class AnalyticsPersistenceService:
                 "observation_count_weight": self.tracking_config.class_stabilization.observation_count_weight,
                 "max_confidence_weight": self.tracking_config.class_stabilization.max_confidence_weight,
                 "minimum_observations": self.tracking_config.class_stabilization.minimum_observations,
+                "minimum_consistency_ratio": self.tracking_config.class_stabilization.minimum_consistency_ratio,
+                "minimum_consecutive_winner_observations": self.tracking_config.class_stabilization.minimum_consecutive_winner_observations,
                 "minimum_winner_margin": self.tracking_config.class_stabilization.minimum_winner_margin,
                 "lock_after_observations": self.tracking_config.class_stabilization.lock_after_observations,
                 "allow_unlock_on_strong_conflict": self.tracking_config.class_stabilization.allow_unlock_on_strong_conflict,
                 "strong_conflict_min_observations": self.tracking_config.class_stabilization.strong_conflict_min_observations,
                 "strong_conflict_margin": self.tracking_config.class_stabilization.strong_conflict_margin,
+                "recent_window_size": self.tracking_config.class_stabilization.recent_window_size,
+                "recent_conflict_minimum_ratio": self.tracking_config.class_stabilization.recent_conflict_minimum_ratio,
+                "recent_conflict_minimum_observations": self.tracking_config.class_stabilization.recent_conflict_minimum_observations,
             },
             "class_aliases": dict(self.tracking_config.class_aliases),
             "class_families": {key: list(value) for key, value in self.tracking_config.class_families.items()},
@@ -773,6 +779,12 @@ class AnalyticsPersistenceService:
                 "minimum_class_compatibility": self.tracking_config.fragment_linking.minimum_class_compatibility,
                 "require_no_time_overlap": self.tracking_config.fragment_linking.require_no_time_overlap,
                 "reject_verified_plate_conflict": self.tracking_config.fragment_linking.reject_verified_plate_conflict,
+            },
+            "class_conflict_split": {
+                "enabled": self.tracking_config.class_conflict_split.enabled,
+                "minimum_consecutive_conflicting_observations": self.tracking_config.class_conflict_split.minimum_consecutive_conflicting_observations,
+                "minimum_conflict_confidence": self.tracking_config.class_conflict_split.minimum_conflict_confidence,
+                "require_spatial_discontinuity": self.tracking_config.class_conflict_split.require_spatial_discontinuity,
             },
         }
 

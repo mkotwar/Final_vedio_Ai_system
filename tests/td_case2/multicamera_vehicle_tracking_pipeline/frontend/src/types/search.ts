@@ -46,6 +46,8 @@ export interface VehicleSearchResultItem {
   primary_media?: MediaReference | null
   primary_vehicle_media?: MediaReference | null
   primary_plate_media?: MediaReference | null
+  primary_full_frame_media?: MediaReference | null
+  primary_annotated_full_frame_media?: MediaReference | null
   match_reasons: string[]
   relevance_score?: number | null
 }

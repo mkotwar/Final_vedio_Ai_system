@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FULL_FRAME_MEDIA_TYPES, groupTrackMedia, pickMediaPair, PLATE_MEDIA_TYPES, VEHICLE_MEDIA_TYPES } from './mediaGroups'
+import { ANNOTATED_FULL_FRAME_MEDIA_TYPES, FULL_FRAME_MEDIA_TYPES, groupTrackMedia, pickMediaPair, PLATE_MEDIA_TYPES, VEHICLE_MEDIA_TYPES } from './mediaGroups'
 import type { MediaReference } from '../../types/media'
 
 const vehicleCrop: MediaReference = {
@@ -32,11 +32,22 @@ const fullFrame: MediaReference = {
   selection_rank: 5,
 }
 
+const annotatedFrame: MediaReference = {
+  media_id: 'annotated-frame-1',
+  media_type: 'ANNOTATED_FULL_FRAME',
+  availability: 'LOCAL_FILE',
+  content_url: '/api/v1/media/annotated-frame-1/content',
+  track_uuid: 'track-1',
+  frame_number: 12,
+  selection_rank: 5,
+}
+
 describe('mediaGroups', () => {
   it('keeps explicit vehicle and plate media categories separate', () => {
     expect(VEHICLE_MEDIA_TYPES.has('PLATE_CROP')).toBe(false)
     expect(PLATE_MEDIA_TYPES.has('BEST_VEHICLE_CROP')).toBe(false)
     expect(FULL_FRAME_MEDIA_TYPES.has('FULL_FRAME')).toBe(true)
+    expect(ANNOTATED_FULL_FRAME_MEDIA_TYPES.has('ANNOTATED_FULL_FRAME')).toBe(true)
   })
 
   it('never promotes a plate crop into the vehicle slot', () => {
@@ -51,6 +62,7 @@ describe('mediaGroups', () => {
         vehicleCrop,
         plateCrop,
         fullFrame,
+        annotatedFrame,
         {
           media_id: 'other-track',
           media_type: 'BEST_VEHICLE_CROP',
@@ -63,6 +75,7 @@ describe('mediaGroups', () => {
     expect(grouped.vehicleMedia?.media_id).toBe('vehicle-1')
     expect(grouped.plateMedia?.media_id).toBe('plate-1')
     expect(grouped.fullFrameMedia?.media_id).toBe('full-frame-1')
+    expect(grouped.annotatedFrameMedia?.media_id).toBe('annotated-frame-1')
     expect(grouped.otherMedia).toHaveLength(0)
   })
 })

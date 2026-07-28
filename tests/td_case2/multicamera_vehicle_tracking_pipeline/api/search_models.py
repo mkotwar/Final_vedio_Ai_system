@@ -303,6 +303,8 @@ class VehicleSearchResultItem(BaseModel):
     primary_media: MediaReference | None = None
     primary_vehicle_media: MediaReference | None = None
     primary_plate_media: MediaReference | None = None
+    primary_full_frame_media: MediaReference | None = None
+    primary_annotated_full_frame_media: MediaReference | None = None
     match_reasons: list[str] = Field(default_factory=list)
     relevance_score: float | None = None
 

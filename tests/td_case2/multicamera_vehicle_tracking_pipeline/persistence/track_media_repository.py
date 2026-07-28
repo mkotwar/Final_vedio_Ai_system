@@ -16,6 +16,7 @@ class TrackMediaBatchResult:
     failed: int
     validated: int = 0
     missing_files: int = 0
+    failed_records: list[dict[str, Any]] | None = None
 
 
 class TrackMediaRepository(AnalyticsRepositoryBase):
@@ -85,4 +86,5 @@ class TrackMediaRepository(AnalyticsRepositoryBase):
             inserted=inserted,
             already_existing=already_existing,
             failed=failed,
+            failed_records=[],
         )

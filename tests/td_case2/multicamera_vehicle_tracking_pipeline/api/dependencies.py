@@ -75,15 +75,18 @@ def get_camera_service(repository: AnalyticsReadRepository = Depends(get_reposit
     return CameraService(repository)
 
 
-def get_match_service(repository: AnalyticsReadRepository = Depends(get_repository)) -> MatchService:
-    return MatchService(repository, media_service=get_media_service(repository))
-
-
 def get_media_service(
     request: Request,
     repository: AnalyticsReadRepository = Depends(get_repository),
 ) -> MediaService:
     return MediaService(repository, settings=request.app.state.settings)
+
+
+def get_match_service(
+    repository: AnalyticsReadRepository = Depends(get_repository),
+    media_service: MediaService = Depends(get_media_service),
+) -> MatchService:
+    return MatchService(repository, media_service=media_service)
 
 
 def get_track_service(

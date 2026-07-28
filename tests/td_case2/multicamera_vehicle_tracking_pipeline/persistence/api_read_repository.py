@@ -8,6 +8,12 @@ import httpx
 
 from .analytics_database_client import AnalyticsDatabaseClient
 from .analytics_repository_base import AnalyticsRepositoryBase, AnalyticsRepositoryError
+from .track_media_types import (
+    ANNOTATED_FULL_FRAME_MEDIA_TYPE_PRIORITY,
+    FULL_FRAME_MEDIA_TYPE_PRIORITY,
+    PLATE_MEDIA_TYPE_PRIORITY,
+    VEHICLE_MEDIA_TYPE_PRIORITY,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,18 +66,6 @@ def _plate_display_text(text: str | None, status: str | None) -> str:
     return "No plate result"
 
 
-VEHICLE_MEDIA_TYPE_PRIORITY = {
-    "BEST_VEHICLE_CROP": 0,
-    "BEST_OVERALL": 1,
-    "VEHICLE_CROP": 2,
-    "TRACK_CROP": 3,
-}
-PLATE_MEDIA_TYPE_PRIORITY = {
-    "PLATE_CROP": 0,
-    "NUMBER_PLATE_CROP": 1,
-    "ANPR_CROP": 2,
-    "OCR_CROP": 3,
-}
 PLATE_STATUS_PRIORITY = {
     "VERIFIED": 0,
     "PROBABLE": 1,
@@ -1263,6 +1257,8 @@ class AnalyticsReadRepository(AnalyticsRepositoryBase):
                     PLATE_MEDIA_TYPE_PRIORITY,
                     excluded_media_ids={str(primary_vehicle_media.get("id"))} if primary_vehicle_media and primary_vehicle_media.get("id") else None,
                 ),
+                "primary_full_frame_media": self._best_media_row(media_rows, FULL_FRAME_MEDIA_TYPE_PRIORITY),
+                "primary_annotated_full_frame_media": self._best_media_row(media_rows, ANNOTATED_FULL_FRAME_MEDIA_TYPE_PRIORITY),
             }
         return result
 
@@ -1316,6 +1312,8 @@ class AnalyticsReadRepository(AnalyticsRepositoryBase):
             result[global_id] = {
                 "primary_vehicle_media": self._to_media_reference(media_bundle.get("primary_vehicle_media")) if media_bundle.get("primary_vehicle_media") else None,
                 "primary_plate_media": self._to_media_reference(media_bundle.get("primary_plate_media")) if media_bundle.get("primary_plate_media") else None,
+                "primary_full_frame_media": self._to_media_reference(media_bundle.get("primary_full_frame_media")) if media_bundle.get("primary_full_frame_media") else None,
+                "primary_annotated_full_frame_media": self._to_media_reference(media_bundle.get("primary_annotated_full_frame_media")) if media_bundle.get("primary_annotated_full_frame_media") else None,
             }
         return result
 
@@ -1560,6 +1558,8 @@ class AnalyticsReadRepository(AnalyticsRepositoryBase):
             "primary_media": self._to_media_reference(media.get("primary_vehicle_media")) if media.get("primary_vehicle_media") else None,
             "primary_vehicle_media": self._to_media_reference(media.get("primary_vehicle_media")) if media.get("primary_vehicle_media") else None,
             "primary_plate_media": self._to_media_reference(media.get("primary_plate_media")) if media.get("primary_plate_media") else None,
+            "primary_full_frame_media": self._to_media_reference(media.get("primary_full_frame_media")) if media.get("primary_full_frame_media") else None,
+            "primary_annotated_full_frame_media": self._to_media_reference(media.get("primary_annotated_full_frame_media")) if media.get("primary_annotated_full_frame_media") else None,
         }
 
     def _search_track_ids_by_enrichment(

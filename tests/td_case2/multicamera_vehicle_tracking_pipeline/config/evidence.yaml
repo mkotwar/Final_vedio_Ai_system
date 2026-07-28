@@ -18,6 +18,17 @@ evidence:
   minimum_detection_confidence: 0.20
 
   bbox_padding_ratio: 0.05
+  padding_ratio_x: 0.08
+  padding_ratio_y: 0.08
+  minimum_padding_pixels: 8
+  clip_to_frame: true
+  annotate_all_observations: false
+  visibility_weight: 0.30
+  detection_confidence_weight: 0.20
+  sharpness_weight: 0.15
+  centeredness_weight: 0.15
+  bbox_area_weight: 0.10
+  edge_penalty_weight: 0.10
 
   save_candidate_crops: false
   save_final_selected_crops: true

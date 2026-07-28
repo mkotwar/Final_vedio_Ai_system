@@ -26,7 +26,7 @@ class FlorenceConfig:
     allow_cpu_fallback: bool = True
     task_timeout_seconds: int = 60
     max_retries: int = 1
-    colour_prompt: str = "Identify the primary exterior colour of the vehicle. Return only one canonical colour label."
+    colour_prompt: str = "<VQA>What is the primary color of the vehicle?"
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
@@ -57,7 +57,7 @@ def load_florence_config(config_path: str | Path, *, overrides: dict[str, Any] |
         allow_cpu_fallback=bool(payload.get("allow_cpu_fallback", True)),
         task_timeout_seconds=int(payload.get("task_timeout_seconds", 60)),
         max_retries=int(payload.get("max_retries", 1)),
-        colour_prompt=str(payload.get("colour_prompt", "Identify the primary exterior colour of the vehicle. Return only one canonical colour label.")),
+        colour_prompt=str(payload.get("colour_prompt", "<VQA>What is the primary color of the vehicle?")),
     )
     if overrides:
         config = replace(

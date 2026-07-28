@@ -17,7 +17,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=None)
     parser.add_argument("--fallback-model", default=None)
     parser.add_argument("--device", default=None)
-    parser.add_argument("--confidence", type=float, default=None)
     parser.add_argument("--iou", type=float, default=None)
     parser.add_argument("--image-size", type=int, default=None)
     parser.add_argument("--preview", action="store_true")
@@ -38,7 +37,6 @@ def main() -> None:
             "model_path": args.model,
             "fallback_model_path": args.fallback_model,
             "device": args.device,
-            "confidence_threshold": args.confidence,
             "iou_threshold": args.iou,
             "image_size": args.image_size,
         }.items()

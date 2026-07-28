@@ -3,19 +3,16 @@ cameras:
     enabled: true
     source_type: file
     source:
-      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/testv/1test_20.mp4"
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/1test.mp4"
 
   - camera_code: CAM_002
     enabled: true
     source_type: file
     source:
-      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/testv/2test_20.mp4"
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/2test.mp4"
 
- 
   - camera_code: CAM_003
     enabled: true
     source_type: file
     source:
-      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/testv/3test_20.mp4"
-
- 
+      path: "C:/Mukul K/vinfo1/video-search-engine/tests/td_case2/multicamera_vehicle_tracking_pipeline/data/3test .mp4"

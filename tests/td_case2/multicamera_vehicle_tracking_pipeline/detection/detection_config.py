@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -16,15 +16,36 @@ class DetectionConfigError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class ClassConfidenceThresholdsConfig:
+    enabled: bool = True
+    default: float | None = None
+    classes: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        default_value = None if self.default is None else float(self.default)
+        if default_value is not None and not 0.0 <= default_value <= 1.0:
+            raise DetectionConfigError("class_confidence_thresholds.default must be between 0 and 1 when provided.")
+        normalized_classes: dict[str, float] = {}
+        for key, value in self.classes.items():
+            normalized_key = str(key).strip().lower()
+            threshold = float(value)
+            if not 0.0 <= threshold <= 1.0:
+                raise DetectionConfigError(f"class_confidence_thresholds.classes.{normalized_key} must be between 0 and 1.")
+            normalized_classes[normalized_key] = threshold
+        object.__setattr__(self, "default", default_value)
+        object.__setattr__(self, "classes", normalized_classes)
+
+
+@dataclass(frozen=True, slots=True)
 class DetectionConfig:
     model_path: str
     fallback_model_path: str | None = None
     allow_fallback: bool = True
     device: str = "auto"
-    confidence_threshold: float = 0.25
     iou_threshold: float = 0.45
     image_size: int = 640
     allowed_classes: tuple[str, ...] = SUPPORTED_ALLOWED_CLASSES
+    class_confidence_thresholds: ClassConfidenceThresholdsConfig = field(default_factory=ClassConfidenceThresholdsConfig)
 
     def __post_init__(self) -> None:
         model_path = str(self.model_path).strip()
@@ -37,8 +58,6 @@ class DetectionConfig:
             raise DetectionConfigError(f"Fallback model path is invalid or unsupported: {fallback_model_path}")
         if self.device not in SUPPORTED_DEVICE_PREFIXES:
             raise DetectionConfigError(f"Unsupported device value: {self.device}")
-        if not 0.0 <= float(self.confidence_threshold) <= 1.0:
-            raise DetectionConfigError("confidence_threshold must be between 0 and 1.")
         if not 0.0 <= float(self.iou_threshold) <= 1.0:
             raise DetectionConfigError("iou_threshold must be between 0 and 1.")
         if int(self.image_size) <= 0:
@@ -49,9 +68,22 @@ class DetectionConfig:
         for item in normalized_classes:
             if item not in SUPPORTED_ALLOWED_CLASSES:
                 raise DetectionConfigError(f"Unsupported allowed class: {item}")
+        if not self.class_confidence_thresholds.enabled:
+            raise DetectionConfigError("class_confidence_thresholds.enabled must be true for vehicle detection.")
+        missing_thresholds = sorted(item for item in normalized_classes if item not in self.class_confidence_thresholds.classes)
+        if missing_thresholds:
+            raise DetectionConfigError(
+                "class_confidence_thresholds.classes must define every allowed class. "
+                f"Missing: {', '.join(missing_thresholds)}"
+            )
         object.__setattr__(self, "model_path", model_path)
         object.__setattr__(self, "fallback_model_path", fallback_model_path)
         object.__setattr__(self, "allowed_classes", normalized_classes)
+
+    @property
+    def confidence_threshold(self) -> float:
+        configured = [float(self.class_confidence_thresholds.classes[item]) for item in self.allowed_classes]
+        return min(configured)
 
 
 def _repo_root() -> Path:
@@ -133,27 +165,48 @@ def load_detection_config(config_path: str | Path, *, overrides: dict[str, Any] 
     raw_config = payload.get("vehicle_detector")
     if not isinstance(raw_config, dict):
         raise DetectionConfigError("Detection config must contain a 'vehicle_detector' mapping.")
+    raw_allowed_classes = tuple(raw_config.get("allowed_classes", SUPPORTED_ALLOWED_CLASSES))
+    raw_class_thresholds = dict(raw_config.get("class_confidence_thresholds", {}) or {})
+    if not raw_class_thresholds:
+        legacy_threshold = float(raw_config.get("confidence_threshold", 0.25))
+        raw_class_thresholds = {
+            "enabled": True,
+            "classes": {str(class_name): legacy_threshold for class_name in raw_allowed_classes},
+        }
     config = DetectionConfig(
         model_path=str(raw_config.get("model_path", "")),
         fallback_model_path=raw_config.get("fallback_model_path"),
         allow_fallback=bool(raw_config.get("allow_fallback", True)),
         device=str(raw_config.get("device", "auto")),
-        confidence_threshold=float(raw_config.get("confidence_threshold", 0.25)),
         iou_threshold=float(raw_config.get("iou_threshold", 0.45)),
         image_size=int(raw_config.get("image_size", 640)),
-        allowed_classes=tuple(raw_config.get("allowed_classes", SUPPORTED_ALLOWED_CLASSES)),
+        allowed_classes=raw_allowed_classes,
+        class_confidence_thresholds=ClassConfidenceThresholdsConfig(**raw_class_thresholds),
     )
     if overrides:
+        class_threshold_payload = overrides.get("class_confidence_thresholds")
+        if class_threshold_payload is None and overrides.get("confidence_threshold") is not None:
+            threshold_value = float(overrides["confidence_threshold"])
+            class_threshold_payload = {
+                "enabled": True,
+                "classes": {class_name: threshold_value for class_name in config.allowed_classes},
+            }
         config = replace(
             config,
             model_path=str(overrides.get("model_path", config.model_path)),
             fallback_model_path=overrides.get("fallback_model_path", config.fallback_model_path),
             allow_fallback=bool(overrides.get("allow_fallback", config.allow_fallback)),
             device=str(overrides.get("device", config.device)),
-            confidence_threshold=float(overrides.get("confidence_threshold", config.confidence_threshold)),
             iou_threshold=float(overrides.get("iou_threshold", config.iou_threshold)),
             image_size=int(overrides.get("image_size", config.image_size)),
             allowed_classes=tuple(overrides.get("allowed_classes", config.allowed_classes)),
+            class_confidence_thresholds=ClassConfidenceThresholdsConfig(
+                **dict(class_threshold_payload or {
+                    "enabled": config.class_confidence_thresholds.enabled,
+                    "default": config.class_confidence_thresholds.default,
+                    "classes": dict(config.class_confidence_thresholds.classes),
+                })
+            ),
         )
     return config
 
@@ -167,7 +220,6 @@ def detection_overrides_from_env() -> dict[str, Any]:
         "TD_CASE2_MULTICAM_MODEL_PATH": ("model_path", str),
         "TD_CASE2_MULTICAM_FALLBACK_MODEL_PATH": ("fallback_model_path", str),
         "TD_CASE2_MULTICAM_DEVICE": ("device", str),
-        "TD_CASE2_MULTICAM_CONFIDENCE": ("confidence_threshold", float),
         "TD_CASE2_MULTICAM_IOU": ("iou_threshold", float),
         "TD_CASE2_MULTICAM_IMAGE_SIZE": ("image_size", int),
     }

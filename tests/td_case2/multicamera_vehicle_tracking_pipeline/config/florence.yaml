@@ -19,9 +19,5 @@ florence:
   task_timeout_seconds: 60
   max_retries: 1
 
-  colour_prompt: >
-    Identify the primary exterior body colour of the vehicle in this crop.
-    Ignore windows, tyres, number plate, road, sky, shadows, reflections,
-    people, and background. Return JSON only with primary_colour,
-    secondary_colour, and confidence.
+  colour_prompt: "<VQA>What is the primary color of the vehicle?"
 

@@ -9,7 +9,7 @@ import ConfidenceBadge from '../components/states/ConfidenceBadge'
 import CameraSequence from '../components/cards/CameraSequence'
 import EvidenceCard from '../components/evidence/EvidenceCard'
 import VehicleIdentityCard from '../components/vehicle/VehicleIdentityCard'
-import { groupTrackMedia, isFullFrameMediaType, isPlateMediaType, isVehicleMediaType } from '../components/vehicle/mediaGroups'
+import { groupTrackMedia, isAnnotatedFullFrameMediaType, isFullFrameMediaType, isPlateMediaType, isVehicleMediaType } from '../components/vehicle/mediaGroups'
 
 export default function GlobalVehicleDetailPage() {
   const { globalVehicleCode = '' } = useParams()
@@ -47,6 +47,9 @@ export default function GlobalVehicleDetailPage() {
   const representativeCameras = membersQuery.data.map((member) => member.camera_code).filter(Boolean) as string[]
   const representativeFullFrames = membersQuery.data
     .map((member) => groupedEvidenceByTrack.get(member.track_uuid || '')?.fullFrameMedia || null)
+    .filter((item, index, list): item is NonNullable<typeof item> => Boolean(item) && list.findIndex((candidate) => candidate?.media_id === item?.media_id) === index)
+  const representativeAnnotatedFrames = membersQuery.data
+    .map((member) => groupedEvidenceByTrack.get(member.track_uuid || '')?.annotatedFrameMedia || null)
     .filter((item, index, list): item is NonNullable<typeof item> => Boolean(item) && list.findIndex((candidate) => candidate?.media_id === item?.media_id) === index)
 
   return (
@@ -86,17 +89,20 @@ export default function GlobalVehicleDetailPage() {
         </div>
       </section>
 
-      {representativeFullFrames.length > 0 ? (
+      {representativeFullFrames.length > 0 || representativeAnnotatedFrames.length > 0 ? (
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="panel__eyebrow">Scene frames</p>
-              <h3>Representative full frames</h3>
+              <p className="panel__eyebrow">Source context</p>
+              <h3>Representative source frames</h3>
             </div>
           </div>
           <div className="card-grid">
             {representativeFullFrames.map((item) => (
               <EvidenceCard key={item.media_id || `${item.media_type || 'full-frame'}-${item.frame_number || 'na'}`} media={item} />
+            ))}
+            {representativeAnnotatedFrames.map((item) => (
+              <EvidenceCard key={item.media_id || `${item.media_type || 'annotated-full-frame'}-${item.frame_number || 'na'}`} media={item} />
             ))}
           </div>
         </section>
@@ -155,7 +161,7 @@ export default function GlobalVehicleDetailPage() {
           </div>
         </div>
         <div className="card-grid">
-          {detail.evidence.filter((item) => !isVehicleMediaType(item.media_type) && !isPlateMediaType(item.media_type) && !isFullFrameMediaType(item.media_type)).map((item) => (
+          {detail.evidence.filter((item) => !isVehicleMediaType(item.media_type) && !isPlateMediaType(item.media_type) && !isFullFrameMediaType(item.media_type) && !isAnnotatedFullFrameMediaType(item.media_type)).map((item) => (
             <EvidenceCard key={item.media_id || `${item.media_type || 'evidence'}-${item.frame_number || 'na'}`} media={item} />
           ))}
         </div>

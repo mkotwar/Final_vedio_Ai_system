@@ -1,4 +1,5 @@
 tracking:
+  behavior_mode: standard_bytetrack
   backend: supervision_bytetrack
   track_activation_threshold: 0.15
   lost_track_buffer: 30
@@ -13,6 +14,10 @@ tracking:
   min_confirmed_observations: 3
   max_lost_frames: 30
   preserve_state_per_camera: true
+  track_class:
+    strategy: confidence_weighted_majority
+    minimum_observations: 3
+    minimum_winner_ratio: 0.50
   fragment_linking:
     enabled: true
     maximum_gap_seconds: 1.5

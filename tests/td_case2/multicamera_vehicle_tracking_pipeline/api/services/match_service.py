@@ -31,3 +31,5 @@ class MatchService:
             track["primary_media"] = self.media_service.decorate_media_reference(track.get("primary_media"))
             track["primary_vehicle_media"] = self.media_service.decorate_media_reference(track.get("primary_vehicle_media"))
             track["primary_plate_media"] = self.media_service.decorate_media_reference(track.get("primary_plate_media"))
+            track["primary_full_frame_media"] = self.media_service.decorate_media_reference(track.get("primary_full_frame_media"))
+            track["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(track.get("primary_annotated_full_frame_media"))

@@ -68,6 +68,8 @@ class VehicleSearchService:
             item["primary_media"] = self.media_service.decorate_media_reference(item.get("primary_media"))
             item["primary_vehicle_media"] = self.media_service.decorate_media_reference(item.get("primary_vehicle_media"))
             item["primary_plate_media"] = self.media_service.decorate_media_reference(item.get("primary_plate_media"))
+            item["primary_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_full_frame_media"))
+            item["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_annotated_full_frame_media"))
 
         sorted_items = _sort_results(combined_items, request)
         page_items = sorted_items[request.offset : request.offset + request.limit]

@@ -72,6 +72,9 @@ function buildMockFetch() {
     }
     if (path.endsWith('/search/vehicles')) {
       const params = url.searchParams
+      if (params.get('plate') === 'BACKEND_DOWN') {
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }
       if (params.get('vehicle_class') === 'PLANE') {
         return jsonResponse({ error: { code: 'VALIDATION_ERROR', message: 'Request validation failed.', details: null } }, 422)
       }

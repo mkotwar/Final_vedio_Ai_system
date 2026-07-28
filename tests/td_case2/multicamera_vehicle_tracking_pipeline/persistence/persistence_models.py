@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 from pathlib import PurePosixPath, PureWindowsPath
 
+from .track_media_types import TRACK_MEDIA_TYPES
 from .vehicle_class_mapping import VehicleClass, normalize_vehicle_class
 
 
@@ -19,7 +20,6 @@ VEHICLE_TRACK_LIFECYCLE_STATES = ("TENTATIVE", "ACTIVE", "TEMPORARILY_LOST", "CO
 VIDEO_SOURCE_TYPES = ("LOCAL_FILE", "RTSP", "LIVE_STREAM", "VMS_RECORDING", "PLAYBACK_API")
 PROCESSING_ERROR_SEVERITIES = ("INFO", "WARNING", "ERROR", "CRITICAL")
 PROCESSING_ERROR_RESOLUTION_STATES = ("OPEN", "ACKNOWLEDGED", "RESOLVED", "IGNORED")
-TRACK_MEDIA_TYPES = ("FULL_FRAME", "VEHICLE_CROP", "BEST_VEHICLE_CROP", "PLATE_CROP", "THUMBNAIL")
 TRACK_MEDIA_STORAGE_PROVIDERS = ("LOCAL", "NAS", "S3", "SUPABASE_STORAGE")
 VEHICLE_ATTRIBUTE_SCOPES = ("TRACK", "GLOBAL")
 VEHICLE_ATTRIBUTE_STATUSES = ("CURRENT", "HISTORICAL", "REJECTED")
@@ -900,6 +900,8 @@ class PersistenceRunMetrics:
     media_records_already_existing: int = 0
     media_records_failed: int = 0
     media_files_missing: int = 0
+    full_frame_rows_failed: int = 0
+    annotated_frame_rows_failed: int = 0
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
@@ -918,5 +920,7 @@ class PersistenceRunMetrics:
             "media_records_already_existing": self.media_records_already_existing,
             "media_records_failed": self.media_records_failed,
             "media_files_missing": self.media_files_missing,
+            "full_frame_rows_failed": self.full_frame_rows_failed,
+            "annotated_frame_rows_failed": self.annotated_frame_rows_failed,
             "errors": list(self.errors),
         }

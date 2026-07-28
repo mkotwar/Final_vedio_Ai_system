@@ -55,6 +55,7 @@ class CameraTrackingResult:
     observations: list[TrackObservation]
     completed_tracks: list[LocalVehicleTrack]
     active_tracks: list[LocalVehicleTrack]
+    native_observations: list[TrackObservation] | None = None
 
 
 class CameraTracker:
@@ -94,6 +95,7 @@ class CameraTracker:
             observations=lifecycle_result.observations,
             completed_tracks=lifecycle_result.completed_tracks,
             active_tracks=lifecycle_result.active_tracks,
+            native_observations=raw_observations,
         )
 
     def flush(self) -> CameraTrackingResult:
@@ -151,6 +153,7 @@ class CameraTracker:
                 TrackObservation(
                     camera_code=packet.camera_code,
                     local_track_id=int(tracker_id),
+                    native_tracker_id=int(tracker_id),
                     frame_number=packet.frame_number,
                     video_time_seconds=packet.video_time_seconds,
                     camera_timestamp=packet.camera_timestamp,
@@ -184,6 +187,7 @@ class CameraTracker:
                 TrackObservation(
                     camera_code=packet.camera_code,
                     local_track_id=local_track_id,
+                    native_tracker_id=local_track_id,
                     frame_number=packet.frame_number,
                     video_time_seconds=packet.video_time_seconds,
                     camera_timestamp=packet.camera_timestamp,

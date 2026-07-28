@@ -4,9 +4,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.florence_config import load_florence_config
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.florence_vehicle_colour_extractor import FlorenceVehicleColourExtractor
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.vehicle_colour_config import load_vehicle_colour_config
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.enrichment.vehicle_colour_mapping import SUPPORTED_VEHICLE_COLOURS
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.models.florence_runtime import FlorenceRuntimeError
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.models.florence_runtime_factory import FlorenceRuntimeFactory
 
 
 class _FakeRuntime:
@@ -72,6 +75,44 @@ class FlorenceVehicleColourExtractorTests(unittest.TestCase):
             result = extractor.extract(image_path, track_uuid="track", camera_code="IMAGE", source_storage_uri="vehicle_1/vehicle.jpg")
             self.assertEqual(result.status, "MODEL_ERROR")
             self.assertEqual(result.canonical_colour, "UNKNOWN")
+
+
+class FlorenceVehicleColourRegressionTests(unittest.TestCase):
+    def test_known_white_car_best_overall_crop_returns_white_with_td_case2_equivalent_prompt(self) -> None:
+        image_path = Path(
+            r"artifacts\RUN_20260727_184525\CAM_003\track_000010\RUN_20260727_184525_CAM_003_TRACK_10\best_overall.jpg"
+        )
+        if not image_path.exists():
+            self.skipTest(f"Regression artifact missing: {image_path}")
+
+        florence_config = load_florence_config(
+            r"tests\td_case2\multicamera_vehicle_tracking_pipeline\config\florence.yaml",
+            overrides={"enabled": True},
+        )
+        vehicle_colour_config = load_vehicle_colour_config(
+            r"tests\td_case2\multicamera_vehicle_tracking_pipeline\config\vehicle_colour.yaml",
+            overrides={"enabled": True},
+        )
+        runtime = FlorenceRuntimeFactory(project_root=Path.cwd()).get_runtime(config=florence_config)
+        if runtime is None:
+            self.skipTest("Florence runtime is disabled.")
+
+        extractor = FlorenceVehicleColourExtractor(
+            runtime=runtime,
+            prompt=florence_config.colour_prompt,
+            allowed_colours=vehicle_colour_config.allowed_colours,
+            minimum_confidence=vehicle_colour_config.minimum_confidence,
+        )
+
+        result = extractor.extract(
+            image_path.resolve(),
+            track_uuid="RUN_20260727_184525:CAM_003:TRACK_10",
+            camera_code="CAM_003",
+            source_storage_uri=image_path.as_posix(),
+        )
+
+        self.assertEqual(result.status, "SUCCESS")
+        self.assertEqual(result.canonical_colour, "WHITE")
 
 
 if __name__ == "__main__":

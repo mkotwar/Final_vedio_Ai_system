@@ -57,6 +57,8 @@ def _track(
         observations=selected_observations,
         camera_name="North Gate",
         source_path=Path("camera.mp4"),
+        stable_class_name=class_name.lower(),
+        provisional_class_name=class_name.lower(),
     )
 
 

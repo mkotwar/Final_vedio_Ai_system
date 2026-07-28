@@ -18,6 +18,8 @@ class TrackService:
             item["primary_media"] = self.media_service.decorate_media_reference(item.get("primary_media"))
             item["primary_vehicle_media"] = self.media_service.decorate_media_reference(item.get("primary_vehicle_media"))
             item["primary_plate_media"] = self.media_service.decorate_media_reference(item.get("primary_plate_media"))
+            item["primary_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_full_frame_media"))
+            item["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_annotated_full_frame_media"))
         return page
 
     def get_track(self, track_uuid: str):
@@ -27,6 +29,8 @@ class TrackService:
         item["track"]["primary_media"] = self.media_service.decorate_media_reference(item["track"].get("primary_media"))
         item["track"]["primary_vehicle_media"] = self.media_service.decorate_media_reference(item["track"].get("primary_vehicle_media"))
         item["track"]["primary_plate_media"] = self.media_service.decorate_media_reference(item["track"].get("primary_plate_media"))
+        item["track"]["primary_full_frame_media"] = self.media_service.decorate_media_reference(item["track"].get("primary_full_frame_media"))
+        item["track"]["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(item["track"].get("primary_annotated_full_frame_media"))
         item["media"] = [self.media_service.decorate_media_reference(media) for media in item.get("media", [])]
         return item
 

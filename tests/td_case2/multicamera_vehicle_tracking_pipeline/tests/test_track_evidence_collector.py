@@ -9,6 +9,7 @@ import numpy as np
 
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.detection.detection_models import DetectionPacket
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.evidence_config import EvidenceConfig
+from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.evidence_models import EvidenceCandidate
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.evidence.track_evidence_collector import TrackEvidenceCollector
 from tests.td_case2.multicamera_vehicle_tracking_pipeline.tracking.tracking_models import LocalVehicleTrack, TrackObservation
 
@@ -107,7 +108,29 @@ class TrackEvidenceCollectorTests(unittest.TestCase):
             self.assertIsNotNone(evidence.output_directory)
             self.assertTrue(Path(evidence.output_directory).exists())
             self.assertTrue((Path(evidence.output_directory) / "full_frame.jpg").exists())
+            self.assertTrue((Path(evidence.output_directory) / "annotated_full_frame.jpg").exists())
+            self.assertTrue((Path(evidence.output_directory) / "evidence_manifest.json").exists())
+            self.assertTrue((Path(evidence.output_directory) / "vehicle" / "best_overall.jpg").exists())
+            self.assertTrue((Path(evidence.output_directory) / "full_frames" / "best_overall.jpg").exists())
+            self.assertTrue((Path(evidence.output_directory) / "annotated_frames" / "best_overall.jpg").exists())
             self.assertIsNotNone(evidence.full_frame_path)
+            self.assertIsNotNone(evidence.annotated_full_frame_path)
+            self.assertIsNotNone(evidence.manifest_path)
+
+    def test_edge_clipped_candidate_records_visibility_diagnostics(self) -> None:
+        collector = TrackEvidenceCollector(
+            EvidenceConfig(enabled=True, minimum_crop_width=20, minimum_crop_height=20, minimum_padding_pixels=12),
+            run_id="RUN_TEST",
+        )
+        frame = np.full((80, 80, 3), 127, dtype=np.uint8)
+        collector.update(_packet(0, frame), [_observation(0, bbox_xyxy=(0.0, 8.0, 20.0, 50.0))])
+        evidence = collector.finalize_track(_track(1))
+        self.assertIsNotNone(evidence)
+        assert evidence is not None
+        candidate = evidence.candidates["best_overall"]
+        self.assertTrue(candidate.crop_clipped)
+        self.assertTrue(candidate.touches_left_edge)
+        self.assertLess(candidate.visible_bbox_ratio, 1.0)
 
     def test_best_overall_prefers_fully_visible_crop_over_edge_crop(self) -> None:
         collector = TrackEvidenceCollector(EvidenceConfig(enabled=True, minimum_crop_width=20, minimum_crop_height=20), run_id="RUN_TEST")
@@ -124,6 +147,96 @@ class TrackEvidenceCollectorTests(unittest.TestCase):
         self.assertIsNotNone(evidence)
         assert evidence is not None
         self.assertEqual(evidence.candidates["best_overall"].frame_number, 1)
+
+    def test_selected_annotation_label_contains_raw_and_final_class(self) -> None:
+        track = _track(1)
+        track.class_name = "truck"
+        track.stable_class_name = "truck"
+        candidate = EvidenceCandidate(
+            candidate_type="best_overall",
+            frame_number=220,
+            video_time_seconds=7.333333333333333,
+            confidence=0.70,
+            original_bbox_xyxy=(10.0, 10.0, 80.0, 80.0),
+            expanded_bbox_xyxy=(8.0, 8.0, 82.0, 82.0),
+            bbox_xyxy=(8.0, 8.0, 82.0, 82.0),
+            crop_width=74,
+            crop_height=74,
+            area=5476,
+            sharpness_score=0.9,
+            visibility_score=1.0,
+            centeredness_score=0.9,
+            visible_bbox_ratio=1.0,
+            edge_penalty=0.0,
+            overall_score=0.9,
+            crop_clipped=False,
+            touches_left_edge=False,
+            touches_right_edge=False,
+            touches_top_edge=False,
+            touches_bottom_edge=False,
+            encoded_jpeg=b"",
+        )
+        label = TrackEvidenceCollector._build_selected_label(
+            track,
+            candidate,
+            {
+                "track_uuid": track.track_uuid,
+                "class_name": "car",
+                "raw_class_name": "car",
+                "confidence": 0.702154815196991,
+                "frame_number": 220,
+                "video_time_seconds": 7.333333333333333,
+            },
+        )
+
+        self.assertIn("RAW CAR", label)
+        self.assertIn("FINAL TRUCK", label)
+        self.assertIn("frame 220", label)
+
+    def test_selected_annotation_label_uses_mixed_identity_when_final_class_is_blocked(self) -> None:
+        track = _track(1)
+        track.class_name = "truck"
+        track.class_status = "MIXED_IDENTITY"
+        track.stable_class_name = None
+        candidate = EvidenceCandidate(
+            candidate_type="best_overall",
+            frame_number=220,
+            video_time_seconds=7.333333333333333,
+            confidence=0.70,
+            original_bbox_xyxy=(10.0, 10.0, 80.0, 80.0),
+            expanded_bbox_xyxy=(8.0, 8.0, 82.0, 82.0),
+            bbox_xyxy=(8.0, 8.0, 82.0, 82.0),
+            crop_width=74,
+            crop_height=74,
+            area=5476,
+            sharpness_score=0.9,
+            visibility_score=1.0,
+            centeredness_score=0.9,
+            visible_bbox_ratio=1.0,
+            edge_penalty=0.0,
+            overall_score=0.9,
+            crop_clipped=False,
+            touches_left_edge=False,
+            touches_right_edge=False,
+            touches_top_edge=False,
+            touches_bottom_edge=False,
+            encoded_jpeg=b"",
+        )
+        label = TrackEvidenceCollector._build_selected_label(
+            track,
+            candidate,
+            {
+                "track_uuid": track.track_uuid,
+                "class_name": "car",
+                "raw_class_name": "car",
+                "confidence": 0.702154815196991,
+                "frame_number": 220,
+                "video_time_seconds": 7.333333333333333,
+            },
+        )
+
+        self.assertIn("RAW CAR", label)
+        self.assertIn("FINAL MIXED_IDENTITY", label)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
+import { describeApiClientError } from '../api/client'
 import { listRunCameras, listRuns } from '../api/runs'
 import { searchVehicles, searchVehiclesNaturalLanguage } from '../api/search'
 import VehicleSearchResultCard from '../components/cards/VehicleSearchResultCard'
@@ -163,8 +164,10 @@ export default function VehicleSearchPage() {
   const activeIsPending = searchMode === 'natural' ? naturalSearchQuery.isPending : searchQuery.isPending
   const activeIsFetching = searchMode === 'natural' ? naturalSearchQuery.isFetching : searchQuery.isFetching
   const activeIsError = searchMode === 'natural' ? naturalSearchQuery.isError : searchQuery.isError
+  const activeError = searchMode === 'natural' ? naturalSearchQuery.error : searchQuery.error
   const refetchActive = () => (searchMode === 'natural' ? naturalSearchQuery.refetch() : searchQuery.refetch())
   const interpretedFilters = searchMode === 'natural' ? naturalSearchQuery.data?.interpreted_filters : null
+  const activeErrorState = describeApiClientError(activeError)
 
   function applyInterpretedFilters() {
     if (!interpretedFilters) {
@@ -408,7 +411,7 @@ export default function VehicleSearchPage() {
       {activeIsPending ? (
         <LoadingState label={searchMode === 'natural' ? 'Interpreting and searching vehicles...' : 'Searching vehicles...'} />
       ) : activeIsError ? (
-        <ErrorState title="Search unavailable" message="The vehicle search request could not be completed." onRetry={() => void refetchActive()} />
+        <ErrorState title={activeErrorState.title} message={activeErrorState.message} onRetry={() => void refetchActive()} />
       ) : !activeResponse || activeResponse.results.length === 0 ? (
         <EmptyState
           title={searchMode === 'natural' && naturalSearchQuery.data?.clarification_required ? 'Awaiting clarification' : 'No results found'}

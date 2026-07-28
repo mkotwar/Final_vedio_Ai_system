@@ -165,6 +165,15 @@ describe('Vehicle search page', () => {
     expect(await screen.findByText('Search unavailable')).toBeInTheDocument()
   })
 
+  it('shows a backend-unavailable message with the configured backend origin', async () => {
+    renderWithProviders(<VehicleSearchPage />, {
+      route: '/search?run_code=RUN_20260725_131944&plate=BACKEND_DOWN',
+      path: '/search',
+    })
+
+    expect(await screen.findByText('Backend API unavailable at http://127.0.0.1:8000')).toBeInTheDocument()
+  })
+
   it('submits on Enter from the natural-language field', async () => {
     const user = userEvent.setup()
     renderWithProviders(<VehicleSearchPage />, {
@@ -194,7 +203,7 @@ describe('Vehicle search page', () => {
       route: '/search?run_code=RUN_20260725_131944&vehicle_class=PLANE',
       path: '/search',
     })
-    expect(await screen.findByText('Search unavailable')).toBeInTheDocument()
+    expect(await screen.findByText('Search service returned an error.')).toBeInTheDocument()
   })
 
   it('clears filters back to the default search form', async () => {

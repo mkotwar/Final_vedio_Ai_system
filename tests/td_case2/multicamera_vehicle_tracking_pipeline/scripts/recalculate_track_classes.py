@@ -36,6 +36,20 @@ class RecalculatedTrack:
     class_confidence_sums: dict[str, float]
     class_max_confidences: dict[str, float]
     class_winner_margin: float | None
+    class_status: str | None
+    winning_class_ratio: float | None
+    runner_up_class: str | None
+    runner_up_ratio: float | None
+    maximum_consecutive_winner_count: int
+    recent_winning_class: str | None
+    recent_winning_ratio: float | None
+    class_transition_count: int
+    incompatible_transition_count: int
+    count_winner: str | None
+    score_winner: str | None
+    winner_agreement: bool
+    strong_conflict_detected: bool
+    split_recommended: bool
     latest_observation_class: str | None
     persisted: bool
     insufficient_history: bool
@@ -204,6 +218,20 @@ def _recalculate_track_rows(
                     class_confidence_sums={},
                     class_max_confidences={},
                     class_winner_margin=None,
+                    class_status="INSUFFICIENT_OBSERVATIONS",
+                    winning_class_ratio=None,
+                    runner_up_class=None,
+                    runner_up_ratio=None,
+                    maximum_consecutive_winner_count=0,
+                    recent_winning_class=None,
+                    recent_winning_ratio=None,
+                    class_transition_count=0,
+                    incompatible_transition_count=0,
+                    count_winner=None,
+                    score_winner=None,
+                    winner_agreement=True,
+                    strong_conflict_detected=False,
+                    split_recommended=False,
                     latest_observation_class=None,
                     persisted=False,
                     insufficient_history=True,
@@ -229,6 +257,20 @@ def _recalculate_track_rows(
                 class_confidence_sums=dict(diagnostics.class_scores),
                 class_max_confidences=dict(diagnostics.class_max_confidences),
                 class_winner_margin=diagnostics.class_winner_margin,
+                class_status=diagnostics.class_status,
+                winning_class_ratio=diagnostics.winning_class_ratio,
+                runner_up_class=diagnostics.runner_up_class_name,
+                runner_up_ratio=diagnostics.runner_up_ratio,
+                maximum_consecutive_winner_count=diagnostics.maximum_consecutive_winner_count,
+                recent_winning_class=diagnostics.recent_winning_class_name,
+                recent_winning_ratio=diagnostics.recent_winning_ratio,
+                class_transition_count=diagnostics.class_transition_count,
+                incompatible_transition_count=diagnostics.incompatible_class_transition_count,
+                count_winner=diagnostics.count_winner_class_name,
+                score_winner=diagnostics.score_winner_class_name,
+                winner_agreement=diagnostics.winners_agree,
+                strong_conflict_detected=diagnostics.strong_conflict_detected,
+                split_recommended=diagnostics.split_recommended,
                 latest_observation_class=diagnostics.latest_observation_class_name,
                 persisted=False,
                 insufficient_history=False,
@@ -257,7 +299,40 @@ def _persist_track_updates(
         track_uuid = str(track_row.get("track_uuid") or "")
         item = by_uuid.get(track_uuid)
         if item is None or item.insufficient_history or item.new_final_class in (None, ""):
-            updated.append(item or RecalculatedTrack("", "", 0, 0, None, None, None, False, {}, {}, {}, None, None, False, True))
+            updated.append(
+                item
+                or RecalculatedTrack(
+                    track_uuid="",
+                    camera_code="",
+                    local_track_id=0,
+                    observation_count=0,
+                    old_final_class=None,
+                    new_final_class=None,
+                    class_confidence=None,
+                    class_is_stable=False,
+                    class_counts={},
+                    class_confidence_sums={},
+                    class_max_confidences={},
+                    class_winner_margin=None,
+                    class_status="INSUFFICIENT_OBSERVATIONS",
+                    winning_class_ratio=None,
+                    runner_up_class=None,
+                    runner_up_ratio=None,
+                    maximum_consecutive_winner_count=0,
+                    recent_winning_class=None,
+                    recent_winning_ratio=None,
+                    class_transition_count=0,
+                    incompatible_transition_count=0,
+                    count_winner=None,
+                    score_winner=None,
+                    winner_agreement=True,
+                    strong_conflict_detected=False,
+                    split_recommended=False,
+                    latest_observation_class=None,
+                    persisted=False,
+                    insufficient_history=True,
+                )
+            )
             continue
         observation_rows = observations_by_track.get(str(track_row.get("id")), [])
         observations = _rows_to_observations(track_row, observation_rows)
@@ -361,8 +436,11 @@ def print_report(report: dict[str, Any]) -> None:
         print(track["track_uuid"])
         print(f"  old_final_class: {track['old_final_class']}")
         print(f"  new_final_class: {track['new_final_class']}")
+        print(f"  class_status: {track.get('class_status')}")
         print(f"  class_counts: {track['class_counts']}")
         print(f"  class_confidence_sums: {track['class_confidence_sums']}")
+        print(f"  winning_class_ratio: {track.get('winning_class_ratio')}")
+        print(f"  count_winner/score_winner: {track.get('count_winner')} / {track.get('score_winner')}")
         print(f"  latest_observation_class: {track['latest_observation_class']}")
         print(f"  persisted: {track['persisted']}")
         if track.get("note"):

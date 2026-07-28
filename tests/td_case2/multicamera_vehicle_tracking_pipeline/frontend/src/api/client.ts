@@ -31,6 +31,10 @@ export function getApiBaseUrl(): string {
   }
 }
 
+export function getApiOrigin(): string {
+  return new URL(getApiBaseUrl()).origin
+}
+
 export function buildApiUrl(path: string, params?: Record<string, string | number | boolean | undefined | null>): string {
   const baseUrl = getApiBaseUrl()
   const url = new URL(`${baseUrl}${path.startsWith('/') ? path : `/${path}`}`)
@@ -121,7 +125,7 @@ export async function apiGet<T>(
     throw new ApiClientError('The backend is unavailable.', {
       status: 503,
       code: 'BACKEND_UNAVAILABLE',
-      details: null,
+      details: { apiBaseUrl: getApiBaseUrl() },
     })
   } finally {
     window.clearTimeout(timeoutId)
@@ -173,9 +177,32 @@ export async function apiPost<T>(
     throw new ApiClientError('The backend is unavailable.', {
       status: 503,
       code: 'BACKEND_UNAVAILABLE',
-      details: null,
+      details: { apiBaseUrl: getApiBaseUrl() },
     })
   } finally {
     window.clearTimeout(timeoutId)
+  }
+}
+
+export function describeApiClientError(error: unknown): { title: string; message: string } {
+  if (!(error instanceof ApiClientError)) {
+    return {
+      title: 'Search unavailable',
+      message: 'The vehicle search request could not be completed.',
+    }
+  }
+  if (error.code === 'BACKEND_UNAVAILABLE') {
+    const apiBaseUrl =
+      typeof error.details === 'object' && error.details !== null && 'apiBaseUrl' in error.details
+        ? String((error.details as { apiBaseUrl?: unknown }).apiBaseUrl || getApiBaseUrl())
+        : getApiBaseUrl()
+    return {
+      title: 'Search unavailable',
+      message: `Backend API unavailable at ${new URL(apiBaseUrl).origin}`,
+    }
+  }
+  return {
+    title: 'Search unavailable',
+    message: 'Search service returned an error.',
   }
 }

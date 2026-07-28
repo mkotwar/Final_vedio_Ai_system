@@ -3,7 +3,6 @@ vehicle_detector:
   fallback_model_path: yolov8n.pt
   allow_fallback: true
   device: auto
-  confidence_threshold: 0.25
   iou_threshold: 0.45
   image_size: 640
   allowed_classes:
@@ -12,3 +11,11 @@ vehicle_detector:
     - bus
     - truck
     - motorcycle
+  class_confidence_thresholds:
+    enabled: true
+    classes:
+      3wheeler: 0.65
+      car: 0.7
+      bus: 0.75
+      truck: 0.75
+      motorcycle: 0.25

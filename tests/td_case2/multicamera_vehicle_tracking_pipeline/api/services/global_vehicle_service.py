@@ -16,6 +16,8 @@ class GlobalVehicleService:
             item["primary_evidence_reference"] = self.media_service.decorate_media_reference(item.get("primary_evidence_reference"))
             item["primary_vehicle_media"] = self.media_service.decorate_media_reference(item.get("primary_vehicle_media"))
             item["primary_plate_media"] = self.media_service.decorate_media_reference(item.get("primary_plate_media"))
+            item["primary_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_full_frame_media"))
+            item["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(item.get("primary_annotated_full_frame_media"))
         return page
 
     def get_global_vehicle(self, global_vehicle_code: str):
@@ -24,9 +26,13 @@ class GlobalVehicleService:
             raise NotFoundError("GLOBAL_VEHICLE_NOT_FOUND", "Global vehicle was not found.")
         item["global_vehicle"]["primary_vehicle_media"] = self.media_service.decorate_media_reference(item["global_vehicle"].get("primary_vehicle_media"))
         item["global_vehicle"]["primary_plate_media"] = self.media_service.decorate_media_reference(item["global_vehicle"].get("primary_plate_media"))
+        item["global_vehicle"]["primary_full_frame_media"] = self.media_service.decorate_media_reference(item["global_vehicle"].get("primary_full_frame_media"))
+        item["global_vehicle"]["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(item["global_vehicle"].get("primary_annotated_full_frame_media"))
         for member in item.get("members", []):
             member["primary_vehicle_media"] = self.media_service.decorate_media_reference(member.get("primary_vehicle_media"))
             member["primary_plate_media"] = self.media_service.decorate_media_reference(member.get("primary_plate_media"))
+            member["primary_full_frame_media"] = self.media_service.decorate_media_reference(member.get("primary_full_frame_media"))
+            member["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(member.get("primary_annotated_full_frame_media"))
         item["evidence"] = [self.media_service.decorate_media_reference(media) for media in item.get("evidence", [])]
         return item
 
@@ -39,4 +45,6 @@ class GlobalVehicleService:
         for member in members:
             member["primary_vehicle_media"] = self.media_service.decorate_media_reference(member.get("primary_vehicle_media"))
             member["primary_plate_media"] = self.media_service.decorate_media_reference(member.get("primary_plate_media"))
+            member["primary_full_frame_media"] = self.media_service.decorate_media_reference(member.get("primary_full_frame_media"))
+            member["primary_annotated_full_frame_media"] = self.media_service.decorate_media_reference(member.get("primary_annotated_full_frame_media"))
         return members

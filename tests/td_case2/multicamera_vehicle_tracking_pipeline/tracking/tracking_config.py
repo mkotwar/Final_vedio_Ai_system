@@ -7,6 +7,7 @@ from typing import Any
 
 
 SUPPORTED_TRACKING_BACKENDS = ("supervision_bytetrack", "ultralytics_bytetrack")
+SUPPORTED_BEHAVIOR_MODES = ("experimental_custom", "standard_bytetrack")
 
 
 class TrackingConfigError(ValueError):
@@ -20,23 +21,75 @@ class ClassStabilizationConfig:
     observation_count_weight: float = 0.10
     max_confidence_weight: float = 0.25
     minimum_observations: int = 2
+    minimum_consistency_ratio: float = 0.0
+    minimum_consecutive_winner_observations: int = 1
     minimum_winner_margin: float = 0.20
     lock_after_observations: int = 5
     allow_unlock_on_strong_conflict: bool = True
     strong_conflict_min_observations: int = 3
     strong_conflict_margin: float = 0.75
+    recent_window_size: int = 5
+    recent_conflict_minimum_ratio: float = 0.60
+    recent_conflict_minimum_observations: int = 3
 
     def __post_init__(self) -> None:
         if int(self.minimum_observations) <= 0:
             raise TrackingConfigError("class_stabilization.minimum_observations must be positive.")
+        if int(self.minimum_consecutive_winner_observations) <= 0:
+            raise TrackingConfigError("class_stabilization.minimum_consecutive_winner_observations must be positive.")
         if int(self.lock_after_observations) <= 0:
             raise TrackingConfigError("class_stabilization.lock_after_observations must be positive.")
         if int(self.strong_conflict_min_observations) <= 0:
             raise TrackingConfigError("class_stabilization.strong_conflict_min_observations must be positive.")
-        for field_name in ("observation_count_weight", "max_confidence_weight", "minimum_winner_margin", "strong_conflict_margin"):
+        if int(self.recent_window_size) <= 0:
+            raise TrackingConfigError("class_stabilization.recent_window_size must be positive.")
+        if int(self.recent_conflict_minimum_observations) <= 0:
+            raise TrackingConfigError("class_stabilization.recent_conflict_minimum_observations must be positive.")
+        for field_name in (
+            "observation_count_weight",
+            "max_confidence_weight",
+            "minimum_consistency_ratio",
+            "minimum_winner_margin",
+            "strong_conflict_margin",
+            "recent_conflict_minimum_ratio",
+        ):
             value = float(getattr(self, field_name))
             if value < 0.0:
                 raise TrackingConfigError(f"class_stabilization.{field_name} must be non-negative.")
+        for field_name in ("minimum_consistency_ratio", "recent_conflict_minimum_ratio"):
+            value = float(getattr(self, field_name))
+            if value > 1.0:
+                raise TrackingConfigError(f"class_stabilization.{field_name} must be between 0 and 1.")
+
+
+@dataclass(frozen=True, slots=True)
+class ClassConflictSplitConfig:
+    enabled: bool = True
+    minimum_consecutive_conflicting_observations: int = 3
+    minimum_conflict_confidence: float = 0.50
+    minimum_average_conflict_confidence: float = 0.50
+    require_spatial_discontinuity: bool = True
+    maximum_iou_for_split: float = 0.10
+    minimum_normalized_center_distance_for_split: float = 0.50
+    maximum_width_ratio_for_split: float = 2.50
+    maximum_height_ratio_for_split: float = 2.50
+
+    def __post_init__(self) -> None:
+        if int(self.minimum_consecutive_conflicting_observations) <= 0:
+            raise TrackingConfigError("class_conflict_split.minimum_consecutive_conflicting_observations must be positive.")
+        for field_name in (
+            "minimum_conflict_confidence",
+            "minimum_average_conflict_confidence",
+            "maximum_iou_for_split",
+            "minimum_normalized_center_distance_for_split",
+        ):
+            value = float(getattr(self, field_name))
+            if not 0.0 <= value <= 1.0:
+                raise TrackingConfigError(f"class_conflict_split.{field_name} must be between 0 and 1.")
+        for field_name in ("maximum_width_ratio_for_split", "maximum_height_ratio_for_split"):
+            value = float(getattr(self, field_name))
+            if value < 1.0:
+                raise TrackingConfigError(f"class_conflict_split.{field_name} must be at least 1.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +128,23 @@ class IdentityContinuityConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TrackClassConfig:
+    strategy: str = "confidence_weighted_majority"
+    minimum_observations: int = 3
+    minimum_winner_ratio: float = 0.50
+
+    def __post_init__(self) -> None:
+        if str(self.strategy).strip() != "confidence_weighted_majority":
+            raise TrackingConfigError("track_class.strategy must be 'confidence_weighted_majority'.")
+        if int(self.minimum_observations) <= 0:
+            raise TrackingConfigError("track_class.minimum_observations must be positive.")
+        if not 0.0 <= float(self.minimum_winner_ratio) <= 1.0:
+            raise TrackingConfigError("track_class.minimum_winner_ratio must be between 0 and 1.")
+
+
+@dataclass(frozen=True, slots=True)
 class TrackingConfig:
+    behavior_mode: str = "experimental_custom"
     backend: str = "supervision_bytetrack"
     track_high_thresh: float = 0.15
     track_low_thresh: float = 0.10
@@ -107,8 +176,12 @@ class TrackingConfig:
     })
     fragment_linking: FragmentLinkingConfig = field(default_factory=FragmentLinkingConfig)
     identity_continuity: IdentityContinuityConfig = field(default_factory=IdentityContinuityConfig)
+    class_conflict_split: ClassConflictSplitConfig = field(default_factory=ClassConflictSplitConfig)
+    track_class: TrackClassConfig = field(default_factory=TrackClassConfig)
 
     def __post_init__(self) -> None:
+        if self.behavior_mode not in SUPPORTED_BEHAVIOR_MODES:
+            raise TrackingConfigError(f"Unsupported tracking behavior mode: {self.behavior_mode}")
         if self.backend not in SUPPORTED_TRACKING_BACKENDS:
             raise TrackingConfigError(f"Unsupported tracking backend: {self.backend}")
         for field_name in ("track_high_thresh", "track_low_thresh", "new_track_thresh", "match_thresh"):
@@ -135,6 +208,10 @@ class TrackingConfig:
         }
         object.__setattr__(self, "class_aliases", normalized_aliases)
         object.__setattr__(self, "class_families", normalized_families)
+
+    @property
+    def is_standard_bytetrack(self) -> bool:
+        return self.behavior_mode == "standard_bytetrack"
 
 
 def _normalize_alias_key(value: Any) -> str:
@@ -204,6 +281,7 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
     if not isinstance(raw_config, dict):
         raise TrackingConfigError("Tracking config must contain a 'tracking' mapping.")
     config = TrackingConfig(
+        behavior_mode=str(raw_config.get("behavior_mode", "experimental_custom")),
         backend=str(raw_config.get("backend", "supervision_bytetrack")),
         track_high_thresh=float(raw_config.get("track_high_thresh", raw_config.get("track_activation_threshold", 0.15))),
         track_low_thresh=float(raw_config.get("track_low_thresh", 0.10)),
@@ -227,11 +305,14 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
         },
         fragment_linking=FragmentLinkingConfig(**dict(raw_config.get("fragment_linking", {}) or {})),
         identity_continuity=IdentityContinuityConfig(**dict(raw_config.get("identity_continuity", {}) or {})),
+        class_conflict_split=ClassConflictSplitConfig(**dict(raw_config.get("class_conflict_split", {}) or {})),
+        track_class=TrackClassConfig(**dict(raw_config.get("track_class", {}) or {})),
     )
     if overrides:
         overrides = _normalize_tracking_overrides(overrides)
         config = replace(
             config,
+            behavior_mode=str(overrides.get("behavior_mode", config.behavior_mode)),
             backend=str(overrides.get("backend", config.backend)),
             track_high_thresh=float(overrides.get("track_high_thresh", config.track_high_thresh)),
             track_low_thresh=float(overrides.get("track_low_thresh", config.track_low_thresh)),
@@ -255,6 +336,8 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
             },
             fragment_linking=FragmentLinkingConfig(**dict(overrides.get("fragment_linking", asdict(config.fragment_linking)) or {})),
             identity_continuity=IdentityContinuityConfig(**dict(overrides.get("identity_continuity", asdict(config.identity_continuity)) or {})),
+            class_conflict_split=ClassConflictSplitConfig(**dict(overrides.get("class_conflict_split", asdict(config.class_conflict_split)) or {})),
+            track_class=TrackClassConfig(**dict(overrides.get("track_class", asdict(config.track_class)) or {})),
         )
     return config
 
@@ -262,6 +345,7 @@ def load_tracking_config(config_path: str | Path, *, overrides: dict[str, Any] |
 def tracking_overrides_from_env() -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     env_map = {
+        "TD_CASE2_MULTICAM_TRACKING_BEHAVIOR_MODE": ("behavior_mode", str),
         "TD_CASE2_MULTICAM_TRACKING_BACKEND": ("backend", str),
         "TD_CASE2_MULTICAM_TRACK_HIGH_THRESH": ("track_high_thresh", float),
         "TD_CASE2_MULTICAM_TRACK_LOW_THRESH": ("track_low_thresh", float),

@@ -90,6 +90,8 @@ class SharedVehicleDetector:
         self.allowed_classes = tuple(config.allowed_classes)
         self.unsupported_class_counts: Counter[str] = Counter()
         self.invalid_box_count = 0
+        self.rejected_by_class_threshold_counts: Counter[str] = Counter()
+        self.accepted_by_class_threshold_counts: Counter[str] = Counter()
         if model is not None:
             self.loaded_model_name = getattr(model, "ckpt_path", None) or config.model_path
             self.resolved_model_path = self.loaded_model_name
@@ -101,11 +103,35 @@ class SharedVehicleDetector:
             "fallback_model_path": self.config.fallback_model_path,
             "allow_fallback": self.config.allow_fallback,
             "device": self.device,
-            "confidence_threshold": self.config.confidence_threshold,
+            "effective_inference_confidence_floor": self.inference_confidence_floor,
             "iou_threshold": self.config.iou_threshold,
             "image_size": self.config.image_size,
             "allowed_classes": list(self.allowed_classes),
+            "class_confidence_thresholds": {
+                "enabled": self.config.class_confidence_thresholds.enabled,
+                "classes": dict(self.config.class_confidence_thresholds.classes),
+            },
         }
+
+    @property
+    def inference_confidence_floor(self) -> float:
+        thresholds = self.config.class_confidence_thresholds
+        configured = [float(value) for value in thresholds.classes.values()]
+        if not configured:
+            raise VehicleDetectorError("No class confidence thresholds are configured for vehicle detection.")
+        return min(configured)
+
+    def class_threshold_for(self, class_name: str | None) -> float:
+        normalized = str(class_name or "").strip().lower()
+        thresholds = self.config.class_confidence_thresholds
+        if normalized not in thresholds.classes:
+            raise VehicleDetectorError(f"Missing class confidence threshold for vehicle class: {normalized or '<empty>'}")
+        return float(thresholds.classes[normalized])
+
+    def evaluate_class_threshold(self, *, normalized_class_name: str | None, confidence: float) -> tuple[bool, float, str | None]:
+        threshold = self.class_threshold_for(normalized_class_name)
+        accepted = float(confidence) >= threshold
+        return accepted, threshold, (None if accepted else "BELOW_CLASS_CONFIDENCE_THRESHOLD")
 
     @property
     def model(self) -> Any:
@@ -153,7 +179,7 @@ class SharedVehicleDetector:
         try:
             predictions = self.model.predict(
                 source=frame_packet.frame,
-                conf=self.config.confidence_threshold,
+                conf=self.inference_confidence_floor,
                 iou=self.config.iou_threshold,
                 imgsz=self.config.image_size,
                 device=self.device,
@@ -223,6 +249,23 @@ class SharedVehicleDetector:
             if bbox is None:
                 self.invalid_box_count += 1
                 continue
+            accepted_by_threshold, class_threshold, rejection_reason = self.evaluate_class_threshold(
+                normalized_class_name=normalized_class,
+                confidence=confidence,
+            )
+            if not accepted_by_threshold:
+                self.rejected_by_class_threshold_counts[normalized_class] += 1
+                LOGGER.debug(
+                    "Rejected detection by class threshold camera_code=%s frame_number=%s class=%s confidence=%.3f threshold=%.3f reason=%s",
+                    frame_packet.camera_code,
+                    frame_packet.frame_number,
+                    normalized_class,
+                    confidence,
+                    class_threshold,
+                    rejection_reason,
+                )
+                continue
+            self.accepted_by_class_threshold_counts[normalized_class] += 1
             detections.append(
                 VehicleDetection(
                     class_id=NORMALIZED_CLASS_TO_ID[normalized_class],

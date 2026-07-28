@@ -121,6 +121,8 @@ class TrackListItem(BaseModel):
     primary_media: MediaReference | None = None
     primary_vehicle_media: MediaReference | None = None
     primary_plate_media: MediaReference | None = None
+    primary_full_frame_media: MediaReference | None = None
+    primary_annotated_full_frame_media: MediaReference | None = None
 
 
 class TrackDetailResponse(BaseModel):
@@ -156,6 +158,8 @@ class GlobalVehicleListItem(BaseModel):
     primary_evidence_reference: MediaReference | None = None
     primary_vehicle_media: MediaReference | None = None
     primary_plate_media: MediaReference | None = None
+    primary_full_frame_media: MediaReference | None = None
+    primary_annotated_full_frame_media: MediaReference | None = None
 
 
 class GlobalVehicleMember(BaseModel):
@@ -178,6 +182,8 @@ class GlobalVehicleMember(BaseModel):
     attached_at: str | None = None
     primary_vehicle_media: MediaReference | None = None
     primary_plate_media: MediaReference | None = None
+    primary_full_frame_media: MediaReference | None = None
+    primary_annotated_full_frame_media: MediaReference | None = None
 
 
 class GlobalVehicleDetailResponse(BaseModel):

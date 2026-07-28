@@ -51,7 +51,13 @@ export default function TrackDetailPage() {
 
   const detail = detailQuery.data
   const groupedMedia = groupTrackMedia(mediaQuery.data, detail.track.track_uuid)
-  const additionalMedia = [...groupedMedia.additionalVehicleMedia, ...groupedMedia.additionalPlateMedia, ...groupedMedia.additionalFullFrameMedia, ...groupedMedia.otherMedia]
+  const additionalMedia = [
+    ...groupedMedia.additionalVehicleMedia,
+    ...groupedMedia.additionalPlateMedia,
+    ...groupedMedia.additionalFullFrameMedia,
+    ...groupedMedia.additionalAnnotatedFrameMedia,
+    ...groupedMedia.otherMedia,
+  ]
 
   return (
     <div className="page-stack">
@@ -150,16 +156,17 @@ export default function TrackDetailPage() {
         </div>
       </section>
 
-      {groupedMedia.fullFrameMedia ? (
+      {groupedMedia.fullFrameMedia || groupedMedia.annotatedFrameMedia ? (
         <section className="panel">
           <div className="panel__header">
             <div>
-              <p className="panel__eyebrow">Scene frame</p>
-              <h3>Full frame</h3>
+              <p className="panel__eyebrow">Source context</p>
+              <h3>Source frames</h3>
             </div>
           </div>
           <div className="card-grid">
-            <EvidenceCard media={groupedMedia.fullFrameMedia} />
+            {groupedMedia.fullFrameMedia ? <EvidenceCard media={groupedMedia.fullFrameMedia} /> : null}
+            {groupedMedia.annotatedFrameMedia ? <EvidenceCard media={groupedMedia.annotatedFrameMedia} /> : null}
           </div>
         </section>
       ) : null}
